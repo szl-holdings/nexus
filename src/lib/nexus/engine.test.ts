@@ -179,7 +179,7 @@ describe("analog computer programs", () => {
 
   it("NEMO analog neuromorphic core stays finite and spikes under drive", () => {
     let s = seedAnalogState("nemo", 0.2);
-    assert.equal(s.bank?.length, 15);
+    assert.equal(s.bank?.length, 20);
     let resets = 0;
     let prev = s.x;
     for (let i = 0; i < 2400; i++) {
@@ -189,11 +189,13 @@ describe("analog computer programs", () => {
     }
     assert.equal(Number.isFinite(s.x) && Number.isFinite(s.y) && Number.isFinite(s.z), true);
     assert.ok(resets > 8, `expected spikes, got ${resets}`);
-    assert.equal(s.bank?.length, 15);
+    assert.equal(s.bank?.length, 20);
     const n = scaleAnalog("nemo", s);
     assert.ok(n.x >= -1 && n.x <= 1);
     assert.ok(n.y >= -1 && n.y <= 1);
     assert.ok(n.z >= 0 && n.z <= 1);
+    const weights = (s.bank ?? []).slice(15, 20);
+    assert.ok(weights.every((v) => v >= 0.05 && v <= 4), `STDP weights out of range ${weights.join(",")}`);
   });
 
   it("NEMO synaptic traces decay with no drive", () => {
@@ -205,6 +207,20 @@ describe("analog computer programs", () => {
     const traces = (s.bank ?? []).slice(10, 15);
     assert.ok(traces.every((v) => v < 8), `traces should leak, got ${traces.join(",")}`);
     assert.ok(s.x < 0, "membrane should rest subthreshold without drive");
+  });
+
+  it("NEMO pads a 15-cell bank and optical STDP leaks toward 1", () => {
+    let s = seedAnalogState("nemo");
+    s = { ...s, bank: (s.bank ?? []).slice(0, 15) };
+    s = analogStep("nemo", s, 0.002, 0, 0);
+    assert.equal(s.bank?.length, 20);
+    const loaded = (s.bank ?? []).slice();
+    for (let i = 15; i < 20; i++) loaded[i] = 2.6;
+    loaded[0] = -80;
+    s = { ...s, bank: loaded };
+    for (let i = 0; i < 120; i++) s = analogStep("nemo", s, 0.002, 0, 0);
+    const weights = (s.bank ?? []).slice(15, 20);
+    assert.ok(weights.every((v) => v < 2.6 && v > 0.05), `weights should leak toward 1, got ${weights.join(",")}`);
   });
 });
 

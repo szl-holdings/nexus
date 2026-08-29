@@ -597,6 +597,7 @@ function Help({ onClose }: { onClose: () => void }) {
           <kbd>F</kbd> Frontier — live analog computer. Shift-F disengages. Press again to reseed the loop.
         </li>
         <li>Programs: LRNZ · HARM · VDP · DFFG · LTKA · NEMO. IC holds. OP integrates. HALT freezes. REP reseeds.</li>
+        <li>NEMO: five analog neurons, optical ring, analog STDP correlator. Not a chip. Energy UNAVAILABLE.</li>
         <li>X Y Z FG Λ meters. Attack / Release are the function generator rise and fall.</li>
         <li>
           Patch <span className="text-phosphor">ANLG</span> and <span className="text-phosphor">FUNC</span> into VCF or PAN

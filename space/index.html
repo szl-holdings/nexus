@@ -77,7 +77,7 @@
       </div>
       <div id="organs" class="lamp-row"></div>
     </div>
-    <p class="foot">Six programs. Optical analog. NEMO is analog math, not silicon. Λ uniqueness is Conjecture 1. Source: <a href="https://github.com/szl-holdings/nexus">szl-holdings/nexus</a></p>
+    <p class="foot">Six programs. Optical analog. NEMO is analog math, not silicon. Kernel organs UNAVAILABLE on the hologram. Λ uniqueness is Conjecture 1. Source: <a href="https://github.com/szl-holdings/nexus">szl-holdings/nexus</a></p>
   </div>
   <script>
     const PROGRAMS = [
@@ -179,7 +179,7 @@
       document.getElementById("lam").textContent = (lam.lambda||0).toFixed(4) + " " + (lam.decision||"");
       const org = await post("/api/organs", {});
       document.getElementById("organs").innerHTML = Object.entries(org.organs||{}).map(([k,v]) =>
-        `<div class="lamp"><span class="dot ${v?"":"down"}"></span>${k} ${v?"LIVE":"DOWN"}</div>`
+        `<div class="lamp"><span class="dot ${v?"":"down"}"></span>${k} ${v?"LIVE":"UNAVAILABLE"}</div>`
       ).join("");
       const tax = await post("/api/ouroboros", { amplitude: 1, bars: 8 });
       document.getElementById("tax").textContent = Number(tax.tax).toFixed(4);
