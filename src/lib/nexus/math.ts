@@ -32,7 +32,7 @@ export interface AnalogState {
   y: number;
   z: number;
   t: number;
-  /** NEMO: 5 membranes + 5 recovery + 5 synaptic traces. Absent on other programs. */
+  /** NEMO: 5 membranes + 5 recovery + 5 synaptic traces + 5 optical STDP weights. */
   bank?: number[];
 }
 
@@ -52,7 +52,18 @@ export function seedNemoBank(nudge = 0): number[] {
   const n = nudge % 1;
   const v = [-65 + n * 6, -62 - n * 4, -70 + n * 5, -58 - n * 3, -67 + n * 8];
   const u = v.map((m) => 0.2 * m);
-  return [...v, ...u, 0, 0, 0, 0, 0];
+  return [...v, ...u, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1];
+}
+
+/** Accept a 15-cell NEMO bank (pre-STDP persist) by padding optical weights to 1. */
+export function padNemoBank(raw?: number[]): number[] {
+  if (raw && raw.length >= 20 && raw.slice(0, 20).every((n) => Number.isFinite(n))) {
+    return raw.slice(0, 20);
+  }
+  if (raw && raw.length === 15 && raw.every((n) => Number.isFinite(n))) {
+    return [...raw, 1, 1, 1, 1, 1];
+  }
+  return seedNemoBank();
 }
 
 export function seedAnalogState(program: AnalogProgram, nudge = 0): AnalogState {
@@ -94,7 +105,7 @@ export function analogCoefficients(chaos: number, program: AnalogProgram = "lore
     const a = 0.02 + c * 0.08;
     const w = 3.5 + c * 14;
     const tau = 3 + (1 - c) * 9;
-    return { sigma: 10, rho: 18 + c * 22, beta: 8 / 3, omega: 1, mu: a, delta: w, gamma: tau, alpha: 0.2, label: `a ${a.toFixed(3)} · w ${w.toFixed(1)}` };
+    return { sigma: 10, rho: 18 + c * 22, beta: 8 / 3, omega: 1, mu: a, delta: w, gamma: tau, alpha: 0.2, label: `a ${a.toFixed(3)} · w ${w.toFixed(1)} · STDP` };
   }
   return {
     sigma: 10,
@@ -279,7 +290,9 @@ export function opticalReconstruct(intensity: number, dphi: number) {
 /**
  * Analog neuromorphic core. Five Izhikevich-style quadratic integrators
  * (IEEE TNN 2003 RS→CH via Chaos), exponential synaptic traces
- * (BrainScaleS-2 analog synapse), opticalInterfere as photonic ring coupling.
+ * (BrainScaleS-2 analog synapse), opticalInterfere as photonic ring coupling,
+ * analog optical STDP correlator (two-beam intensity as eligibility;
+ * Billaudelle et al. analog correlators — the job, not the circuit).
  * Not a physical Loihi / BrainScaleS chip. Energy UNAVAILABLE.
  */
 function analogNemoStep(s: AnalogState, dt: number, chaos: number, drive: number): AnalogState {
@@ -292,8 +305,7 @@ function analogNemoStep(s: AnalogState, dt: number, chaos: number, drive: number
   const w = pots.delta;
   const tau = Math.max(1.4, pots.gamma);
   const I0 = 1.2 + drive * 13.5;
-  const healthy = s.bank && s.bank.length === 15 && s.bank.every((n) => Number.isFinite(n));
-  const bank = healthy ? s.bank!.slice() : seedNemoBank();
+  const bank = padNemoBank(s.bank);
   let rate = Number.isFinite(s.z) ? Math.max(0, Math.min(1, s.z)) : 0;
   let t = Number.isFinite(s.t) ? s.t : 0;
   const totalMs = Math.max(0.25, Math.min(80, dt * 1000));
@@ -302,12 +314,14 @@ function analogNemoStep(s: AnalogState, dt: number, chaos: number, drive: number
 
   for (let k = 0; k < n; k++) {
     const I = [0, 0, 0, 0, 0];
+    const iopt = [0, 0, 0, 0, 0];
     for (let i = 0; i < 5; i++) {
       const opp = (i + 2) % 5;
       const ao = Math.max(0, (bank[i]! + 70) / 110);
       const ar = Math.max(0, (bank[opp]! + 70) / 110);
-      const Iopt = opticalInterfere(ao, bank[i]! * 0.035, ar, bank[opp]! * 0.035);
-      I[i] = bank[10 + i]! + Iopt * (1.1 + drive * 0.9) + (i === 0 ? I0 : 0.8 + drive * 2.4);
+      iopt[i] = opticalInterfere(ao, bank[i]! * 0.035, ar, bank[opp]! * 0.035);
+      const wi = Math.max(0.05, Math.min(4, bank[15 + i]!));
+      I[i] = bank[10 + i]! + iopt[i]! * (1.1 + drive * 0.9) * wi + (i === 0 ? I0 : 0.8 + drive * 2.4);
     }
     const fired: number[] = [];
     for (let i = 0; i < 5; i++) {
@@ -330,7 +344,15 @@ function analogNemoStep(s: AnalogState, dt: number, chaos: number, drive: number
     }
     for (const i of fired) {
       const post = (i + 1) % 5;
+      const opp = (i + 2) % 5;
       bank[10 + post] = Math.min(48, (bank[10 + post] ?? 0) + w);
+      // Causal LTP: optical eligibility × partner trace. Reverse LTD on the ring.
+      bank[15 + i] = (bank[15 + i] ?? 1) + 0.014 * ((bank[10 + opp] ?? 0) / 48) * (iopt[i] ?? 0);
+      bank[15 + opp] = (bank[15 + opp] ?? 1) - 0.007;
+    }
+    for (let i = 0; i < 5; i++) {
+      const leaked = (bank[15 + i] ?? 1) + (1 - (bank[15 + i] ?? 1)) * (h / 180);
+      bank[15 + i] = Math.max(0.05, Math.min(4, leaked));
     }
     const decay = Math.exp(-h / 38);
     rate = rate * decay + (fired.length / 5) * (1 - decay) * 10;

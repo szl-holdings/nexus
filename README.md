@@ -69,9 +69,9 @@ Frontier patch: **ANLG → VCF**, **FUNC → PAN**, **S&H → VCF**. F19: a DOWN
 | **VDP** | van der Pol. Nonlinear damping μ from Chaos. |
 | **DFFG** | Duffing. Cubic restoring + driven cosine. |
 | **LTKA** | Lotka–Volterra. Prey/predator stay positive. |
-| **NEMO** | Analog neuromorphic core. Five Izhikevich-style quadratic integrators, exponential synapses, optical ring coupling. Not a physical chip. |
+| **NEMO** | Analog neuromorphic core. Five Izhikevich-style quadratic integrators, exponential synapses, optical ring, analog optical STDP correlator. Not a physical chip. |
 
-Coefficient pots: Chaos maps onto the program’s analog coefficient. Rate is computer time (BrainScaleS-style acceleration on NEMO). Drive is how hard the voltages hit the voice and tape — on NEMO it is injected current. Optical analog: object beam (X,Y) interferes with reference beam (FG,Z). Reconstruction folds the voice. NEMO also uses the same optical inner product as a photonic synapse. Energy stays UNAVAILABLE — never a fabricated pJ/spike.
+Coefficient pots: Chaos maps onto the program’s analog coefficient. Rate is computer time (BrainScaleS-style acceleration on NEMO). Drive is how hard the voltages hit the voice and tape — on NEMO it is injected current. Optical analog: object beam (X,Y) interferes with reference beam (FG,Z). Reconstruction folds the voice. NEMO uses the same optical inner product as a photonic synapse and as analog STDP eligibility. Energy stays UNAVAILABLE — never a fabricated pJ/spike.
 
 Inspired by analog computing practice (THE ANALOG THING, CRT holograms, modular patchbays) and analog neuromorphic literature (Izhikevich 2003; Brette & Gerstner AdEx 2005; BrainScaleS-2 continuous-time analog; Mead analog VLSI) — original analog-computer-native math, not a Loihi/BrainScaleS emulator, not a dashboard, not a generative-audio model.
 

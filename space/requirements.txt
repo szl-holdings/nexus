@@ -1,0 +1,3 @@
+# NEXUS hologram is stdlib Python. No pip packages.
+# This file exists so the Hub tree does not keep a leftover Lorenz-era
+# requirements.txt the docker factory could mix with the analog CRT.

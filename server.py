@@ -82,7 +82,15 @@ def seed_nemo_bank(nudge: float = 0.0) -> list[float]:
     n = nudge % 1
     v = [-65 + n * 6, -62 - n * 4, -70 + n * 5, -58 - n * 3, -67 + n * 8]
     u = [0.2 * m for m in v]
-    return [*v, *u, 0.0, 0.0, 0.0, 0.0, 0.0]
+    return [*v, *u, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+
+
+def pad_nemo_bank(raw: Any) -> list[float]:
+    if isinstance(raw, list) and len(raw) >= 20 and all(math.isfinite(float(n)) for n in raw[:20]):
+        return [float(n) for n in raw[:20]]
+    if isinstance(raw, list) and len(raw) == 15 and all(math.isfinite(float(n)) for n in raw):
+        return [float(n) for n in raw] + [1.0] * 5
+    return seed_nemo_bank()
 
 
 def seed_analog(program: str, nudge: float = 0.0) -> dict[str, Any]:
@@ -141,7 +149,7 @@ def analog_coefficients(chaos: float, program: str = "lorenz") -> dict[str, Any]
         return {
             "sigma": 10, "rho": 18 + c * 22, "beta": 8 / 3, "omega": 1,
             "mu": a, "delta": w, "gamma": tau, "alpha": 0.2,
-            "label": f"a {a:.3f} · w {w:.1f}",
+            "label": f"a {a:.3f} · w {w:.1f} · STDP",
         }
     rho = 18 + c * 22
     return {
@@ -169,9 +177,11 @@ def optical_reconstruct(intensity: float, dphi: float) -> float:
 
 
 def analog_nemo_step(s: dict[str, Any], dt: float, chaos: float, drive: float) -> dict[str, Any]:
-    """Five Izhikevich-style quadratic integrators + exp synapses + optical ring.
+    """Five Izhikevich-style quadratic integrators + exp synapses + optical ring + STDP.
 
-    IEEE TNN 2003 RS→CH via Chaos. Not a physical Loihi / BrainScaleS chip.
+    IEEE TNN 2003 RS→CH via Chaos. Optical STDP uses two-beam intensity as
+    analog eligibility (BrainScaleS-2 correlator *job*, not the circuit).
+    Not a physical Loihi / BrainScaleS chip. Energy UNAVAILABLE.
     """
     c = clamp01(chaos)
     pots = analog_coefficients(c, "nemo")
@@ -182,9 +192,7 @@ def analog_nemo_step(s: dict[str, Any], dt: float, chaos: float, drive: float) -
     w = float(pots["delta"])
     tau = max(1.4, float(pots["gamma"]))
     i0 = 1.2 + drive * 13.5
-    raw = s.get("bank")
-    healthy = isinstance(raw, list) and len(raw) == 15 and all(math.isfinite(float(n)) for n in raw)
-    bank = [float(n) for n in raw] if healthy else seed_nemo_bank()
+    bank = pad_nemo_bank(s.get("bank"))
     rate = float(s["z"]) if math.isfinite(float(s.get("z", 0))) else 0.0
     rate = max(0.0, min(1.0, rate))
     t = float(s["t"]) if math.isfinite(float(s.get("t", 0))) else 0.0
@@ -194,12 +202,14 @@ def analog_nemo_step(s: dict[str, Any], dt: float, chaos: float, drive: float) -
 
     for _ in range(n):
         I = [0.0] * 5
+        iopts = [0.0] * 5
         for i in range(5):
             opp = (i + 2) % 5
             ao = max(0.0, (bank[i] + 70) / 110)
             ar = max(0.0, (bank[opp] + 70) / 110)
-            iopt = optical_interfere(ao, bank[i] * 0.035, ar, bank[opp] * 0.035)
-            I[i] = bank[10 + i] + iopt * (1.1 + drive * 0.9) + (i0 if i == 0 else 0.8 + drive * 2.4)
+            iopts[i] = optical_interfere(ao, bank[i] * 0.035, ar, bank[opp] * 0.035)
+            wi = max(0.05, min(4.0, bank[15 + i]))
+            I[i] = bank[10 + i] + iopts[i] * (1.1 + drive * 0.9) * wi + (i0 if i == 0 else 0.8 + drive * 2.4)
         fired: list[int] = []
         for i in range(5):
             vi = bank[i]
@@ -219,7 +229,13 @@ def analog_nemo_step(s: dict[str, Any], dt: float, chaos: float, drive: float) -
             bank[10 + i] = max(0.0, min(48.0, si))
         for i in fired:
             post = (i + 1) % 5
+            opp = (i + 2) % 5
             bank[10 + post] = min(48.0, bank[10 + post] + w)
+            bank[15 + i] = bank[15 + i] + 0.014 * (bank[10 + opp] / 48.0) * iopts[i]
+            bank[15 + opp] = bank[15 + opp] - 0.007
+        for i in range(5):
+            leaked = bank[15 + i] + (1.0 - bank[15 + i]) * (h / 180.0)
+            bank[15 + i] = max(0.05, min(4.0, leaked))
         decay = math.exp(-h / 38.0)
         rate = rate * decay + (len(fired) / 5.0) * (1 - decay) * 10
         if rate > 1:
@@ -351,25 +367,15 @@ def ouroboros_tax(amplitude: float, bars: int = 8) -> float:
 
 
 def organs_eval(payload: dict) -> dict:
-    flags = {
-        "YACHAY": not bool(payload.get("zero_cortex")),
-        "YUYAY": not bool(payload.get("zero_heart")),
-        "YAWAR": not bool(payload.get("tamper_chain")),
-        "NERVOUS": not bool(payload.get("fabricate_joule")),
-        "KHIPU": not bool(payload.get("break_skeleton")),
-    }
-    live = [name for name, ok in flags.items() if ok]
-    blocked = len(live) < 5
-    reason = "all five organs live" if not blocked else "fail-closed: " + ",".join(
-        name for name, ok in flags.items() if not ok
-    )
+    # Hologram does not run the SZL kernel. Fail-closed — never fabricate LIVE.
+    flags = {name: False for name in ORGANS}
+    reason = "UNAVAILABLE — hologram has no kernel organs"
     if payload.get("fabricate_joule"):
         reason = "HARD_DENY — fabricated joule downs NERVOUS"
-        blocked = True
     return {
         "organs": flags,
-        "live_count": len(live),
-        "blocked": blocked,
+        "live_count": 0,
+        "blocked": True,
         "reason": reason,
         "energy": "UNAVAILABLE",
         "proven_trust": False,
@@ -394,7 +400,7 @@ def analog_payload(data: dict) -> dict:
     }
     if program == "nemo":
         bank = data.get("bank")
-        state["bank"] = bank if isinstance(bank, list) and len(bank) == 15 else seed_nemo_bank()
+        state["bank"] = pad_nemo_bank(bank)
     trail, last = analog_trail(program, state, steps, chaos, drive, dt)
     sc = scale_analog(program, last)
     ao = max(0.0, 0.5 + 0.5 * math.hypot(sc["x"], sc["y"]))
@@ -461,7 +467,7 @@ class Handler(BaseHTTPRequestHandler):
                     "ok": True,
                     "space": "nexus",
                     "kernel": "hologram",
-                    "analog": "six-program Euler + NEMO",
+                    "analog": "six-program Euler + NEMO optical STDP",
                     "programs": list(PROGRAMS),
                     "uniqueness": "Conjecture 1",
                     "energy": "UNAVAILABLE",
@@ -586,7 +592,23 @@ def selftest() -> None:
 
     # Programs enumerate.
     assert len(PROGRAMS) == 6
-    print("analog selftest ok — six programs, NEMO spikes, optical (Ao+Ar)²", flush=True)
+
+    # 15-cell persist pads; optical STDP leaks toward 1 without spikes.
+    s = seed_analog("nemo")
+    s["bank"] = s["bank"][:15]
+    s = analog_step("nemo", s, 0.016, 0.0, 0.0)
+    assert len(s["bank"]) == 20, len(s["bank"])
+    s["bank"][15:20] = [2.4] * 5
+    s["bank"][0] = -80.0
+    for _ in range(40):
+        s = analog_step("nemo", s, 0.016, 0.0, 0.0)
+    assert all(0.05 < w < 2.4 for w in s["bank"][15:20]), s["bank"][15:20]
+
+    # Organs fail-closed on the hologram.
+    org = organs_eval({})
+    assert org["live_count"] == 0 and org["blocked"] is True
+
+    print("analog selftest ok — six programs, NEMO STDP, optical (Ao+Ar)²", flush=True)
 
 
 def main() -> None:
