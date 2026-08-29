@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { ModuleId } from "@/lib/nexus/types";
-import { LOCKED_EIGHT } from "@/lib/nexus/kernel";
+import { LOCKED_EIGHT, LOCKED_NOTE } from "@/lib/nexus/kernel";
 import { engine, useEngine } from "@/lib/nexus/use-engine";
 import { Grid } from "./Grid";
 import { Oscilloscope } from "./Oscilloscope";
@@ -271,11 +271,17 @@ function Header({ help, onHelp }: { help: boolean; onHelp: () => void }) {
       </div>
       <div className="flex flex-col gap-3 lg:ml-auto lg:flex-row lg:flex-wrap lg:items-center">
         <div className="grid grid-cols-8 gap-1 lg:flex">
-          {LOCKED_EIGHT.map((fid, i) => (
+          {LOCKED_EIGHT.map((fid, i) => {
+            const note = LOCKED_NOTE[fid];
+            return (
             <button
               key={fid}
               type="button"
-              title={snap.scenes[i] ? `Recall ${fid}` : `Empty ${fid} · shift-click to store`}
+              title={
+                snap.scenes[i]
+                  ? `${fid} · ${note.name} — ${note.analog} · stored`
+                  : `${fid} · ${note.name} — ${note.analog} · shift-click to store`
+              }
               className={`nx-btn min-h-11 min-w-0 px-0 text-micro lg:min-w-11 ${snap.sceneSlot === i ? "nx-btn-on" : ""} ${snap.scenes[i] ? "text-phosphor" : ""}`}
               onClick={(e) => {
                 if (e.shiftKey) engine.saveScene(i);
@@ -284,7 +290,8 @@ function Header({ help, onHelp }: { help: boolean; onHelp: () => void }) {
             >
               {fid}
             </button>
-          ))}
+            );
+          })}
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <label className="nx-label flex min-h-11 items-center gap-2">

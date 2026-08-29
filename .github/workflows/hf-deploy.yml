@@ -1,6 +1,16 @@
 # Copyright 2026 SZL Holdings — SPDX-License-Identifier: Apache-2.0
 name: Deploy to HuggingFace Space
 
+# Canonical Space publisher is szl-holdings/yarqa `.github/workflows/deploy-nexus.yml`.
+# That repo holds HF_ORG_TOKEN. This caller does not. Do not fail-loud on a token
+# that is not bound here — that painted every merge red while the instrument
+# was already live. Skip honestly.
+#
+# If this repo is later granted the token, still refuse the root Dockerfile.
+# That image is leftover vite-dev + npm ci. The HF factory BUILD_ERRORs on
+# npm ci (~3s cache-miss dump). Yarqa prebuilds the Nitro node-server bundle
+# and publishes space/Dockerfile. GitHub remains source of truth.
+
 on:
   push:
     branches: [main]
@@ -14,33 +24,39 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  gate:
+    name: Publisher binding
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    outputs:
+      bound: ${{ steps.s.outputs.bound }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.12"
-      - run: pip install huggingface_hub
-      - name: Publish Python hologram to SZLHOLDINGS/nexus
+      - id: s
         env:
           HF_TOKEN: ${{ secrets.HF_ORG_TOKEN || secrets.HF_TOKEN }}
         run: |
-          python - <<'PY'
-          import os, sys
-          token = os.environ.get("HF_TOKEN") or ""
-          if not token:
-              print("HF_TOKEN UNAVAILABLE — Space publish skipped. GitHub remains the source. Not fabricated LIVE.")
-              sys.exit(0)
-          from huggingface_hub import HfApi, create_repo
-          api = HfApi(token=token)
-          create_repo("SZLHOLDINGS/nexus", repo_type="space", space_sdk="docker", exist_ok=True, token=token)
-          api.upload_folder(
-              folder_path="space",
-              repo_id="SZLHOLDINGS/nexus",
-              repo_type="space",
-              ignore_patterns=[".git*"],
-          )
-          print("published SZLHOLDINGS/nexus python hologram")
-          PY
+          set -euo pipefail
+          if [ -n "${HF_TOKEN:-}" ]; then
+            echo "bound=true" >> "$GITHUB_OUTPUT"
+            echo "Token is bound, but this repo must not publish the root Dockerfile."
+            echo "Canonical Space publisher: szl-holdings/yarqa deploy-nexus.yml"
+            echo "(prebuild + space/Dockerfile). Refusing the vite-dev image."
+          else
+            echo "bound=false" >> "$GITHUB_OUTPUT"
+            echo "HF_ORG_TOKEN unbound on szl-holdings/nexus."
+            echo "Canonical Space publisher: szl-holdings/yarqa deploy-nexus.yml."
+            echo "GitHub remains source of truth. This is not a failed deploy."
+          fi
+
+  deploy:
+    needs: gate
+    if: needs.gate.outputs.bound == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refuse leftover vite-dev image
+        run: |
+          set -euo pipefail
+          echo "HF token is bound on szl-holdings/nexus."
+          echo "This workflow will not call reusable-hf-deploy against Dockerfile."
+          echo "That image is leftover vite-dev (npm ci). Space image is space/Dockerfile."
+          echo "Canonical publisher: szl-holdings/yarqa deploy-nexus.yml."
+          echo "GitHub remains source. This is not a failed deploy."

@@ -2,18 +2,23 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   LOCKED_EIGHT,
+  LOCKED_NOTE,
   KERNEL_COMMIT,
   CONJECTURE_1,
+  LAMBDA_LABEL,
   ORG_AXIS_NAMES,
   ORG_AXIS_WEIGHTS,
   appendReceipt,
+  canalOf,
   evaluateAnatomy,
   evaluateLambda,
+  instantCycles,
   loopTax,
   recomputeRowHash,
   runInvariants,
   sha256Hex,
   tickLoop,
+  yarqaLeak,
   yuyayAxes,
   type LedgerRow,
 } from "./kernel.ts";
@@ -194,5 +199,70 @@ describe("anatomy", () => {
     });
     assert.equal(a.organs.find((o) => o.id === "nervous")?.status, "DOWN");
     assert.equal(a.blocked, true);
+  });
+  it("cross-canal leak is a bound, not a mute", () => {
+    const lambda = evaluateLambda([0.8, 0.7, 0.9, 0.6, 0.5]);
+    const a = evaluateAnatomy({
+      lambda,
+      rows: [],
+      chainOk: true,
+      chainHead: "genesis",
+      leak: 0.5,
+      cycles: 0,
+      fabricateJoule: false,
+      hatunLive: false,
+    });
+    assert.equal(a.organs.find((o) => o.id === "brain")?.status, "LIVE");
+    assert.equal(a.blocked, false);
+    assert.match(a.organs.find((o) => o.id === "brain")?.detail ?? "", /leak 0\.50/);
+  });
+  it("F4 instant cycle downs the brain", () => {
+    const lambda = evaluateLambda([0.8, 0.7, 0.9, 0.6, 0.5]);
+    const a = evaluateAnatomy({
+      lambda,
+      rows: [],
+      chainOk: true,
+      chainHead: "genesis",
+      leak: 0.25,
+      cycles: 1,
+      fabricateJoule: false,
+      hatunLive: false,
+    });
+    assert.equal(a.organs.find((o) => o.id === "brain")?.status, "DOWN");
+    assert.equal(a.blocked, true);
+    assert.match(a.reason, /BRAIN DOWN/);
+  });
+});
+
+describe("YARQA canals", () => {
+  it("ANLG and FUNC live on the voice canal", () => {
+    assert.equal(canalOf("anlg"), "voice");
+    assert.equal(canalOf("func"), "voice");
+    assert.equal(canalOf("vcf"), "voice");
+    assert.equal(canalOf("delay"), "tape");
+    assert.equal(canalOf("out"), "out");
+  });
+  it("vcfout→delay is leak, vco→vcf is not", () => {
+    assert.equal(yarqaLeak([{ from: "vco", to: "vcf" }]), 0);
+    assert.equal(yarqaLeak([{ from: "vcfout", to: "delay" }]), 1);
+    assert.equal(yarqaLeak([{ from: "vco", to: "vcf" }, { from: "vcfout", to: "delay" }]), 0.5);
+  });
+  it("instant cycle is F4; delay loop is not", () => {
+    assert.equal(instantCycles([{ from: "vcfout", to: "vcf" }]).length, 1);
+    assert.equal(instantCycles([{ from: "vcfout", to: "delay" }]).length, 0);
+    assert.equal(instantCycles([{ from: "tape", to: "tapein" }]).length, 0);
+  });
+});
+
+describe("locked-8 analog faces", () => {
+  it("LOCKED_NOTE covers the locked-8 and uniqueness stays OPEN", () => {
+    assert.equal(Object.keys(LOCKED_NOTE).length, 8);
+    for (const id of LOCKED_EIGHT) {
+      assert.ok(LOCKED_NOTE[id].name.length > 0);
+      assert.ok(LOCKED_NOTE[id].analog.length > 0);
+    }
+    assert.match(LOCKED_NOTE.F19.analog, /Conjecture 1/);
+    assert.match(LAMBDA_LABEL, /Conjecture 1/);
+    assert.equal(CONJECTURE_1, "OPEN");
   });
 });
