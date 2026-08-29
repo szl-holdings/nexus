@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { ScopeMode } from "@/lib/nexus/types";
-import { ANALOG_PROGRAMS } from "@/lib/nexus/types";
+import { ANALOG_PROGRAMS, NEMO_ORGANS } from "@/lib/nexus/types";
 import { engine, useEngine } from "@/lib/nexus/use-engine";
 import { ModuleFrame } from "./ModuleFrame";
 
@@ -11,13 +11,7 @@ const MODES: { id: ScopeMode; label: string }[] = [
   { id: "holo", label: "Holo" },
 ];
 
-const ORGAN_DRAW: { id: "brain" | "heart" | "circulatory" | "nervous" | "skeleton"; q: string }[] = [
-  { id: "brain", q: "YACHAY" },
-  { id: "heart", q: "YUYAY" },
-  { id: "circulatory", q: "YAWAR" },
-  { id: "nervous", q: "OTel" },
-  { id: "skeleton", q: "KHIPU" },
-];
+const ORGAN_DRAW = NEMO_ORGANS;
 
 export function Oscilloscope() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -108,7 +102,7 @@ export function Oscilloscope() {
   const prog = ANALOG_PROGRAMS.find((p) => p.id === (snap.analog.program ?? "lorenz"))?.label ?? "LRNZ";
   const caption =
     snap.scopeMode === "holo"
-      ? `OPTICAL · ${prog} · Λ ${engine.getKernel().lambda.toFixed(3)} · C1 OPEN`
+      ? `WILLAY · 2ND BRAIN · 5ORG · ${prog} · Λ ${engine.getKernel().lambda.toFixed(3)} · C1 OPEN`
       : snap.scopeMode === "xy"
         ? snap.frontier
           ? `${prog} · X×Y · ${(snap.analog.mode ?? "op").toUpperCase()}`
@@ -388,23 +382,28 @@ function drawHolo(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fill();
 
   const R = 0.58;
+  const analogBank = a.bank;
   const nodes = ORGAN_DRAW.map((o, i) => {
     const ang = -Math.PI / 2 + (i * Math.PI * 2) / 5;
     const p = project(Math.cos(ang) * R, Math.sin(ang) * 0.12, Math.sin(ang) * R);
     const organ = k.organs.find((g) => g.id === o.id);
-    return { ...o, p, live: organ?.status !== "DOWN", metric: organ?.metric ?? 0 };
+    const membrane = analogBank && analogBank.length >= 5 ? analogBank[i] : undefined;
+    const analogFace = membrane !== undefined && Number.isFinite(membrane) ? (membrane + 70) / 110 : 0.5;
+    return { ...o, p, live: organ?.status !== "DOWN", metric: organ?.metric ?? 0, analogFace };
   });
 
   ctx.shadowBlur = 0;
-  ctx.strokeStyle = "rgba(255,176,0,0.28)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
+  ctx.lineCap = "round";
   nodes.forEach((n, i) => {
-    if (i === 0) ctx.moveTo(n.p.x, n.p.y);
-    else ctx.lineTo(n.p.x, n.p.y);
+    const nxt = nodes[(i + 1) % nodes.length]!;
+    const glow = Math.max(0, Math.min(1, n.analogFace));
+    ctx.strokeStyle = `rgba(255,176,0,${0.12 + 0.55 * glow})`;
+    ctx.lineWidth = 1 + 1.5 * glow;
+    ctx.beginPath();
+    ctx.moveTo(n.p.x, n.p.y);
+    ctx.lineTo(nxt.p.x, nxt.p.y);
+    ctx.stroke();
   });
-  ctx.closePath();
-  ctx.stroke();
 
   const heart = project(0, 0, 0);
   const base = Math.min(w, h) * 0.28;
@@ -427,12 +426,15 @@ function drawHolo(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.font = "8px 'IBM Plex Mono', monospace";
   ctx.textAlign = "center";
   ctx.fillText("WILLAY", heart.x, heart.y + 14);
+  ctx.fillStyle = k.blocked ? "rgba(196,74,56,0.55)" : "rgba(124,255,107,0.55)";
+  ctx.font = "8px 'IBM Plex Mono', monospace";
+  ctx.fillText("2ND BRAIN", heart.x, heart.y - 12);
   ctx.fillStyle = k.blocked ? "#c44a38" : k.disagree ? "#ffb000" : "#7cff6b";
   ctx.font = "9px 'IBM Plex Mono', monospace";
   ctx.fillText(k.disagree ? "DISAGREE" : `Λ ${k.lambda.toFixed(3)}`, heart.x, heart.y + 3);
 
   for (const n of nodes) {
-    const rad = 5.5 * n.p.s * (n.live ? 1 : 0.7);
+    const rad = 5.5 * n.p.s * (n.live ? 0.75 + 0.45 * Math.max(0, Math.min(1, n.analogFace)) : 0.7);
     ctx.shadowColor = n.live ? "#7cff6b" : "#c44a38";
     ctx.shadowBlur = n.live ? 12 : 4;
     ctx.fillStyle = n.live ? "#7cff6b" : "#c44a38";

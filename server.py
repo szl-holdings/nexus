@@ -149,7 +149,7 @@ def analog_coefficients(chaos: float, program: str = "lorenz") -> dict[str, Any]
         return {
             "sigma": 10, "rho": 18 + c * 22, "beta": 8 / 3, "omega": 1,
             "mu": a, "delta": w, "gamma": tau, "alpha": 0.2,
-            "label": f"a {a:.3f} · w {w:.1f} · STDP",
+            "label": "AdEx · 5ORG · 2BRN",
         }
     rho = 18 + c * 22
     return {
@@ -177,21 +177,27 @@ def optical_reconstruct(intensity: float, dphi: float) -> float:
 
 
 def analog_nemo_step(s: dict[str, Any], dt: float, chaos: float, drive: float) -> dict[str, Any]:
-    """Five Izhikevich-style quadratic integrators + exp synapses + optical ring + STDP.
+    """AdEx five-organ anatomy + WILLAY optical second brain.
 
-    IEEE TNN 2003 RS→CH via Chaos. Optical STDP uses two-beam intensity as
-    analog eligibility (BrainScaleS-2 correlator *job*, not the circuit).
-    Not a physical Loihi / BrainScaleS chip. Energy UNAVAILABLE.
+    Brette & Gerstner 2005 membranes (BrainScaleS-2 *job*). Organ jobs:
+    YACHAY cognition, YUYAY pacemaker If, YAWAR traveling wave (Miller 2026
+    analog-wave *job*), OTel optical write, KHIPU bound. WILLAY is the
+    optical ring — second brain, not a sixth organ. Drive is analog
+    neuromodulator, not dopamine. Not a physical chip. Energy UNAVAILABLE.
     """
     c = clamp01(chaos)
     pots = analog_coefficients(c, "nemo")
-    a_rec = float(pots["mu"])
-    b = 0.2
-    c_reset = -65 + c * 15
-    d_jump = 8 - c * 6
-    w = float(pots["delta"])
+    a_adapt = float(pots["mu"])
+    chem_w = float(pots["delta"])
     tau = max(1.4, float(pots["gamma"]))
-    i0 = 1.2 + drive * 13.5
+    i0 = 2.2 + drive * 10.5
+    el, d_t, g_l = -65.0, 2.0, 0.12
+    vt = -52 + c * 6
+    tau_w = max(8.0, 42 - c * 28)
+    vr = -58 + c * 8
+    b_jump = 4 + c * 10
+    v_peak = 20.0
+    mod = clamp01(drive)
     bank = pad_nemo_bank(s.get("bank"))
     rate = float(s["z"]) if math.isfinite(float(s.get("z", 0))) else 0.0
     rate = max(0.0, min(1.0, rate))
@@ -203,26 +209,47 @@ def analog_nemo_step(s: dict[str, Any], dt: float, chaos: float, drive: float) -
     for _ in range(n):
         I = [0.0] * 5
         iopts = [0.0] * 5
+        t_ms = t * 1000.0
+        pace_t = 170.0 + (1.0 - mod) * 260.0
+        i_pace = mod * (1.6 + 3.8 * (0.5 + 0.5 * math.sin((t_ms * math.pi * 2) / pace_t)))
+        willay_field = 0.0
         for i in range(5):
             opp = (i + 2) % 5
+            prev = (i + 4) % 5
             ao = max(0.0, (bank[i] + 70) / 110)
             ar = max(0.0, (bank[opp] + 70) / 110)
             iopts[i] = optical_interfere(ao, bank[i] * 0.035, ar, bank[opp] * 0.035)
+            willay_field += optical_reconstruct(iopts[i], (bank[i] - bank[opp]) * 0.035)
+            i_wave = 0.72 * max(0.0, (bank[prev] - el) / 40.0)
             wi = max(0.05, min(4.0, bank[15 + i]))
-            I[i] = bank[10 + i] + iopts[i] * (1.1 + drive * 0.9) * wi + (i0 if i == 0 else 0.8 + drive * 2.4)
+            inj = bank[10 + i] + iopts[i] * (1.1 + drive * 0.9) * wi + i_wave
+            if i == 0:
+                inj += i0
+            elif i == 1:
+                inj += 0.8 + drive * 2.4 + i_pace
+            else:
+                inj += 0.8 + drive * 2.4
+            if i == 3:
+                inj += 0.45 * iopts[i]
+            I[i] = inj
+        willay_field /= 5.0
+        gate = 0.35 + 0.65 * (0.5 + 0.5 * willay_field)
         fired: list[int] = []
         for i in range(5):
             vi = bank[i]
             ui = bank[5 + i]
             si = bank[10 + i]
-            dv = 0.04 * vi * vi + 5 * vi + 140 - ui + I[i]
-            du = a_rec * (b * vi - ui)
+            arg = max(-20.0, min(8.0, (vi - vt) / d_t))
+            dv = -g_l * (vi - el) + g_l * d_t * math.exp(arg) - ui + I[i]
+            du = (a_adapt * (vi - el) - ui) / tau_w
             vi += dv * h
             ui += du * h
+            if i == 4:
+                vi += (el - vi) * (h / 420.0)
             si += (-si / tau) * h
-            if vi >= 30:
-                vi = c_reset
-                ui += d_jump
+            if vi >= v_peak:
+                vi = vr
+                ui += b_jump
                 fired.append(i)
             bank[i] = max(-90.0, min(40.0, vi))
             bank[5 + i] = max(-40.0, min(80.0, ui))
@@ -230,9 +257,12 @@ def analog_nemo_step(s: dict[str, Any], dt: float, chaos: float, drive: float) -
         for i in fired:
             post = (i + 1) % 5
             opp = (i + 2) % 5
-            bank[10 + post] = min(48.0, bank[10 + post] + w)
-            bank[15 + i] = bank[15 + i] + 0.014 * (bank[10 + opp] / 48.0) * iopts[i]
-            bank[15 + opp] = bank[15 + opp] - 0.007
+            avail = 1.0 - min(1.0, bank[10 + post] / 48.0)
+            jump = chem_w * avail * (0.55 + 0.45 * gate)
+            bank[10 + post] = min(48.0, bank[10 + post] + jump)
+            nervous = 1.35 if i == 3 else 1.0
+            bank[15 + i] = bank[15 + i] + 0.018 * (bank[10 + opp] / 48.0) * iopts[i] * mod * gate * nervous
+            bank[15 + opp] = bank[15 + opp] - 0.006
         for i in range(5):
             leaked = bank[15 + i] + (1.0 - bank[15 + i]) * (h / 180.0)
             bank[15 + i] = max(0.05, min(4.0, leaked))
@@ -245,6 +275,7 @@ def analog_nemo_step(s: dict[str, Any], dt: float, chaos: float, drive: float) -
             return seed_analog("nemo")
 
     return {"x": bank[0], "y": bank[2], "z": rate, "t": t, "bank": bank}
+
 
 
 def analog_step(program: str, s: dict[str, Any], dt: float, chaos: float, drive: float = 0.5) -> dict[str, Any]:
@@ -467,7 +498,7 @@ class Handler(BaseHTTPRequestHandler):
                     "ok": True,
                     "space": "nexus",
                     "kernel": "hologram",
-                    "analog": "six-program Euler + NEMO optical STDP",
+                    "analog": "AdEx 5-organ anatomy + WILLAY second brain + traveling wave + 3F STDP",
                     "programs": list(PROGRAMS),
                     "uniqueness": "Conjecture 1",
                     "energy": "UNAVAILABLE",
@@ -608,7 +639,7 @@ def selftest() -> None:
     org = organs_eval({})
     assert org["live_count"] == 0 and org["blocked"] is True
 
-    print("analog selftest ok — six programs, NEMO STDP, optical (Ao+Ar)²", flush=True)
+    print("analog selftest ok — AdEx 5ORG, WILLAY 2BRN, traveling wave, 3F STDP, optical (Ao+Ar)²", flush=True)
 
 
 def main() -> None:

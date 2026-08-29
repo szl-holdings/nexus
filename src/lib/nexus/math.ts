@@ -105,7 +105,7 @@ export function analogCoefficients(chaos: number, program: AnalogProgram = "lore
     const a = 0.02 + c * 0.08;
     const w = 3.5 + c * 14;
     const tau = 3 + (1 - c) * 9;
-    return { sigma: 10, rho: 18 + c * 22, beta: 8 / 3, omega: 1, mu: a, delta: w, gamma: tau, alpha: 0.2, label: `a ${a.toFixed(3)} · w ${w.toFixed(1)} · STDP` };
+    return { sigma: 10, rho: 18 + c * 22, beta: 8 / 3, omega: 1, mu: a, delta: w, gamma: tau, alpha: 0.2, label: `AdEx · 5ORG · 2BRN` };
   }
   return {
     sigma: 10,
@@ -288,23 +288,38 @@ export function opticalReconstruct(intensity: number, dphi: number) {
 }
 
 /**
- * Analog neuromorphic core. Five Izhikevich-style quadratic integrators
- * (IEEE TNN 2003 RS→CH via Chaos), exponential synaptic traces
- * (BrainScaleS-2 analog synapse), opticalInterfere as photonic ring coupling,
- * analog optical STDP correlator (two-beam intensity as eligibility;
- * Billaudelle et al. analog correlators — the job, not the circuit).
- * Not a physical Loihi / BrainScaleS chip. Energy UNAVAILABLE.
+ * Analog neuromorphic core — five-organ anatomy as analog physics,
+ * WILLAY as optical second brain (not a sixth organ, not a seventh module).
+ *
+ * Membranes: AdEx (Brette & Gerstner 2005; BrainScaleS-2 analog job, not the circuit).
+ * Organ jobs (analog, not a digital state machine):
+ *   0 YACHAY  cognition — Drive injected current
+ *   1 YUYAY   pacemaker — analog SA-node If (DiFrancesco job, not a cardiac cell)
+ *   2 YAWAR   traveling wave — nearest-neighbor depolarizing current around the ring
+ *               (Miller 2026 analog traveling-wave job, not their circuit)
+ *   3 OTel    optical nervous write — extra two-beam coupling; never a joule
+ *   4 KHIPU   bound — extra leak toward rest
+ * Chemical synapses: Tsodyks–Markram analog STP.
+ * Three-factor optical STDP: eligibility × Drive × WILLAY reconstruct.
+ * WILLAY conscience field = mean first-order diffraction of the five optical pairs.
+ * Dark hologram soft-inhibits the ring (analog fail-closed). Not a chip. Energy UNAVAILABLE.
  */
 function analogNemoStep(s: AnalogState, dt: number, chaos: number, drive: number): AnalogState {
   const c = clamp01(chaos);
   const pots = analogCoefficients(c, "nemo");
-  const aRec = pots.mu;
-  const b = 0.2;
-  const cReset = -65 + c * 15;
-  const dJump = 8 - c * 6;
-  const w = pots.delta;
+  const aAdapt = pots.mu;
+  const chemW = pots.delta;
   const tau = Math.max(1.4, pots.gamma);
-  const I0 = 1.2 + drive * 13.5;
+  const I0 = 2.2 + drive * 10.5;
+  const EL = -65;
+  const VT = -52 + c * 6;
+  const dT = 2;
+  const gL = 0.12;
+  const tauW = Math.max(8, 42 - c * 28);
+  const vr = -58 + c * 8;
+  const bJump = 4 + c * 10;
+  const vPeak = 20;
+  const M = clamp01(drive);
   const bank = padNemoBank(s.bank);
   let rate = Number.isFinite(s.z) ? Math.max(0, Math.min(1, s.z)) : 0;
   let t = Number.isFinite(s.t) ? s.t : 0;
@@ -315,27 +330,44 @@ function analogNemoStep(s: AnalogState, dt: number, chaos: number, drive: number
   for (let k = 0; k < n; k++) {
     const I = [0, 0, 0, 0, 0];
     const iopt = [0, 0, 0, 0, 0];
+    const tMs = t * 1000;
+    const paceT = 170 + (1 - M) * 260;
+    const Ipace = M * (1.6 + 3.8 * (0.5 + 0.5 * Math.sin((tMs * Math.PI * 2) / paceT)));
+    let willayField = 0;
     for (let i = 0; i < 5; i++) {
       const opp = (i + 2) % 5;
+      const prev = (i + 4) % 5;
       const ao = Math.max(0, (bank[i]! + 70) / 110);
       const ar = Math.max(0, (bank[opp]! + 70) / 110);
       iopt[i] = opticalInterfere(ao, bank[i]! * 0.035, ar, bank[opp]! * 0.035);
+      willayField += opticalReconstruct(iopt[i]!, (bank[i]! - bank[opp]!) * 0.035);
+      const Iwave = 0.72 * Math.max(0, (bank[prev]! - EL) / 40);
       const wi = Math.max(0.05, Math.min(4, bank[15 + i]!));
-      I[i] = bank[10 + i]! + iopt[i]! * (1.1 + drive * 0.9) * wi + (i === 0 ? I0 : 0.8 + drive * 2.4);
+      let inj = bank[10 + i]! + iopt[i]! * (1.1 + drive * 0.9) * wi + Iwave;
+      if (i === 0) inj += I0;
+      else if (i === 1) inj += 0.8 + drive * 2.4 + Ipace;
+      else inj += 0.8 + drive * 2.4;
+      if (i === 3) inj += 0.45 * (iopt[i] ?? 0);
+      I[i] = inj;
     }
+    willayField /= 5;
+    const gate = 0.35 + 0.65 * (0.5 + 0.5 * willayField);
     const fired: number[] = [];
     for (let i = 0; i < 5; i++) {
       let vi = bank[i]!;
       let ui = bank[5 + i]!;
       let si = bank[10 + i]!;
-      const dv = 0.04 * vi * vi + 5 * vi + 140 - ui + I[i]!;
-      const du = aRec * (b * vi - ui);
+      const arg = Math.max(-20, Math.min(8, (vi - VT) / dT));
+      const expNa = Math.exp(arg);
+      const dv = -gL * (vi - EL) + gL * dT * expNa - ui + I[i]!;
+      const du = (aAdapt * (vi - EL) - ui) / tauW;
       vi += dv * h;
       ui += du * h;
+      if (i === 4) vi += (EL - vi) * (h / 420);
       si += (-si / tau) * h;
-      if (vi >= 30) {
-        vi = cReset;
-        ui += dJump;
+      if (vi >= vPeak) {
+        vi = vr;
+        ui += bJump;
         fired.push(i);
       }
       bank[i] = Math.max(-90, Math.min(40, vi));
@@ -345,10 +377,12 @@ function analogNemoStep(s: AnalogState, dt: number, chaos: number, drive: number
     for (const i of fired) {
       const post = (i + 1) % 5;
       const opp = (i + 2) % 5;
-      bank[10 + post] = Math.min(48, (bank[10 + post] ?? 0) + w);
-      // Causal LTP: optical eligibility × partner trace. Reverse LTD on the ring.
-      bank[15 + i] = (bank[15 + i] ?? 1) + 0.014 * ((bank[10 + opp] ?? 0) / 48) * (iopt[i] ?? 0);
-      bank[15 + opp] = (bank[15 + opp] ?? 1) - 0.007;
+      const avail = 1 - Math.min(1, (bank[10 + post] ?? 0) / 48);
+      const jump = chemW * avail * (0.55 + 0.45 * gate);
+      bank[10 + post] = Math.min(48, (bank[10 + post] ?? 0) + jump);
+      const nervous = i === 3 ? 1.35 : 1;
+      bank[15 + i] = (bank[15 + i] ?? 1) + 0.018 * ((bank[10 + opp] ?? 0) / 48) * (iopt[i] ?? 0) * M * gate * nervous;
+      bank[15 + opp] = (bank[15 + opp] ?? 1) - 0.006;
     }
     for (let i = 0; i < 5; i++) {
       const leaked = (bank[15 + i] ?? 1) + (1 - (bank[15 + i] ?? 1)) * (h / 180);

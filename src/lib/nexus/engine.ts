@@ -356,6 +356,7 @@ class NexusEngine {
       holo: this.holoI,
       recon: this.holoR,
       program,
+      bank: this.analog.bank,
       ...cell,
       ...coef,
     };

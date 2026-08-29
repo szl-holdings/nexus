@@ -198,6 +198,18 @@ describe("analog computer programs", () => {
     assert.ok(weights.every((v) => v >= 0.05 && v <= 4), `STDP weights out of range ${weights.join(",")}`);
   });
 
+  it("NEMO three-factor optical STDP is gated by Drive", () => {
+    const run = (drive: number) => {
+      let s = seedAnalogState("nemo", 0.2);
+      for (let i = 0; i < 1800; i++) s = analogStep("nemo", s, 0.002, 0.45, drive);
+      const w = (s.bank ?? []).slice(15, 20);
+      return w.reduce((a, b) => a + Math.abs(b - 1), 0) / 5;
+    };
+    const quiet = run(0);
+    const driven = run(0.95);
+    assert.ok(driven > quiet + 0.002, `3-factor should move more under Drive, quiet ${quiet.toFixed(4)} driven ${driven.toFixed(4)}`);
+  });
+
   it("NEMO synaptic traces decay with no drive", () => {
     let s = seedAnalogState("nemo");
     const bank = (s.bank ?? []).slice();
@@ -221,6 +233,42 @@ describe("analog computer programs", () => {
     for (let i = 0; i < 120; i++) s = analogStep("nemo", s, 0.002, 0, 0);
     const weights = (s.bank ?? []).slice(15, 20);
     assert.ok(weights.every((v) => v < 2.6 && v > 0.05), `weights should leak toward 1, got ${weights.join(",")}`);
+  });
+
+  it("NEMO YUYAY pacemaker fires more under Drive than at rest", () => {
+    const spikes = (drive: number) => {
+      let s = seedAnalogState("nemo", 0.2);
+      let prev = s.bank![1]!;
+      let n = 0;
+      for (let i = 0; i < 1800; i++) {
+        s = analogStep("nemo", s, 0.002, 0.4, drive);
+        const v = s.bank![1]!;
+        if (v < prev - 20) n++;
+        prev = v;
+      }
+      return n;
+    };
+    const quiet = spikes(0);
+    const paced = spikes(0.95);
+    assert.ok(paced > quiet + 2, `YUYAY pacemaker should spike more under Drive, quiet ${quiet} paced ${paced}`);
+  });
+
+  it("NEMO YAWAR traveling wave carries YACHAY depolarization to YUYAY first", () => {
+    let s = seedAnalogState("nemo");
+    const bank = (s.bank ?? []).slice();
+    for (let i = 0; i < 5; i++) {
+      bank[i] = -70;
+      bank[5 + i] = 0;
+      bank[10 + i] = 0;
+    }
+    bank[0] = -55;
+    s = { ...s, bank, t: 0, z: 0 };
+    for (let i = 0; i < 4; i++) s = analogStep("nemo", s, 0.002, 0, 0);
+    const yuyay = s.bank![1]!;
+    const otel = s.bank![3]!;
+    const khipu = s.bank![4]!;
+    assert.ok(yuyay > otel + 0.6, `wave should hit YUYAY before OTel, YUYAY ${yuyay.toFixed(2)} OTel ${otel.toFixed(2)}`);
+    assert.ok(yuyay > khipu + 0.6, `wave should hit YUYAY before KHIPU, YUYAY ${yuyay.toFixed(2)} KHIPU ${khipu.toFixed(2)}`);
   });
 });
 
