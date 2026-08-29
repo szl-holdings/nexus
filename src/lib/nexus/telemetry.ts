@@ -10,7 +10,7 @@ export interface Probe {
   at: number;
 }
 
-const ENDPOINTS: { id: string; label: string; url: string }[] = [
+export const ENDPOINTS: { id: string; label: string; url: string }[] = [
   { id: "hatun", label: "Hatun MCP", url: "https://szlholdings-hatun-mcp.hf.space/healthz" },
   { id: "anatomy", label: "Anatomy", url: "https://szlholdings-anatomy.hf.space/version" },
   { id: "nexus-space", label: "NEXUS Space", url: "https://huggingface.co/api/spaces/SZLHOLDINGS/nexus" },
@@ -26,6 +26,28 @@ export function idleProbes(): Probe[] {
   }));
 }
 
+export function parseProbes(data: unknown): Probe[] | null {
+  if (!Array.isArray(data)) return null;
+  const out: Probe[] = [];
+  for (const row of data) {
+    if (!row || typeof row !== "object") return null;
+    const r = row as Record<string, unknown>;
+    if (typeof r.id !== "string" || typeof r.label !== "string") return null;
+    if (r.status !== "LIVE" && r.status !== "UNAVAILABLE") return null;
+    if (typeof r.detail !== "string") return null;
+    out.push({
+      id: r.id,
+      label: r.label,
+      status: r.status,
+      detail: r.detail,
+      at: typeof r.at === "number" ? r.at : 0,
+    });
+  }
+  if (out.length !== ENDPOINTS.length) return null;
+  if (!ENDPOINTS.every((e) => out.some((p) => p.id === e.id))) return null;
+  return out;
+}
+
 export async function probeEstate(timeoutMs = 2800): Promise<Probe[]> {
   return Promise.all(ENDPOINTS.map((e) => probeOne(e, timeoutMs)));
 }
@@ -33,10 +55,10 @@ export async function probeEstate(timeoutMs = 2800): Promise<Probe[]> {
 async function probeOne(e: { id: string; label: string; url: string }, timeoutMs: number): Promise<Probe> {
   const at = Date.now();
   const ctrl = new AbortController();
-  const t = window.setTimeout(() => ctrl.abort(), timeoutMs);
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(e.url, { signal: ctrl.signal, mode: "cors" });
-    window.clearTimeout(t);
+    const res = await fetch(e.url, { signal: ctrl.signal });
+    clearTimeout(t);
     if (!res.ok) {
       return { id: e.id, label: e.label, status: "UNAVAILABLE", detail: `HTTP ${res.status}`, at };
     }
@@ -51,7 +73,7 @@ async function probeOne(e: { id: string; label: string; url: string }, timeoutMs
     }
     return { id: e.id, label: e.label, status: "LIVE", detail, at };
   } catch (err) {
-    window.clearTimeout(t);
+    clearTimeout(t);
     const reason = err instanceof Error ? err.name : "error";
     return {
       id: e.id,

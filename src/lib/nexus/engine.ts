@@ -42,7 +42,7 @@ import {
   type LedgerRow,
   type LoopExit,
 } from "./kernel";
-import { idleProbes, probeEstate, type Probe } from "./telemetry";
+import { idleProbes, parseProbes, probeEstate, type Probe } from "./telemetry";
 
 export { euclid, midiToHz };
 
@@ -1075,6 +1075,7 @@ class NexusEngine {
     for (const l of this.listeners) l();
     this.queueSave();
     if (this.snapshot.powered) this.play();
+    void this.refreshProbes();
   }
 
   setVoice(partial: Partial<VoiceParams>) {
@@ -1569,11 +1570,26 @@ class NexusEngine {
     if (this.probing) return;
     this.probing = true;
     try {
+      const res = await fetch("/api/probes", { headers: { accept: "application/json" } });
+      if (res.ok) {
+        const parsed = parseProbes(await res.json());
+        if (parsed) {
+          this.probes = parsed;
+          this.refreshKernel(true);
+          this.applyMaster();
+          return;
+        }
+      }
       this.probes = await probeEstate();
       this.refreshKernel(true);
       this.applyMaster();
     } catch {
-      this.probes = idleProbes();
+      try {
+        this.probes = await probeEstate();
+      } catch {
+        this.probes = idleProbes();
+      }
+      this.refreshKernel(true);
     } finally {
       this.probing = false;
     }
