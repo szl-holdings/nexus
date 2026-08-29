@@ -11,9 +11,12 @@ import {
   SCALE_CHROMATIC,
   SCALE_MINOR,
   SCALE_PENTA,
+  SCENE_COUNT,
   SOURCE_PORTS,
   type PatchCable,
   type PortId,
+  type Scene,
+  type ScopeMode,
   type SeqParams,
   type SeqStep,
   type TapeParams,
@@ -36,6 +39,11 @@ export interface EngineSnapshot {
   activeNotes: number;
   heldKeys: number[];
   module: "grid" | "scope" | "tape" | "patch" | "seq" | "voice";
+  scopeMode: ScopeMode;
+  orbit: number;
+  sceneSlot: number;
+  scenes: (Scene | null)[];
+  bouncing: boolean;
   version: number;
 }
 
@@ -68,6 +76,40 @@ function euclid(hits: number, steps: number, rot: number): boolean[] {
   }
   const r = ((rot % n) + n) % n;
   return pattern.slice(n - r).concat(pattern.slice(0, n - r));
+}
+
+function makeSpringImpulse(ctx: AudioContext) {
+  const len = Math.floor(ctx.sampleRate * 1.85);
+  const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const ch = buf.getChannelData(c);
+    const comb = Math.floor(ctx.sampleRate * (0.018 + c * 0.003));
+    for (let i = 0; i < len; i++) {
+      const t = i / ctx.sampleRate;
+      const env = Math.exp(-t * 2.2);
+      const ping = Math.sin(t * (1620 + c * 90)) * Math.exp(-t * 7.5);
+      let s = (Math.random() * 2 - 1) * env * 0.28 + ping * 0.12;
+      if (comb > 0 && i > comb) s += (ch[i - comb] ?? 0) * 0.35;
+      ch[i] = s;
+    }
+  }
+  return buf;
+}
+
+function makeFoldCurve(amount: number) {
+  const n = 2048;
+  const curve = new Float32Array(n);
+  const drive = 1 + amount * 6.5;
+  const stages = Math.max(1, Math.round(1 + amount * 5));
+  for (let i = 0; i < n; i++) {
+    let x = ((i / (n - 1)) * 2 - 1) * drive;
+    for (let s = 0; s < stages; s++) {
+      if (x > 1) x = 2 - x;
+      else if (x < -1) x = -2 - x;
+    }
+    curve[i] = Math.tanh(x * (0.85 + amount * 0.4));
+  }
+  return curve;
 }
 
 function makeClipCurve(amount: number) {
@@ -125,8 +167,12 @@ class NexusEngine {
   private masterGain!: GainNode;
   private compressor!: DynamicsCompressorNode;
   private analyser!: AnalyserNode;
+  private analyserL!: AnalyserNode;
+  private analyserR!: AnalyserNode;
   private vuIn!: AnalyserNode;
   private vuOut!: AnalyserNode;
+  private orbitConv!: ConvolverNode;
+  private orbitGain!: GainNode;
   private masterPan!: StereoPannerNode;
   private noiseSrc!: AudioBufferSourceNode;
   private noiseOut!: GainNode;
@@ -139,6 +185,20 @@ class NexusEngine {
   private gridOut!: GainNode;
   private seqClick!: GainNode;
   private cutoffMod!: GainNode;
+  private foldShaper!: WaveShaperNode;
+  private foldDry!: GainNode;
+  private foldWet!: GainNode;
+  private foldMix!: GainNode;
+  private ringOsc!: OscillatorNode;
+  private ringVca!: GainNode;
+  private ringDry!: GainNode;
+  private ringWet!: GainNode;
+  private ringMix!: GainNode;
+  private shHold!: ConstantSourceNode;
+  private shOut!: GainNode;
+  private shAmtGain!: GainNode;
+  private bounceDest: MediaStreamAudioDestinationNode | null = null;
+  private bounceTimer = 0;
   private nodes: Partial<Record<PortId, AudioNode>> = {};
   private paramTargets: Partial<Record<PortId, AudioParam>> = {};
   private live: AudioNode[] = [];
@@ -161,6 +221,11 @@ class NexusEngine {
     activeNotes: 0,
     heldKeys: [],
     module: "grid",
+    scopeMode: "yt",
+    orbit: 0.16,
+    sceneSlot: 0,
+    scenes: Array.from({ length: SCENE_COUNT }, () => null),
+    bouncing: false,
     version: 0,
   };
 
@@ -193,17 +258,7 @@ class NexusEngine {
     if (typeof window === "undefined") return;
     window.setTimeout(() => {
       this.saveQueued = false;
-      const s = this.snapshot;
-      scheduleSave({
-        v: 1,
-        voice: s.voice,
-        tape: s.tape,
-        seq: { ...s.seq, playing: false },
-        steps: s.steps,
-        grid: s.grid,
-        patches: s.patches,
-        master: s.master,
-      });
+      scheduleSave(this.persistNow());
     }, 80);
   }
 
@@ -221,6 +276,10 @@ class NexusEngine {
       grid: lit ? savedGrid : emptyGrid(),
       patches: data.patches?.length ? data.patches : this.snapshot.patches,
       master: data.master ?? this.snapshot.master,
+      orbit: data.orbit ?? this.snapshot.orbit,
+      scopeMode: data.scopeMode ?? this.snapshot.scopeMode,
+      scenes: data.scenes?.length === SCENE_COUNT ? data.scenes : this.snapshot.scenes,
+      sceneSlot: data.sceneSlot ?? 0,
       version: this.snapshot.version + 1,
     };
     for (const l of this.listeners) l();
@@ -231,6 +290,12 @@ class NexusEngine {
   }
   getAnalyser() {
     return this.analyser;
+  }
+  getAnalyserL() {
+    return this.analyserL;
+  }
+  getAnalyserR() {
+    return this.analyserR;
   }
   getVuIn() {
     return this.vuIn;
@@ -253,6 +318,7 @@ class NexusEngine {
     this.buildGraph();
     this.applyVoice();
     this.applyTape();
+    this.applyOrbit();
     this.applyMaster();
     this.rebuildPatches();
     this.loop();
@@ -366,6 +432,26 @@ class NexusEngine {
     this.preMaster.connect(this.analyser);
     this.preMaster.connect(this.vuOut);
     this.voiceMix.connect(this.vuIn);
+
+    this.analyserL = ctx.createAnalyser();
+    this.analyserL.fftSize = 2048;
+    this.analyserL.smoothingTimeConstant = 0.25;
+    this.analyserR = ctx.createAnalyser();
+    this.analyserR.fftSize = 2048;
+    this.analyserR.smoothingTimeConstant = 0.25;
+    const split = ctx.createChannelSplitter(2);
+    this.preMaster.connect(split);
+    split.connect(this.analyserL, 0);
+    split.connect(this.analyserR, 1);
+
+    this.orbitConv = ctx.createConvolver();
+    this.orbitConv.buffer = makeSpringImpulse(ctx);
+    this.orbitGain = ctx.createGain();
+    this.orbitGain.gain.value = 0.16;
+    this.preMaster.connect(this.orbitConv);
+    this.orbitConv.connect(this.orbitGain);
+    this.orbitGain.connect(this.compressor);
+
     this.vcoSend = ctx.createGain();
     this.vcfSendOut = ctx.createGain();
     this.tapeSend = ctx.createGain();
@@ -373,10 +459,59 @@ class NexusEngine {
     this.vcfSend.connect(this.vcfSendOut);
     this.tapeOut.connect(this.tapeSend);
 
+    this.foldShaper = ctx.createWaveShaper();
+    this.foldShaper.curve = makeFoldCurve(0);
+    this.foldShaper.oversample = "4x";
+    this.foldDry = ctx.createGain();
+    this.foldDry.gain.value = 1;
+    this.foldWet = ctx.createGain();
+    this.foldWet.gain.value = 0;
+    this.foldMix = ctx.createGain();
+    this.ringOsc = ctx.createOscillator();
+    this.ringOsc.type = "sine";
+    this.ringOsc.frequency.value = 218;
+    this.ringVca = ctx.createGain();
+    this.ringVca.gain.value = 0;
+    this.ringDry = ctx.createGain();
+    this.ringDry.gain.value = 1;
+    this.ringWet = ctx.createGain();
+    this.ringWet.gain.value = 0;
+    this.ringMix = ctx.createGain();
+    this.shHold = ctx.createConstantSource();
+    this.shHold.offset.value = 0;
+    this.shOut = ctx.createGain();
+    this.shOut.gain.value = 0.85;
+    this.shAmtGain = ctx.createGain();
+    this.shAmtGain.gain.value = 0;
+
+    try {
+      this.voiceMix.disconnect(this.vcoSend);
+    } catch {
+      /* ok */
+    }
+    this.voiceMix.connect(this.foldDry);
+    this.voiceMix.connect(this.foldShaper);
+    this.foldShaper.connect(this.foldWet);
+    this.foldDry.connect(this.foldMix);
+    this.foldWet.connect(this.foldMix);
+    this.foldMix.connect(this.ringDry);
+    this.foldMix.connect(this.ringVca);
+    this.ringOsc.connect(this.ringVca.gain);
+    this.ringVca.connect(this.ringWet);
+    this.ringDry.connect(this.ringMix);
+    this.ringWet.connect(this.ringMix);
+    this.ringMix.connect(this.vcoSend);
+    this.shHold.connect(this.shOut);
+    this.shHold.connect(this.shAmtGain);
+    this.shAmtGain.connect(this.filterA.frequency);
+    this.shAmtGain.connect(this.filterB.frequency);
+
     this.lfo.start();
     this.wowOsc.start();
     this.flutterOsc.start();
     this.noiseSrc.start();
+    this.ringOsc.start();
+    this.shHold.start();
 
     this.nodes = {
       vco: this.vcoSend,
@@ -385,6 +520,7 @@ class NexusEngine {
       grid: this.gridOut,
       tape: this.tapeSend,
       vcfout: this.vcfSendOut,
+      sh: this.shOut,
       vcf: this.vcfIn,
       vca: this.vca,
       delay: this.tapeIn,
@@ -427,7 +563,7 @@ class NexusEngine {
   }
 
   private rebuildPatches() {
-    const srcIds: PortId[] = ["vco", "noise", "lfo", "grid", "tape", "vcfout"];
+    const srcIds = SOURCE_PORTS;
     for (const id of srcIds) {
       try {
         this.nodes[id]?.disconnect();
@@ -454,9 +590,9 @@ class NexusEngine {
       const dstNode = this.nodes[p.to];
       const dstParam = this.paramTargets[p.to];
       if (!src) continue;
-      if (p.from === "lfo" && dstParam) {
+      if ((p.from === "lfo" || p.from === "sh") && dstParam) {
         const g = this.ctx!.createGain();
-        g.gain.value = p.to === "pan" ? 0.6 : 900;
+        g.gain.value = p.to === "pan" ? 0.55 : p.from === "sh" ? 2600 : 900;
         src.connect(g);
         g.connect(dstParam);
         this.live.push(g);
@@ -485,17 +621,24 @@ class NexusEngine {
   }
 
   private applyVoice() {
-    if (!this.ctx) return;
+    if (!this.ctx || !this.foldShaper) return;
     const v = this.snapshot.voice;
     const now = this.ctx.currentTime;
     this.filterA.frequency.setTargetAtTime(v.cutoff, now, 0.04);
     this.filterB.frequency.setTargetAtTime(v.cutoff * 0.96, now, 0.04);
     this.filterA.Q.setTargetAtTime(v.resonance * 0.55, now, 0.05);
     this.filterB.Q.setTargetAtTime(v.resonance * 0.4, now, 0.05);
-    this.cutoffMod.gain.setTargetAtTime(v.fmIndex > 0 ? 0 : 420 * (v.morph > 0.8 ? 1 : 0), now, 0.08);
     this.masterPan.pan.setTargetAtTime(v.pan, now, 0.05);
-    this.lfo.frequency.setTargetAtTime(0.2 + v.morph * 2.4, now, 0.08);
-    this.lfoOut.gain.setTargetAtTime(0.15 + v.unison * 0.05, now, 0.08);
+    this.lfo.frequency.setTargetAtTime(Math.max(0.04, v.lfoRate), now, 0.08);
+    this.lfoOut.gain.setTargetAtTime(1, now, 0.08);
+    this.cutoffMod.gain.setTargetAtTime(v.lfoDepth * 2200, now, 0.08);
+    this.foldShaper.curve = makeFoldCurve(v.fold);
+    this.foldWet.gain.setTargetAtTime(v.fold, now, 0.05);
+    this.foldDry.gain.setTargetAtTime(Math.max(0.12, 1 - v.fold * 0.78), now, 0.05);
+    this.ringWet.gain.setTargetAtTime(v.ring, now, 0.05);
+    this.ringDry.gain.setTargetAtTime(Math.max(0.08, 1 - v.ring * 0.88), now, 0.05);
+    this.ringOsc.frequency.setTargetAtTime(110 + v.morph * 520, now, 0.1);
+    this.shAmtGain.gain.setTargetAtTime(v.shAmt * 3400, now, 0.06);
     for (const s of this.slots) {
       s.filterA.frequency.setTargetAtTime(v.cutoff, now, 0.04);
       s.filterB.frequency.setTargetAtTime(v.cutoff * 0.97, now, 0.04);
@@ -526,6 +669,188 @@ class NexusEngine {
     if (!this.ctx) return;
     const g = this.snapshot.muted ? 0 : this.snapshot.master * this.snapshot.master;
     this.masterGain.gain.setTargetAtTime(g, this.ctx.currentTime, 0.03);
+  }
+
+  private applyOrbit() {
+    if (!this.ctx || !this.orbitGain) return;
+    this.orbitGain.gain.setTargetAtTime(this.snapshot.orbit * 0.85, this.ctx.currentTime, 0.08);
+  }
+
+  setOrbit(v: number) {
+    this.snapshot = { ...this.snapshot, orbit: Math.min(1, Math.max(0, v)), version: this.snapshot.version + 1 };
+    this.applyOrbit();
+    for (const l of this.listeners) l();
+    this.queueSave();
+  }
+
+  setScopeMode(scopeMode: ScopeMode) {
+    this.emit({ scopeMode });
+  }
+
+  cycleScopeMode() {
+    const order: ScopeMode[] = ["yt", "xy", "fft"];
+    const i = order.indexOf(this.snapshot.scopeMode);
+    this.setScopeMode(order[(i + 1) % order.length]!);
+  }
+
+  bounce(seconds = 8) {
+    if (!this.ctx || this.snapshot.bouncing) return;
+    const dest = this.ctx.createMediaStreamDestination();
+    this.masterGain.connect(dest);
+    this.bounceDest = dest;
+    const types = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg"];
+    const mime = types.find((t) => MediaRecorder.isTypeSupported(t));
+    const rec = new MediaRecorder(dest.stream, mime ? { mimeType: mime } : undefined);
+    const chunks: Blob[] = [];
+    rec.ondataavailable = (e) => {
+      if (e.data.size) chunks.push(e.data);
+    };
+    rec.onstop = () => {
+      try {
+        this.masterGain.disconnect(dest);
+      } catch {
+        /* already */
+      }
+      this.bounceDest = null;
+      const blob = new Blob(chunks, { type: rec.mimeType || "audio/webm" });
+      const ext = blob.type.includes("ogg") ? "ogg" : "webm";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `nexus-bounce-${Date.now()}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+      this.emit({ bouncing: false });
+    };
+    rec.start(250);
+    this.emit({ bouncing: true });
+    this.bounceTimer = window.setTimeout(() => {
+      if (rec.state === "recording") rec.stop();
+    }, Math.max(2, seconds) * 1000);
+  }
+
+  captureScene(): Scene {
+    const s = this.snapshot;
+    return {
+      voice: { ...s.voice },
+      tape: { ...s.tape, rec: false },
+      seq: { ...s.seq, playing: false },
+      steps: s.steps.map((st) => ({ ...st })),
+      grid: s.grid.map((c) => c.slice()),
+      patches: s.patches.map((p) => ({ ...p })),
+      orbit: s.orbit,
+      scopeMode: s.scopeMode,
+    };
+  }
+
+  saveScene(slot: number) {
+    const i = Math.max(0, Math.min(SCENE_COUNT - 1, slot));
+    const scenes = this.snapshot.scenes.slice();
+    scenes[i] = this.captureScene();
+    this.emit({ scenes, sceneSlot: i });
+  }
+
+  loadScene(slot: number) {
+    const i = Math.max(0, Math.min(SCENE_COUNT - 1, slot));
+    const sc = this.snapshot.scenes[i];
+    if (!sc) {
+      this.emit({ sceneSlot: i });
+      return;
+    }
+    this.snapshot = {
+      ...this.snapshot,
+      voice: { ...DEFAULT_VOICE, ...sc.voice },
+      tape: { ...DEFAULT_TAPE, ...sc.tape, rec: false },
+      seq: { ...DEFAULT_SEQ, ...sc.seq, playing: this.snapshot.seq.playing },
+      steps: sc.steps?.length === COLS ? sc.steps.map((st) => ({ ...st })) : this.snapshot.steps,
+      grid: sc.grid?.length === COLS ? sc.grid.map((c) => c.slice()) : this.snapshot.grid,
+      patches: sc.patches?.length ? sc.patches.map((p) => ({ ...p })) : this.snapshot.patches,
+      orbit: sc.orbit,
+      scopeMode: sc.scopeMode,
+      sceneSlot: i,
+      version: this.snapshot.version + 1,
+    };
+    this.applyVoice();
+    this.applyTape();
+    this.applyOrbit();
+    if (this.ctx) this.rebuildPatches();
+    for (const l of this.listeners) l();
+    this.queueSave();
+  }
+
+  frontier() {
+    const grid = emptyGrid();
+    for (let c = 0; c < COLS; c++) {
+      const col = grid[c]!;
+      col[(c * 3) % ROWS] = true;
+      col[(c * 2 + 3) % ROWS] = true;
+      if (c % 5 === 0) col[7] = true;
+    }
+    const steps = emptySteps().map((s, i) => ({
+      ...s,
+      gate: i % 3 !== 2,
+      accent: i % 6 === 0,
+      note: (i * 2) % 8,
+      slide: i % 8 === 7,
+    }));
+    this.snapshot = {
+      ...this.snapshot,
+      voice: {
+        ...DEFAULT_VOICE,
+        waveform: "sawtooth",
+        morph: 0.72,
+        cutoff: 2650,
+        resonance: 10.5,
+        fmIndex: 7.2,
+        unison: 3,
+        detune: 16,
+        attack: 0.006,
+        decay: 0.22,
+        sustain: 0.42,
+        release: 0.38,
+        fold: 0.58,
+        lfoRate: 0.22,
+        lfoDepth: 0.48,
+        shAmt: 0.42,
+        ring: 0.28,
+      },
+      tape: {
+        ...DEFAULT_TAPE,
+        motor: true,
+        rec: false,
+        time: 0.46,
+        feedback: 0.58,
+        mix: 0.48,
+        wow: 0.38,
+        flutter: 0.2,
+        saturate: 0.62,
+      },
+      seq: {
+        ...DEFAULT_SEQ,
+        bpm: 94,
+        swing: 0.14,
+        euclidHits: 7,
+        euclidSteps: 16,
+        scale: "minor",
+        arp: true,
+        playing: this.snapshot.powered,
+      },
+      steps,
+      grid,
+      orbit: 0.46,
+      scopeMode: "xy",
+      version: this.snapshot.version + 1,
+    };
+    this.applyVoice();
+    this.applyTape();
+    this.applyOrbit();
+    if (this.snapshot.powered && this.ctx && !this.snapshot.seq.playing) {
+      this.stepIndex = 0;
+      this.nextNoteTime = this.ctx.currentTime + 0.05;
+      this.snapshot = { ...this.snapshot, seq: { ...this.snapshot.seq, playing: true } };
+    }
+    for (const l of this.listeners) l();
+    this.queueSave();
   }
 
   setVoice(partial: Partial<VoiceParams>) {
@@ -858,6 +1183,10 @@ class NexusEngine {
   }
 
   private scheduleStep(step: number, time: number) {
+    if (this.shHold) {
+      const sample = Math.random() * 2 - 1;
+      this.shHold.offset.setValueAtTime(sample, time);
+    }
     const s = this.snapshot.steps[step];
     const seq = this.snapshot.seq;
     const scale = scaleFor(seq.scale);
@@ -875,6 +1204,11 @@ class NexusEngine {
       for (let r = 0; r < ROWS; r++) {
         if (gridCol[r]) fire(r, Boolean(s?.accent), Boolean(s?.slide), s?.prob ?? 1);
       }
+    }
+    if (seq.arp && this.snapshot.heldKeys.length > 0) {
+      const midi = this.snapshot.heldKeys[step % this.snapshot.heldKeys.length]!;
+      this.noteOn(midi, 0.82, time, false);
+      this.noteOff(midi, time + (60 / seq.bpm / 4) * 0.62);
     }
   }
 
@@ -896,7 +1230,7 @@ class NexusEngine {
   persistNow(): PersistedState {
     const s = this.snapshot;
     return {
-      v: 1,
+      v: 3,
       voice: s.voice,
       tape: s.tape,
       seq: { ...s.seq, playing: false },
@@ -904,6 +1238,10 @@ class NexusEngine {
       grid: s.grid,
       patches: s.patches,
       master: s.master,
+      orbit: s.orbit,
+      scopeMode: s.scopeMode,
+      scenes: s.scenes,
+      sceneSlot: s.sceneSlot,
     };
   }
 }

@@ -38,6 +38,13 @@ export function Sequencer() {
           <button type="button" className="nx-btn px-3 py-2" onClick={() => engine.applyEuclid()}>
             Euclid
           </button>
+          <button
+            type="button"
+            className={`nx-btn px-3 py-2 ${seq.arp ? "nx-btn-on" : ""}`}
+            onClick={() => engine.setSeq({ arp: !seq.arp })}
+          >
+            Arp
+          </button>
           <select
             className="nx-btn bg-panel px-2 py-2 text-fg"
             value={seq.scale}

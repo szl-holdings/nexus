@@ -74,6 +74,29 @@ export function Workstation() {
         setHelp((h) => !h);
         return;
       }
+      if (e.code === "KeyF" && engine.getSnapshot().powered) {
+        e.preventDefault();
+        engine.frontier();
+        return;
+      }
+      if (e.code === "Tab" && engine.getSnapshot().powered) {
+        e.preventDefault();
+        engine.cycleScopeMode();
+        return;
+      }
+      if (e.code === "KeyO" && engine.getSnapshot().powered && e.shiftKey) {
+        engine.saveScene(engine.getSnapshot().sceneSlot);
+        return;
+      }
+      if (e.code.startsWith("Digit") && e.altKey && engine.getSnapshot().powered) {
+        const slot = Number(e.code.replace("Digit", "")) - 1;
+        if (slot >= 0 && slot < 8) {
+          e.preventDefault();
+          if (e.shiftKey) engine.saveScene(slot);
+          else engine.loadScene(slot);
+        }
+        return;
+      }
       if (e.code === "KeyM" && e.metaKey) return;
       const digit = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6"].indexOf(e.code);
       if (digit >= 0 && !e.shiftKey && !KEY_NOTES[e.code]) {
@@ -195,7 +218,7 @@ function Header({ help, onHelp }: { help: boolean; onHelp: () => void }) {
       <span className="nx-screw right-2 top-2" />
       <div>
         <p className="nx-wordmark text-xl leading-tight sm:text-2xl">Nexus</p>
-        <p className="nx-label">Analog computing workstation · MK-I</p>
+        <p className="nx-label">Analog computing workstation · MK-II</p>
       </div>
       <div className="mx-auto flex items-center gap-2">
         <button
@@ -214,13 +237,48 @@ function Header({ help, onHelp }: { help: boolean; onHelp: () => void }) {
         </button>
         <button
           type="button"
+          className="nx-btn min-h-11 px-4"
+          onClick={() => engine.frontier()}
+        >
+          Frontier
+        </button>
+        <button
+          type="button"
           className={`nx-btn min-h-11 px-4 ${snap.muted ? "nx-btn-on" : ""}`}
           onClick={() => engine.setMuted(!snap.muted)}
         >
           {snap.muted ? "Muted" : "Mute"}
         </button>
       </div>
-      <div className="ml-auto flex items-center gap-3">
+      <div className="ml-auto flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-1">
+          {Array.from({ length: 8 }, (_, i) => (
+            <button
+              key={i}
+              type="button"
+              title={snap.scenes[i] ? `Recall scene ${i + 1}` : `Empty scene ${i + 1} · shift-click to store`}
+              className={`nx-btn min-h-9 min-w-9 px-0 ${snap.sceneSlot === i ? "nx-btn-on" : ""} ${snap.scenes[i] ? "text-phosphor" : ""}`}
+              onClick={(e) => {
+                if (e.shiftKey) engine.saveScene(i);
+                else engine.loadScene(i);
+              }}
+            >
+              {i + 1}
+            </button>
+          ))}
+        </div>
+        <label className="nx-label flex items-center gap-2">
+          Orbit
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={snap.orbit}
+            onChange={(e) => engine.setOrbit(Number(e.target.value))}
+            className="w-20 accent-amber"
+          />
+        </label>
         <label className="nx-label flex items-center gap-2">
           Master
           <input
@@ -269,7 +327,12 @@ function SignalStrip() {
         );
       })}
       <span className="ml-auto font-mono text-micro tabular-nums text-amber">
-        {Math.round(snap.seq.bpm)} BPM · {snap.voice.waveform.toUpperCase()}
+        {Math.round(snap.seq.bpm)} BPM · {snap.voice.waveform.toUpperCase()} · {snap.scopeMode.toUpperCase()}
+        {snap.seq.arp ? " · ARP" : ""}
+        {snap.voice.fold > 0.05 ? " · FOLD" : ""}
+        {snap.voice.shAmt > 0.05 ? " · S&H" : ""}
+        {snap.voice.ring > 0.05 ? " · RING" : ""}
+        {snap.bouncing ? " · BOUNCE" : ""}
       </span>
     </div>
   );
@@ -285,6 +348,8 @@ function PowerGate({ booting, onEngage }: { booting: boolean; onEngage: () => vo
       <p className="nx-wordmark text-4xl sm:text-6xl">Nexus</p>
       <p className="nx-label max-w-sm text-pretty">
         Analog computing workstation · six instruments · phosphor CRT · local memory
+        <br />
+        MK-II: sample & hold, wavefolder, ring multiplier, function generator, tape bounce
       </p>
       <span className={`nx-btn min-h-12 px-8 py-3 text-sm ${booting ? "nx-btn-on" : ""}`}>
         {booting ? "Warming heaters…" : "Press to engage"}
@@ -304,6 +369,21 @@ function Help({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <ul className="space-y-1.5 font-mono text-sm text-fg">
+        <li>
+          <kbd>F</kbd> Frontier — launch the analog-computer patch
+        </li>
+        <li>
+          Voice computer: Fold, LFO, S&H, Ring · Tape Bounce dumps eight seconds
+        </li>
+        <li>
+          Patch <span className="text-phosphor">S&H</span> into VCF or PAN — clocked by the sequencer
+        </li>
+        <li>
+          <kbd>Tab</kbd> cycle scope Y-T / X-Y / FFT
+        </li>
+        <li>
+          Scenes <kbd>1</kbd>–<kbd>8</kbd> on the header · shift-click stores
+        </li>
         <li>
           <kbd>space</kbd> run / stop sequencer
         </li>
