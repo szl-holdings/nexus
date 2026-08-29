@@ -1,7 +1,6 @@
-# Hugging Face Space build context. Root-anchored rules drop the leftover
+# Hugging Face Space build context. Root-anchored rules drop leftover
 # MK-II python/static snapshot without touching instrument paths.
-/server.py
-/index.html
+# server.py and index.html MUST remain — factory COPY resolves them at repo root.
 /og.jpg
 /favicon.svg
 /assets
