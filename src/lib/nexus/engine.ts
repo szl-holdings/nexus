@@ -1,5 +1,6 @@
 import {
   COLS,
+  DEFAULT_ANALOG,
   DEFAULT_PATCHES,
   DEFAULT_SEQ,
   DEFAULT_TAPE,
@@ -7,12 +8,14 @@ import {
   DEST_PORTS,
   emptyGrid,
   emptySteps,
+  FRONTIER_PATCHES,
   ROWS,
   SCALE_CHROMATIC,
   SCALE_MINOR,
   SCALE_PENTA,
   SCENE_COUNT,
   SOURCE_PORTS,
+  type AnalogParams,
   type PatchCable,
   type PortId,
   type Scene,
@@ -22,24 +25,11 @@ import {
   type TapeParams,
   type VoiceParams,
   type Waveform,
-  type ModuleId,
 } from "./types";
 import { loadPersisted, scheduleSave, type PersistedState } from "./store";
-import {
-  appendReceipt,
-  braidFromPatches,
-  emptyKernel,
-  fifoOk,
-  foldKernel,
-  instantCycles,
-  khipuMerkleRoot,
-  type LockedId,
-  type KernelState,
-  reedSolomonSingleton,
-  rmsFromAnalyser,
-  runGovernedLoop,
-  verifyReceipts,
-} from "./formulas";
+import { euclid, funcGenStep, lorenzStep, midiToHz, scaleLorenz, seedLorenz, analogCell, analogCoefficients, type LorenzState } from "./math";
+
+export { euclid, midiToHz };
 
 export interface EngineSnapshot {
   powered: boolean;
@@ -47,6 +37,7 @@ export interface EngineSnapshot {
   voice: VoiceParams;
   tape: TapeParams;
   seq: SeqParams;
+  analog: AnalogParams;
   steps: SeqStep[];
   grid: boolean[][];
   patches: PatchCable[];
@@ -54,13 +45,14 @@ export interface EngineSnapshot {
   muted: boolean;
   activeNotes: number;
   heldKeys: number[];
-  module: ModuleId;
+  module: "grid" | "scope" | "tape" | "patch" | "seq" | "voice";
   scopeMode: ScopeMode;
   orbit: number;
   sceneSlot: number;
   scenes: (Scene | null)[];
   bouncing: boolean;
-  kernel: KernelState;
+  midi: boolean;
+  frontier: boolean;
   version: number;
 }
 
@@ -73,27 +65,6 @@ const MORPH_PAIRS: Record<Waveform, [OscillatorType, OscillatorType]> = {
   square: ["square", "sine"],
   pluck: ["triangle", "sawtooth"],
 };
-
-function midiToHz(m: number) {
-  return 440 * Math.pow(2, (m - 69) / 12);
-}
-
-function euclid(hits: number, steps: number, rot: number): boolean[] {
-  const n = Math.max(1, Math.min(32, Math.floor(steps)));
-  const k = Math.max(0, Math.min(n, Math.floor(hits)));
-  const pattern: boolean[] = Array.from({ length: n }, () => false);
-  if (k === 0) return pattern;
-  let bucket = 0;
-  for (let i = 0; i < n; i++) {
-    bucket += k;
-    if (bucket >= n) {
-      bucket -= n;
-      pattern[i] = true;
-    }
-  }
-  const r = ((rot % n) + n) % n;
-  return pattern.slice(n - r).concat(pattern.slice(0, n - r));
-}
 
 function makeSpringImpulse(ctx: AudioContext) {
   const len = Math.floor(ctx.sampleRate * 1.85);
@@ -182,7 +153,6 @@ class NexusEngine {
   private vca!: GainNode;
   private preMaster!: GainNode;
   private masterGain!: GainNode;
-  private lambdaVca!: GainNode;
   private compressor!: DynamicsCompressorNode;
   private analyser!: AnalyserNode;
   private analyserL!: AnalyserNode;
@@ -217,10 +187,22 @@ class NexusEngine {
   private shAmtGain!: GainNode;
   private bounceDest: MediaStreamAudioDestinationNode | null = null;
   private bounceTimer = 0;
-  private lastKernelMs = 0;
-  private loopCycle = 0;
-  private lastBurst: { midi: number; vel: number; slide: boolean }[] = [];
-  private lastPlayhead = -1;
+  private anlgHold!: ConstantSourceNode;
+  private anlgOut!: GainNode;
+  private funcHold!: ConstantSourceNode;
+  private funcOut!: GainNode;
+  private lorenz: LorenzState = seedLorenz();
+  private nx = 0;
+  private ny = 0;
+  private nz = 0.4;
+  private fg = 0;
+  private fgUp = true;
+  private analogLast = 0;
+  private repAcc = 0;
+  private trail = new Float32Array(1200);
+  private trailWrite = 0;
+  private trailLen = 0;
+  private lastUiEmit = 0;
   private nodes: Partial<Record<PortId, AudioNode>> = {};
   private paramTargets: Partial<Record<PortId, AudioParam>> = {};
   private live: AudioNode[] = [];
@@ -235,6 +217,7 @@ class NexusEngine {
     voice: { ...DEFAULT_VOICE },
     tape: { ...DEFAULT_TAPE },
     seq: { ...DEFAULT_SEQ },
+    analog: { ...DEFAULT_ANALOG },
     steps: emptySteps(),
     grid: emptyGrid(),
     patches: DEFAULT_PATCHES.map((p) => ({ ...p })),
@@ -248,7 +231,8 @@ class NexusEngine {
     sceneSlot: 0,
     scenes: Array.from({ length: SCENE_COUNT }, () => null),
     bouncing: false,
-    kernel: emptyKernel(),
+    midi: false,
+    frontier: false,
     version: 0,
   };
 
@@ -269,6 +253,7 @@ class NexusEngine {
       voice: partial.voice ?? this.snapshot.voice,
       tape: partial.tape ?? this.snapshot.tape,
       seq: partial.seq ?? this.snapshot.seq,
+      analog: partial.analog ?? this.snapshot.analog,
       version: this.snapshot.version + 1,
     };
     for (const l of this.listeners) l();
@@ -295,6 +280,7 @@ class NexusEngine {
       voice: { ...DEFAULT_VOICE, ...data.voice },
       tape: { ...DEFAULT_TAPE, ...data.tape, motor: false, rec: false },
       seq: { ...DEFAULT_SEQ, ...data.seq, playing: false },
+      analog: { ...DEFAULT_ANALOG, ...data.analog },
       steps: data.steps?.length === COLS ? data.steps : this.snapshot.steps,
       grid: lit ? savedGrid : emptyGrid(),
       patches: data.patches?.length ? data.patches : this.snapshot.patches,
@@ -303,6 +289,7 @@ class NexusEngine {
       scopeMode: data.scopeMode ?? this.snapshot.scopeMode,
       scenes: data.scenes?.length === SCENE_COUNT ? data.scenes : this.snapshot.scenes,
       sceneSlot: data.sceneSlot ?? 0,
+      frontier: false,
       version: this.snapshot.version + 1,
     };
     for (const l of this.listeners) l();
@@ -329,15 +316,30 @@ class NexusEngine {
   getPlayhead() {
     return this.stepIndex;
   }
+  getAnalog() {
+    const coef = analogCoefficients(this.snapshot.analog.chaos);
+    const cell = analogCell(this.nx, this.ny, COLS, ROWS);
+    return { x: this.nx, y: this.ny, z: this.nz, fg: this.fg, ...cell, ...coef };
+  }
+  getAnalogTrail() {
+    return { data: this.trail, write: this.trailWrite, len: this.trailLen, cap: 600 };
+  }
+
+  setMidi(on: boolean) {
+    if (this.snapshot.midi === on) return;
+    this.emit({ midi: on });
+  }
 
   async powerOn() {
     if (this.snapshot.powered && this.ctx) {
       if (this.ctx.state === "suspended") await this.ctx.resume();
       return;
     }
-    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const Ctx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     this.ctx = new Ctx({ latencyHint: "interactive" });
-    if (this.ctx.state === "suspended") await this.ctx.resume();
+    const resume = this.ctx.resume();
     this.buildGraph();
     this.applyVoice();
     this.applyTape();
@@ -349,7 +351,12 @@ class NexusEngine {
     const lit = this.snapshot.grid.some((col) => col.some(Boolean));
     if (!lit) this.snapshot.grid = emptyGrid();
     this.emit({ powered: true, ready: true });
-    this.tickKernel(true);
+    try {
+      await resume;
+    } catch {
+      /* autoplay */
+    }
+    if (this.ctx.state === "suspended") await this.ctx.resume();
   }
 
   private onVis = () => {
@@ -382,8 +389,6 @@ class NexusEngine {
     this.vca = ctx.createGain();
     this.preMaster = ctx.createGain();
     this.masterGain = ctx.createGain();
-    this.lambdaVca = ctx.createGain();
-    this.lambdaVca.gain.value = 1;
     this.compressor = ctx.createDynamicsCompressor();
     this.compressor.threshold.value = -12;
     this.compressor.knee.value = 18;
@@ -453,8 +458,7 @@ class NexusEngine {
     this.cutoffMod.connect(this.filterB.frequency);
     this.preMaster.connect(this.masterPan);
     this.masterPan.connect(this.compressor);
-    this.compressor.connect(this.lambdaVca);
-    this.lambdaVca.connect(this.masterGain);
+    this.compressor.connect(this.masterGain);
     this.masterGain.connect(ctx.destination);
     this.preMaster.connect(this.analyser);
     this.preMaster.connect(this.vuOut);
@@ -510,6 +514,14 @@ class NexusEngine {
     this.shOut.gain.value = 0.85;
     this.shAmtGain = ctx.createGain();
     this.shAmtGain.gain.value = 0;
+    this.anlgHold = ctx.createConstantSource();
+    this.anlgHold.offset.value = 0;
+    this.anlgOut = ctx.createGain();
+    this.anlgOut.gain.value = 1;
+    this.funcHold = ctx.createConstantSource();
+    this.funcHold.offset.value = 0;
+    this.funcOut = ctx.createGain();
+    this.funcOut.gain.value = 1;
 
     try {
       this.voiceMix.disconnect(this.vcoSend);
@@ -532,6 +544,8 @@ class NexusEngine {
     this.shHold.connect(this.shAmtGain);
     this.shAmtGain.connect(this.filterA.frequency);
     this.shAmtGain.connect(this.filterB.frequency);
+    this.anlgHold.connect(this.anlgOut);
+    this.funcHold.connect(this.funcOut);
 
     this.lfo.start();
     this.wowOsc.start();
@@ -539,6 +553,8 @@ class NexusEngine {
     this.noiseSrc.start();
     this.ringOsc.start();
     this.shHold.start();
+    this.anlgHold.start();
+    this.funcHold.start();
 
     this.nodes = {
       vco: this.vcoSend,
@@ -548,6 +564,8 @@ class NexusEngine {
       tape: this.tapeSend,
       vcfout: this.vcfSendOut,
       sh: this.shOut,
+      anlg: this.anlgOut,
+      func: this.funcOut,
       vcf: this.vcfIn,
       vca: this.vca,
       delay: this.tapeIn,
@@ -560,7 +578,7 @@ class NexusEngine {
       pan: this.masterPan.pan,
     };
 
-    this.slots = Array.from({ length: 6 }, () => this.makeSlot());
+    this.slots = Array.from({ length: 8 }, () => this.makeSlot());
   }
 
   private makeSlot(): VoiceSlot {
@@ -589,9 +607,16 @@ class NexusEngine {
     };
   }
 
+  private cvGain(from: PortId, to: PortId) {
+    if (to === "pan") return 0.55;
+    if (from === "sh") return 2600;
+    if (from === "anlg") return 1800;
+    if (from === "func") return 1200;
+    return 900;
+  }
+
   private rebuildPatches() {
-    const srcIds = SOURCE_PORTS;
-    for (const id of srcIds) {
+    for (const id of SOURCE_PORTS) {
       try {
         this.nodes[id]?.disconnect();
       } catch {
@@ -612,14 +637,15 @@ class NexusEngine {
     }
     this.live = [];
     const patches = this.snapshot.patches;
+    const cvSrc: PortId[] = ["lfo", "sh", "anlg", "func"];
     for (const p of patches) {
       const src = this.nodes[p.from];
       const dstNode = this.nodes[p.to];
       const dstParam = this.paramTargets[p.to];
       if (!src) continue;
-      if ((p.from === "lfo" || p.from === "sh") && dstParam) {
+      if (cvSrc.includes(p.from) && dstParam) {
         const g = this.ctx!.createGain();
-        g.gain.value = p.to === "pan" ? 0.55 : p.from === "sh" ? 2600 : 900;
+        g.gain.value = this.cvGain(p.from, p.to);
         src.connect(g);
         g.connect(dstParam);
         this.live.push(g);
@@ -651,11 +677,13 @@ class NexusEngine {
     if (!this.ctx || !this.foldShaper) return;
     const v = this.snapshot.voice;
     const now = this.ctx.currentTime;
-    this.filterA.frequency.setTargetAtTime(v.cutoff, now, 0.04);
-    this.filterB.frequency.setTargetAtTime(v.cutoff * 0.96, now, 0.04);
+    if (!this.snapshot.frontier) {
+      this.filterA.frequency.setTargetAtTime(v.cutoff, now, 0.04);
+      this.filterB.frequency.setTargetAtTime(v.cutoff * 0.96, now, 0.04);
+      this.masterPan.pan.setTargetAtTime(v.pan, now, 0.05);
+    }
     this.filterA.Q.setTargetAtTime(v.resonance * 0.55, now, 0.05);
     this.filterB.Q.setTargetAtTime(v.resonance * 0.4, now, 0.05);
-    this.masterPan.pan.setTargetAtTime(v.pan, now, 0.05);
     this.lfo.frequency.setTargetAtTime(Math.max(0.04, v.lfoRate), now, 0.08);
     this.lfoOut.gain.setTargetAtTime(1, now, 0.08);
     this.cutoffMod.gain.setTargetAtTime(v.lfoDepth * 2200, now, 0.08);
@@ -696,19 +724,103 @@ class NexusEngine {
     if (!this.ctx) return;
     const g = this.snapshot.muted ? 0 : this.snapshot.master * this.snapshot.master;
     this.masterGain.gain.setTargetAtTime(g, this.ctx.currentTime, 0.03);
-    this.applyLambdaVca();
-  }
-
-  private applyLambdaVca() {
-    if (!this.ctx || !this.lambdaVca) return;
-    const k = this.snapshot.kernel;
-    const gated = k.failClosed ? 0 : (0.36 + 0.64 * k.lambda) * k.loopTax;
-    this.lambdaVca.gain.setTargetAtTime(gated, this.ctx.currentTime, 0.08);
   }
 
   private applyOrbit() {
     if (!this.ctx || !this.orbitGain) return;
     this.orbitGain.gain.setTargetAtTime(this.snapshot.orbit * 0.85, this.ctx.currentTime, 0.08);
+  }
+
+  seedAnalog(nudge = Math.random()) {
+    this.lorenz = seedLorenz(nudge);
+    this.fg = 0;
+    this.fgUp = true;
+    this.trailWrite = 0;
+    this.trailLen = 0;
+    this.repAcc = 0;
+    this.analogLast = this.ctx?.currentTime ?? 0;
+    const scaled = scaleLorenz(this.lorenz);
+    this.nx = scaled.x;
+    this.ny = scaled.y;
+    this.nz = scaled.z;
+  }
+
+  private stepAnalog() {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const last = this.analogLast || now;
+    let dt = now - last;
+    this.analogLast = now;
+    if (dt <= 0 || dt > 0.2) dt = 0.016;
+    const a = this.snapshot.analog;
+    const v = this.snapshot.voice;
+    const mode = a.mode ?? "op";
+
+    if (mode === "rep") {
+      this.repAcc += dt;
+      const period = 2.4 / (0.35 + a.rate);
+      if (this.repAcc >= period) {
+        this.seedAnalog(this.repAcc);
+        this.repAcc = 0;
+      }
+    }
+
+    const frozen = mode === "ic" || mode === "halt";
+    if (!frozen) {
+      const speed = 0.28 + a.rate * 1.9;
+      this.lorenz = lorenzStep(this.lorenz, dt * speed, a.chaos);
+      const scaled = scaleLorenz(this.lorenz);
+      this.nx = scaled.x;
+      this.ny = scaled.y;
+      this.nz = scaled.z;
+      if (a.cycle) {
+        const next = funcGenStep(this.fg, this.fgUp, dt, Math.max(0.04, v.attack * 4), Math.max(0.06, v.release));
+        this.fg = next.value;
+        this.fgUp = next.rising;
+      } else if (this.fgUp || this.fg > 0) {
+        const next = funcGenStep(this.fg, this.fgUp, dt, Math.max(0.03, v.attack), Math.max(0.05, v.release));
+        this.fg = next.value;
+        this.fgUp = next.rising;
+        if (!next.rising && next.value <= 0) this.fgUp = false;
+      }
+      const wi = this.trailWrite * 2;
+      this.trail[wi] = this.nx;
+      this.trail[wi + 1] = this.ny;
+      this.trailWrite = (this.trailWrite + 1) % 600;
+      this.trailLen = Math.min(600, this.trailLen + 1);
+    }
+
+    this.applyAnalogCv(now);
+  }
+
+  private applyAnalogCv(now: number) {
+    if (!this.ctx) return;
+    const a = this.snapshot.analog;
+    const v = this.snapshot.voice;
+    const drive = a.drive;
+    if (this.anlgHold) {
+      this.anlgHold.offset.setTargetAtTime(this.nx, now, 0.02);
+      this.funcHold.offset.setTargetAtTime(this.fg * 2 - 1, now, 0.015);
+    }
+    const cut = Math.max(80, Math.min(8000, v.cutoff * (0.55 + 0.45 * this.fg) * (1 + this.nx * drive * 0.85)));
+    const pan = Math.max(-1, Math.min(1, v.pan + this.ny * drive * 0.9));
+    const fold = Math.max(0, Math.min(1, v.fold + this.nz * drive * 0.28));
+    this.filterA.frequency.setTargetAtTime(cut, now, 0.05);
+    this.filterB.frequency.setTargetAtTime(cut * 0.96, now, 0.05);
+    this.masterPan.pan.setTargetAtTime(pan, now, 0.06);
+    this.foldWet.gain.setTargetAtTime(fold, now, 0.08);
+    this.foldDry.gain.setTargetAtTime(Math.max(0.12, 1 - fold * 0.78), now, 0.08);
+    if (this.snapshot.tape.motor) {
+      const t = this.snapshot.tape.time;
+      const zmod = 1 + this.nz * drive * 0.2;
+      this.delayL.delayTime.setTargetAtTime(Math.max(0.05, t * zmod), now, 0.1);
+      this.delayR.delayTime.setTargetAtTime(Math.max(0.05, t * zmod * 1.035), now, 0.1);
+    }
+  }
+
+  private triggerFunc() {
+    this.fg = 0;
+    this.fgUp = true;
   }
 
   setOrbit(v: number) {
@@ -723,7 +835,7 @@ class NexusEngine {
   }
 
   cycleScopeMode() {
-    const order: ScopeMode[] = ["yt", "xy", "fft", "lambda", "knot"];
+    const order: ScopeMode[] = ["yt", "xy", "fft"];
     const i = order.indexOf(this.snapshot.scopeMode);
     this.setScopeMode(order[(i + 1) % order.length]!);
   }
@@ -770,11 +882,13 @@ class NexusEngine {
       voice: { ...s.voice },
       tape: { ...s.tape, rec: false },
       seq: { ...s.seq, playing: false },
+      analog: { ...s.analog },
       steps: s.steps.map((st) => ({ ...st })),
       grid: s.grid.map((c) => c.slice()),
       patches: s.patches.map((p) => ({ ...p })),
       orbit: s.orbit,
       scopeMode: s.scopeMode,
+      frontier: s.frontier,
     };
   }
 
@@ -797,23 +911,44 @@ class NexusEngine {
       voice: { ...DEFAULT_VOICE, ...sc.voice },
       tape: { ...DEFAULT_TAPE, ...sc.tape, rec: false },
       seq: { ...DEFAULT_SEQ, ...sc.seq, playing: this.snapshot.seq.playing },
+      analog: { ...DEFAULT_ANALOG, ...sc.analog },
       steps: sc.steps?.length === COLS ? sc.steps.map((st) => ({ ...st })) : this.snapshot.steps,
       grid: sc.grid?.length === COLS ? sc.grid.map((c) => c.slice()) : this.snapshot.grid,
       patches: sc.patches?.length ? sc.patches.map((p) => ({ ...p })) : this.snapshot.patches,
       orbit: sc.orbit,
       scopeMode: sc.scopeMode,
+      frontier: Boolean(sc.frontier),
       sceneSlot: i,
       version: this.snapshot.version + 1,
     };
     this.applyVoice();
     this.applyTape();
     this.applyOrbit();
+    if (this.snapshot.frontier) this.seedAnalog();
     if (this.ctx) this.rebuildPatches();
     for (const l of this.listeners) l();
     this.queueSave();
   }
 
+  toggleFrontier() {
+    if (this.snapshot.frontier) this.stopFrontier();
+    else this.frontier();
+  }
+
+  stopFrontier() {
+    if (!this.snapshot.frontier) return;
+    this.snapshot = { ...this.snapshot, frontier: false, version: this.snapshot.version + 1 };
+    this.applyVoice();
+    for (const l of this.listeners) l();
+    this.queueSave();
+  }
+
   frontier() {
+    if (this.snapshot.frontier) {
+      this.seedAnalog();
+      if (this.snapshot.powered && !this.snapshot.seq.playing) this.play();
+      return;
+    }
     const grid = emptyGrid();
     for (let c = 0; c < COLS; c++) {
       const col = grid[c]!;
@@ -825,9 +960,10 @@ class NexusEngine {
       ...s,
       gate: i % 3 !== 2,
       accent: i % 6 === 0,
-      note: (i * 2) % 8,
       slide: i % 8 === 7,
+      note: (i * 2) % 8,
     }));
+    const wasPlaying = this.snapshot.seq.playing;
     this.snapshot = {
       ...this.snapshot,
       voice: {
@@ -868,30 +1004,40 @@ class NexusEngine {
         euclidSteps: 16,
         scale: "minor",
         arp: true,
-        playing: this.snapshot.powered,
+        playing: wasPlaying,
       },
+      analog: { rate: 0.68, chaos: 0.64, drive: 0.78, cycle: true, mode: "op" },
       steps,
       grid,
+      patches: FRONTIER_PATCHES.map((p) => ({ ...p })),
       orbit: 0.46,
       scopeMode: "xy",
+      frontier: true,
       version: this.snapshot.version + 1,
     };
+    this.seedAnalog();
     this.applyVoice();
     this.applyTape();
     this.applyOrbit();
-    if (this.snapshot.powered && this.ctx && !this.snapshot.seq.playing) {
-      this.stepIndex = 0;
-      this.nextNoteTime = this.ctx.currentTime + 0.05;
-      this.snapshot = { ...this.snapshot, seq: { ...this.snapshot.seq, playing: true } };
-    }
+    if (this.ctx) this.rebuildPatches();
     for (const l of this.listeners) l();
     this.queueSave();
+    if (this.snapshot.powered) this.play();
   }
 
   setVoice(partial: Partial<VoiceParams>) {
     const voice = { ...this.snapshot.voice, ...partial };
     this.snapshot = { ...this.snapshot, voice, version: this.snapshot.version + 1 };
     this.applyVoice();
+    for (const l of this.listeners) l();
+    this.queueSave();
+  }
+
+  setAnalog(partial: Partial<AnalogParams>) {
+    const analog = { ...this.snapshot.analog, ...partial };
+    this.snapshot = { ...this.snapshot, analog, version: this.snapshot.version + 1 };
+    if (partial.mode === "ic") this.seedAnalog(0);
+    if (partial.mode === "rep") this.repAcc = 0;
     for (const l of this.listeners) l();
     this.queueSave();
   }
@@ -925,9 +1071,7 @@ class NexusEngine {
   }
 
   toggleCell(col: number, row: number) {
-    const grid = this.snapshot.grid.map((c, i) =>
-      i === col ? c.map((v, r) => (r === row ? !v : v)) : c,
-    );
+    const grid = this.snapshot.grid.map((c, i) => (i === col ? c.map((v, r) => (r === row ? !v : v)) : c));
     this.emit({ grid });
   }
 
@@ -944,7 +1088,7 @@ class NexusEngine {
     for (const l of this.listeners) l();
   }
 
-  setModule(module: ModuleId) {
+  setModule(module: EngineSnapshot["module"]) {
     this.emit({ module });
   }
 
@@ -994,11 +1138,8 @@ class NexusEngine {
     if (!this.ctx) return;
     if (this.snapshot.seq.playing) return;
     this.stepIndex = 0;
-    this.loopCycle = 0;
-    this.lastPlayhead = -1;
     this.nextNoteTime = this.ctx.currentTime + 0.05;
     this.emit({ seq: { ...this.snapshot.seq, playing: true } });
-    this.tickKernel(true);
   }
 
   stop() {
@@ -1011,7 +1152,7 @@ class NexusEngine {
     else this.play();
   }
 
-  noteOn(midi: number, vel = 0.8, time?: number, slide = false) {
+  noteOn(midi: number, vel = 0.8, time?: number, slide = false, hold = true) {
     if (!this.ctx) return;
     const now = time ?? this.ctx.currentTime;
     let slot = this.slots.find((s) => s.busy && s.midi === midi);
@@ -1022,32 +1163,45 @@ class NexusEngine {
     slot = this.slots.find((s) => !s.busy) ?? this.slots.slice().sort((a, b) => a.born - b.born)[0];
     if (!slot) return;
     this.triggerSlot(slot, midi, vel, now, slide);
-    const held = this.snapshot.heldKeys.includes(midi)
-      ? this.snapshot.heldKeys
-      : [...this.snapshot.heldKeys, midi];
-    this.snapshot = {
-      ...this.snapshot,
-      heldKeys: held,
-      activeNotes: this.slots.filter((s) => s.busy).length,
-      version: this.snapshot.version + 1,
-    };
-    for (const l of this.listeners) l();
+    const busy = this.slots.filter((s) => s.busy).length;
+    if (hold) {
+      const held = this.snapshot.heldKeys.includes(midi) ? this.snapshot.heldKeys : [...this.snapshot.heldKeys, midi];
+      this.snapshot = {
+        ...this.snapshot,
+        heldKeys: held,
+        activeNotes: busy,
+        version: this.snapshot.version + 1,
+      };
+      for (const l of this.listeners) l();
+      return;
+    }
+    this.snapshot = { ...this.snapshot, activeNotes: busy, version: this.snapshot.version + 1 };
+    const t = performance.now();
+    if (t - this.lastUiEmit > 80) {
+      this.lastUiEmit = t;
+      for (const l of this.listeners) l();
+    }
   }
 
-  noteOff(midi: number, time?: number) {
+  noteOff(midi: number, time?: number, hold = true) {
     if (!this.ctx) return;
     const now = time ?? this.ctx.currentTime;
     for (const slot of this.slots) {
       if (slot.busy && slot.midi === midi) this.releaseSlot(slot, now);
     }
-    const held = this.snapshot.heldKeys.filter((k) => k !== midi);
-    this.snapshot = {
-      ...this.snapshot,
-      heldKeys: held,
-      activeNotes: this.slots.filter((s) => s.busy).length,
-      version: this.snapshot.version + 1,
-    };
-    for (const l of this.listeners) l();
+    const busy = this.slots.filter((s) => s.busy).length;
+    if (hold) {
+      const held = this.snapshot.heldKeys.filter((k) => k !== midi);
+      this.snapshot = {
+        ...this.snapshot,
+        heldKeys: held,
+        activeNotes: busy,
+        version: this.snapshot.version + 1,
+      };
+      for (const l of this.listeners) l();
+      return;
+    }
+    this.snapshot = { ...this.snapshot, activeNotes: busy, version: this.snapshot.version + 1 };
   }
 
   panic() {
@@ -1211,7 +1365,7 @@ class NexusEngine {
   }
 
   setGridXY(x: number, y: number) {
-    if (!this.ctx) return;
+    if (!this.ctx || this.snapshot.frontier) return;
     const cutoff = 180 + y * 6200;
     const pan = x * 2 - 1;
     const now = this.ctx.currentTime;
@@ -1222,22 +1376,21 @@ class NexusEngine {
 
   private scheduleStep(step: number, time: number) {
     if (this.shHold) {
-      const sample = Math.random() * 2 - 1;
+      const sample = this.snapshot.frontier ? this.nx : Math.random() * 2 - 1;
       this.shHold.offset.setValueAtTime(sample, time);
     }
+    if (this.snapshot.frontier && !this.snapshot.analog.cycle) this.triggerFunc();
     const s = this.snapshot.steps[step];
     const seq = this.snapshot.seq;
     const scale = scaleFor(seq.scale);
     const gridCol = this.snapshot.grid[step];
     const fire = (row: number, accent: boolean, slide: boolean, gateProb: number) => {
       if (Math.random() > gateProb * seq.probability) return;
-      const midi = scale[row] ?? 48;
+      const midi = (scale[row] ?? 48) + (this.snapshot.frontier ? Math.round(this.ny * 4) : 0);
       const vel = accent ? 1 : 0.72;
-      this.lastBurst.push({ midi, vel, slide });
-      if (this.lastBurst.length > 24) this.lastBurst = this.lastBurst.slice(-16);
-      this.noteOn(midi, vel, time, slide);
+      this.noteOn(midi, vel, time, slide, false);
       const dur = (60 / seq.bpm / 4) * (slide ? 1.4 : 0.7);
-      this.noteOff(midi, time + dur);
+      this.noteOff(midi, time + dur, false);
     };
     if (s?.gate) fire(s.note, s.accent, s.slide, s.prob);
     if (gridCol) {
@@ -1247,39 +1400,41 @@ class NexusEngine {
     }
     if (seq.arp && this.snapshot.heldKeys.length > 0) {
       const midi = this.snapshot.heldKeys[step % this.snapshot.heldKeys.length]!;
-      this.noteOn(midi, 0.82, time, false);
-      this.noteOff(midi, time + (60 / seq.bpm / 4) * 0.62);
+      this.noteOn(midi, 0.82, time, false, false);
+      this.noteOff(midi, time + (60 / seq.bpm / 4) * 0.62, false);
     }
-    if (step % 4 === 0) this.stamp("seq-step", 0.5 + (step / COLS) * 0.4, { step, cycle: this.loopCycle });
-    if (step === COLS - 1) this.stamp("ouroboros", this.snapshot.kernel.loopTax, { cycle: this.loopCycle });
   }
 
   private loop = () => {
     this.raf = requestAnimationFrame(this.loop);
-    this.tickKernel(false);
-    if (!this.ctx || !this.snapshot.seq.playing) return;
+    if (!this.ctx) return;
+    if (this.snapshot.frontier) this.stepAnalog();
+    if (!this.snapshot.seq.playing) return;
     const t = this.ctx.currentTime;
     const stepDur = 60 / this.snapshot.seq.bpm / 4;
     const swing = this.snapshot.seq.swing;
-    while (this.nextNoteTime < t + 0.12) {
+    if (this.nextNoteTime === 0 || this.nextNoteTime < t - 0.5) {
+      this.nextNoteTime = t + 0.05;
+    }
+    let guard = 0;
+    while (this.nextNoteTime < t + 0.12 && guard < 24) {
       const step = this.stepIndex;
       this.scheduleStep(step, this.nextNoteTime);
       const odd = step % 2 === 1;
       this.nextNoteTime += odd ? stepDur * (1 + swing) : stepDur * (1 - swing);
-      const next = (step + 1) % COLS;
-      if (next === 0) this.loopCycle += 1;
-      this.lastPlayhead = step;
-      this.stepIndex = next;
+      this.stepIndex = (step + 1) % COLS;
+      guard += 1;
     }
   };
 
   persistNow(): PersistedState {
     const s = this.snapshot;
     return {
-      v: 3,
+      v: 4,
       voice: s.voice,
       tape: s.tape,
       seq: { ...s.seq, playing: false },
+      analog: s.analog,
       steps: s.steps,
       grid: s.grid,
       patches: s.patches,
@@ -1289,163 +1444,6 @@ class NexusEngine {
       scenes: s.scenes,
       sceneSlot: s.sceneSlot,
     };
-  }
-
-  private senseNow() {
-    const s = this.snapshot;
-    const last = s.kernel.receipts.at(-1);
-    return {
-      powered: s.powered,
-      muted: s.muted,
-      failClosed: s.kernel.failClosed,
-      patches: s.patches,
-      master: s.master,
-      pan: s.voice.pan,
-      fold: s.voice.fold,
-      saturate: s.tape.saturate,
-      motor: s.tape.motor,
-      rmsIn: rmsFromAnalyser(this.vuIn ?? null),
-      rmsOut: rmsFromAnalyser(this.vuOut ?? null),
-      loopTax: s.kernel.loopTax,
-      withinBudget: s.kernel.withinBudget,
-      receiptAgeMs: last ? Date.now() - last.ts : 1e9,
-      receiptCount: s.kernel.receipts.length,
-      replayOk: verifyReceipts(s.kernel.receipts),
-      seqIncreasing: this.lastPlayhead < 0 || this.stepIndex === (this.lastPlayhead + 1) % COLS,
-      hasGates: s.steps.some((st) => st.gate) || s.grid.some((c) => c.some(Boolean)),
-      analyserLive: Boolean(this.analyser),
-    };
-  }
-
-  private stamp(formula: string, scalar: number, extra: unknown = {}) {
-    const receipts = appendReceipt(this.snapshot.kernel.receipts, formula, scalar, extra);
-    this.snapshot = {
-      ...this.snapshot,
-      kernel: { ...this.snapshot.kernel, receipts, rootHash: receipts.at(-1)?.hash ?? this.snapshot.kernel.rootHash },
-    };
-  }
-
-  tickKernel(force = false) {
-    const now = typeof performance !== "undefined" ? performance.now() : 0;
-    if (!force && now - this.lastKernelMs < 140) return;
-    this.lastKernelMs = now;
-    const next = foldKernel(this.senseNow(), this.snapshot.kernel, this.loopCycle);
-    this.snapshot = { ...this.snapshot, kernel: next, version: this.snapshot.version + 1 };
-    this.applyLambdaVca();
-    for (const l of this.listeners) l();
-  }
-
-  setFailClosed(on: boolean) {
-    const kernel = { ...this.snapshot.kernel, failClosed: on, haltReason: on ? "F12 fail-closed latch" : null };
-    this.snapshot = { ...this.snapshot, kernel, version: this.snapshot.version + 1 };
-    this.stamp("F12", on ? 0 : 1, { latch: on });
-    this.applyLambdaVca();
-    for (const l of this.listeners) l();
-  }
-
-  injectLocked(id: LockedId) {
-    if (!this.snapshot.powered) return;
-    switch (id) {
-      case "F1":
-        this.replayLastBurst();
-        break;
-      case "F4":
-        this.pruneInstantCycles();
-        break;
-      case "F7":
-        this.fifoReset();
-        break;
-      case "F11":
-        this.ayniTape();
-        break;
-      case "F12":
-        this.setFailClosed(!this.snapshot.kernel.failClosed);
-        return;
-      case "F18":
-        this.rsLattice();
-        break;
-      case "F19":
-        this.setScopeMode("lambda");
-        break;
-      case "F22":
-        this.stamp("F22", 1, { seq: this.snapshot.kernel.receipts.map((r) => r.index) });
-        break;
-    }
-    this.stamp(id, 1, { inject: id });
-    this.tickKernel(true);
-  }
-
-  runPuriq() {
-    if (!this.snapshot.powered || this.snapshot.kernel.puriqRunning) return;
-    const axes = this.snapshot.kernel.axes.map((a) => a.score);
-    const braid = braidFromPatches(this.snapshot.patches);
-    const chain = runGovernedLoop([
-      { formula_name: "lambda_bounded", args: [axes] },
-      { formula_name: "lambda_homogeneous", args: [0.5, axes] },
-      { formula_name: "schur_concave_lambda_two_axis", args: [this.snapshot.kernel.lambdaMin, this.snapshot.kernel.lambdaMax] },
-      { formula_name: "reed_solomon_singleton", args: [16, 8] },
-      { formula_name: "reidemeister_invariant", args: [braid || "abBA", "R2"] },
-      { formula_name: "madhava_series", args: [0.5, 12] },
-    ]);
-    for (const r of chain.receipts) this.stamp(r.formula_name, r.scalar, { puriq: true });
-    const merkle = khipuMerkleRoot(
-      this.snapshot.kernel.receipts.map((r) => ({ decision_id: r.hash, value: Math.round(r.scalar * 100) })),
-    );
-    this.stamp("khipu_merkle_root", 1, { merkle });
-    if (chain.halted) {
-      this.setFailClosed(true);
-      this.snapshot = {
-        ...this.snapshot,
-        kernel: { ...this.snapshot.kernel, puriqRunning: false, haltReason: chain.halt_reason },
-        version: this.snapshot.version + 1,
-      };
-      this.applyLambdaVca();
-      for (const l of this.listeners) l();
-      return;
-    }
-    this.ayniTape();
-    this.pruneInstantCycles();
-    this.setScopeMode("knot");
-    this.stamp("puriq", chain.lambda, { halted: false });
-    this.tickKernel(true);
-  }
-
-  private replayLastBurst() {
-    if (!this.ctx || !this.lastBurst.length) {
-      const last = this.snapshot.kernel.receipts.at(-1);
-      if (last) this.stamp("F1", 1, { replay: last.hash });
-      return;
-    }
-    const now = this.ctx.currentTime;
-    for (const n of this.lastBurst) this.noteOn(n.midi, n.vel, now, n.slide);
-    for (const n of this.lastBurst) this.noteOff(n.midi, now + 0.18);
-  }
-
-  private pruneInstantCycles() {
-    const bad = new Set(instantCycles(this.snapshot.patches).map((p) => `${p.from}->${p.to}`));
-    if (!bad.size) return;
-    const patches = this.snapshot.patches.filter((p) => !bad.has(`${p.from}->${p.to}`));
-    this.snapshot = { ...this.snapshot, patches, version: this.snapshot.version + 1 };
-    if (this.ctx) this.rebuildPatches();
-  }
-
-  private fifoReset() {
-    this.stepIndex = 0;
-    this.loopCycle = 0;
-    fifoOk(this.snapshot.steps.map((_, i) => i));
-    if (this.ctx) this.nextNoteTime = this.ctx.currentTime + 0.05;
-  }
-
-  private ayniTape() {
-    const t = this.snapshot.tape;
-    const mix = Math.min(0.72, t.mix);
-    this.setTape({ mix, feedback: Math.min(0.62, t.feedback) });
-  }
-
-  private rsLattice() {
-    const d = reedSolomonSingleton(16, 8);
-    this.setSeq({ euclidHits: d, euclidSteps: 16 });
-    this.applyEuclid();
   }
 }
 

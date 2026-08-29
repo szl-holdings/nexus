@@ -7,8 +7,6 @@ const MODES: { id: ScopeMode; label: string }[] = [
   { id: "yt", label: "Y-T" },
   { id: "xy", label: "X-Y" },
   { id: "fft", label: "FFT" },
-  { id: "lambda", label: "Λ" },
-  { id: "knot", label: "Knot" },
 ];
 
 export function Oscilloscope() {
@@ -49,7 +47,7 @@ export function Oscilloscope() {
       const mode = modeRef.current;
 
       ctx.globalCompositeOperation = "destination-out";
-      ctx.fillStyle = mode === "xy" || mode === "knot" ? "rgba(0,0,0,0.08)" : "rgba(0,0,0,0.12)";
+      ctx.fillStyle = mode === "xy" ? "rgba(0,0,0,0.08)" : "rgba(0,0,0,0.12)";
       ctx.fillRect(0, 0, w, h);
       ctx.globalCompositeOperation = "source-over";
       ctx.fillStyle = "rgba(6,10,8,0.18)";
@@ -57,7 +55,7 @@ export function Oscilloscope() {
 
       ctx.strokeStyle = "rgba(124,255,107,0.12)";
       ctx.lineWidth = 1;
-      const divs = mode === "xy" ? 8 : 8;
+      const divs = 8;
       for (let i = 0; i <= divs; i++) {
         const y = (h / divs) * i;
         ctx.beginPath();
@@ -74,10 +72,10 @@ export function Oscilloscope() {
       }
 
       if (mode === "yt") drawYt(ctx, w, h, time);
-      else if (mode === "xy") drawXy(ctx, w, h, left, right);
-      else if (mode === "fft") drawFft(ctx, w, h, freq);
-      else if (mode === "lambda") drawLambda(ctx, w, h);
-      else drawKnot(ctx, w, h);
+      else if (mode === "xy") {
+        if (engine.getSnapshot().frontier) drawAnalogXy(ctx, w, h);
+        else drawXy(ctx, w, h, left, right);
+      } else drawFft(ctx, w, h, freq);
 
       ctx.globalAlpha = 0.07;
       for (let y = 0; y < h; y += 3) {
@@ -95,14 +93,12 @@ export function Oscilloscope() {
 
   const caption =
     snap.scopeMode === "xy"
-      ? "LISSAJOUS · L×R"
+      ? snap.frontier
+        ? `LORENZ · X×Y · ${(snap.analog.mode ?? "op").toUpperCase()}`
+        : "LISSAJOUS · L×R"
       : snap.scopeMode === "fft"
         ? "SPECTRUM · 0–8 kHz"
-        : snap.scopeMode === "lambda"
-          ? "YUYAY · 13 AXES · CONJECTURE 1"
-          : snap.scopeMode === "knot"
-            ? "KHIPU · HASH CHAIN · UNSIGNED-honest"
-            : "0.5 V/DIV · TRIG ↑";
+        : "0.5 V/DIV · TRIG ↑";
 
   return (
     <ModuleFrame title="Oscilloscope" serial="CRT-2A">
@@ -112,14 +108,14 @@ export function Oscilloscope() {
             <button
               key={m.id}
               type="button"
-              className={`nx-btn min-h-9 px-3 ${snap.scopeMode === m.id ? "nx-btn-on" : ""}`}
+              className={`nx-btn min-h-11 px-3 ${snap.scopeMode === m.id ? "nx-btn-on" : ""}`}
               onClick={() => engine.setScopeMode(m.id)}
             >
               {m.label}
             </button>
           ))}
         </div>
-        <div className="relative min-h-40 w-full flex-1 overflow-hidden rounded-sm" style={{ background: "#07100c" }}>
+        <div className="relative min-h-40 w-full flex-1 overflow-hidden rounded-sm bg-[#07100c]">
           <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
           <div className="pointer-events-none absolute left-2 top-2 font-mono text-micro tracking-widest text-phosphor-dim">
             {caption}
@@ -195,6 +191,40 @@ function drawXy(ctx: CanvasRenderingContext2D, w: number, h: number, left: Bytes
   ctx.restore();
 }
 
+function drawAnalogXy(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const trail = engine.getAnalogTrail();
+  const a = engine.getAnalog();
+  if (trail.len < 2) return;
+  const cx = w / 2;
+  const cy = h / 2;
+  const sx = w * 0.42;
+  const sy = h * 0.42;
+  ctx.save();
+  ctx.shadowColor = "#7cff6b";
+  ctx.shadowBlur = 8;
+  ctx.strokeStyle = "#7cff6b";
+  ctx.lineWidth = 1.35;
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  const cap = trail.cap;
+  const start = (trail.write - trail.len + cap) % cap;
+  for (let i = 0; i < trail.len; i++) {
+    const idx = (start + i) % cap;
+    const x = cx + (trail.data[idx * 2] ?? 0) * sx;
+    const y = cy - (trail.data[idx * 2 + 1] ?? 0) * sy;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.shadowColor = "#ffb000";
+  ctx.shadowBlur = 14;
+  ctx.fillStyle = "#ffb000";
+  ctx.beginPath();
+  ctx.arc(cx + a.x * sx, cy - a.y * sy, 3.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 function drawFft(ctx: CanvasRenderingContext2D, w: number, h: number, freq: Bytes) {
   const analyser = engine.getAnalyser();
   if (!analyser) return;
@@ -221,76 +251,5 @@ function drawFft(ctx: CanvasRenderingContext2D, w: number, h: number, freq: Byte
   ctx.closePath();
   ctx.fillStyle = "rgba(124,255,107,0.12)";
   ctx.fill();
-  ctx.restore();
-}
-
-function drawLambda(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const k = engine.getSnapshot().kernel;
-  const cx = w / 2;
-  const cy = h / 2;
-  const r = Math.min(w, h) * 0.38;
-  const n = k.axes.length;
-  ctx.save();
-  ctx.strokeStyle = "rgba(255,176,0,0.28)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.beginPath();
-  for (let i = 0; i <= n; i++) {
-    const a = k.axes[i % n]!;
-    const ang = -Math.PI / 2 + (i % n) * ((Math.PI * 2) / n);
-    const rr = r * (0.18 + a.score * 0.82);
-    const x = cx + Math.cos(ang) * rr;
-    const y = cy + Math.sin(ang) * rr;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
-  ctx.closePath();
-  ctx.fillStyle = "rgba(124,255,107,0.12)";
-  ctx.fill();
-  ctx.strokeStyle = "#7cff6b";
-  ctx.shadowColor = "#7cff6b";
-  ctx.shadowBlur = 8;
-  ctx.lineWidth = 1.4;
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = "#ffb000";
-  ctx.font = "600 11px 'IBM Plex Mono', monospace";
-  ctx.textAlign = "center";
-  ctx.fillText(`Λ ${k.lambda.toFixed(4)}`, cx, cy + 4);
-  ctx.fillStyle = "#a06e00";
-  ctx.font = "10px 'IBM Plex Mono', monospace";
-  ctx.fillText("CONJECTURE 1", cx, cy + 18);
-  ctx.restore();
-}
-
-function drawKnot(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const receipts = engine.getSnapshot().kernel.receipts;
-  if (!receipts.length) return;
-  const cx = w / 2;
-  const cy = h / 2;
-  ctx.save();
-  receipts.forEach((r, i) => {
-    const t = i / Math.max(1, receipts.length - 1);
-    const radius = Math.min(w, h) * (0.12 + t * 0.32);
-    ctx.beginPath();
-    const turns = 3 + (parseInt(r.hash.slice(0, 2), 16) % 5);
-    for (let s = 0; s <= 160; s++) {
-      const a = (s / 160) * Math.PI * 2 * turns;
-      const wobble = 0.22 * Math.sin(a * 2 + t * 6);
-      const rr = radius * (1 + wobble);
-      const x = cx + Math.cos(a + t * 0.7) * rr * (1 + 0.08 * Math.sin(a * 3));
-      const y = cy + Math.sin(a + t * 0.7) * rr * 0.72;
-      if (s === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.strokeStyle = i === receipts.length - 1 ? "#ffb000" : "#7cff6b";
-    ctx.globalAlpha = 0.35 + t * 0.55;
-    ctx.lineWidth = 1.1;
-    ctx.shadowColor = i === receipts.length - 1 ? "#ffb000" : "#7cff6b";
-    ctx.shadowBlur = 6;
-    ctx.stroke();
-  });
   ctx.restore();
 }

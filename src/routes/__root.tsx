@@ -3,7 +3,7 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import appCss from "../styles.css?url";
 
-const APP_NAME = "NEXUS";
+const APP_NAME = "NEXUS MK-II";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -14,7 +14,8 @@ export const Route = createRootRoute({
       { name: "theme-color", content: "#0A0C0E" },
       {
         name: "description",
-        content: "NEXUS MK-III — analog formula computer. Locked-8 voltages, F19 VCA, F12 fail-closed, Khipu CRT.",
+        content:
+          "NEXUS MK-II — analog computing workstation. Lorenz Frontier core, function generator, phosphor CRT, tape echo, patchbay, sequencer, voice.",
       },
     ],
     links: [

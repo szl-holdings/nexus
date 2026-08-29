@@ -1,11 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
-import {
-  DEST_PORTS,
-  PORT_META,
-  SOURCE_PORTS,
-  type PortId,
-} from "@/lib/nexus/types";
-import { canalOf } from "@/lib/nexus/formulas";
+import { DEST_PORTS, PORT_META, SOURCE_PORTS, type PortId } from "@/lib/nexus/types";
 import { engine, useEngine } from "@/lib/nexus/use-engine";
 import { ModuleFrame } from "./ModuleFrame";
 
@@ -49,10 +43,9 @@ export function Patchbay() {
         if (!a || !b) return null;
         const sag = Math.max(18, Math.abs(b.x - a.x) * 0.28 + 12);
         const d = `M ${a.x} ${a.y} C ${a.x} ${a.y + sag}, ${b.x} ${b.y + sag}, ${b.x} ${b.y}`;
-        const leak = canalOf(p.from) !== canalOf(p.to);
-        return { p, d, color: leak ? "#ffb000" : COLORS[i % COLORS.length]!, leak };
+        return { p, d, color: COLORS[i % COLORS.length]! };
       })
-      .filter(Boolean) as { p: (typeof snap.patches)[number]; d: string; color: string; leak: boolean }[];
+      .filter(Boolean) as { p: (typeof snap.patches)[number]; d: string; color: string }[];
   }, [pts, snap.patches]);
 
   function onJack(id: PortId, kind: "src" | "dst") {
@@ -76,7 +69,7 @@ export function Patchbay() {
   }
 
   return (
-    <ModuleFrame title="Patchbay" serial="YARQA">
+    <ModuleFrame title="Patchbay" serial="PB-24">
       <div
         ref={rootRef}
         className="relative min-h-48 sm:h-full"
@@ -87,9 +80,9 @@ export function Patchbay() {
         }}
         onPointerUp={() => setDrag(null)}
       >
-        <div className="flex flex-col gap-6 px-2 pt-2">
-          <JackRow ids={SOURCE_PORTS} kind="src" jackRefs={jackRefs} onJack={onJack} hot={drag?.from} />
-          <JackRow ids={DEST_PORTS} kind="dst" jackRefs={jackRefs} onJack={onJack} hot={undefined} />
+        <div className="flex flex-col gap-6 px-1 pt-2 sm:px-2">
+          <JackRow ids={SOURCE_PORTS} kind="src" jackRefs={jackRefs} onJack={onJack} hot={drag?.from} cols="src" />
+          <JackRow ids={DEST_PORTS} kind="dst" jackRefs={jackRefs} onJack={onJack} hot={undefined} cols="dst" />
         </div>
         <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${size.w} ${size.h}`}>
           {cables.map(({ p, d, color }) => (
@@ -112,9 +105,7 @@ export function Patchbay() {
             />
           ) : null}
         </svg>
-        <p className="nx-label mt-3 text-center">
-          canals voice / tape / out · leak {snap.kernel.yarqaLeak.toFixed(2)} · amber is cross-canal
-        </p>
+        <p className="nx-label mt-3 text-center">drag source → dest · click cable to pull</p>
       </div>
     </ModuleFrame>
   );
@@ -126,15 +117,17 @@ function JackRow({
   jackRefs,
   onJack,
   hot,
+  cols,
 }: {
   ids: PortId[];
   kind: "src" | "dst";
   jackRefs: MutableRefObject<Record<string, HTMLButtonElement | null>>;
   onJack: (id: PortId, kind: "src" | "dst") => void;
   hot?: PortId;
+  cols: "src" | "dst";
 }) {
   return (
-    <div className="flex flex-wrap justify-between gap-2">
+    <div className={`grid gap-1 ${cols === "src" ? "grid-cols-5 sm:grid-cols-9" : "grid-cols-4 sm:grid-cols-7"}`}>
       {ids.map((id) => (
         <button
           key={id}
@@ -142,11 +135,11 @@ function JackRow({
           ref={(el) => {
             jackRefs.current[id] = el;
           }}
-          className="flex flex-col items-center gap-1"
+          className="flex min-h-11 flex-col items-center gap-1"
           onClick={() => onJack(id, kind)}
         >
           <span className={`nx-jack ${hot === id ? "nx-jack-hot" : ""}`} />
-          <span className="nx-label">{PORT_META[id].label}</span>
+          <span className="nx-label text-center">{PORT_META[id].label}</span>
         </button>
       ))}
     </div>

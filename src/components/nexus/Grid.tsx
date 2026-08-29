@@ -90,15 +90,34 @@ export function Grid() {
         }
       }
 
-      if (playing) {
-        const x = pad + (play + 0.5) * gw;
-        ctx.strokeStyle = "rgba(255,176,0,0.55)";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(x, pad);
-        ctx.lineTo(x, h - pad);
-        ctx.stroke();
-      }
+          if (playing) {
+            const x = pad + (play + 0.5) * gw;
+            ctx.strokeStyle = "rgba(255,176,0,0.55)";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x, pad);
+            ctx.lineTo(x, h - pad);
+            ctx.stroke();
+          }
+
+          const analog = engine.getSnapshot().frontier;
+          if (analog) {
+            const a = engine.getAnalog();
+            const x = pad + (a.col + 0.5) * gw;
+            const y = pad + (ROWS - 1 - a.row + 0.5) * gh;
+            const rad = Math.min(gw, gh) * 0.42;
+            ctx.save();
+            ctx.shadowColor = "#ffb000";
+            ctx.shadowBlur = 16;
+            ctx.strokeStyle = "#ffb000";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(x, y, rad, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.fillStyle = "rgba(255,176,0,0.28)";
+            ctx.fill();
+            ctx.restore();
+          }
 
       ctx.globalAlpha = 0.1;
       for (let y = 0; y < h; y += 3) {
@@ -134,8 +153,8 @@ export function Grid() {
         <div className="relative min-h-40 w-full flex-1">
           <canvas
             ref={canvasRef}
-            className="absolute inset-0 h-full w-full rounded-sm"
-            style={{ background: "#07090b", touchAction: "none" }}
+            className="absolute inset-0 h-full w-full rounded-sm bg-bg"
+            style={{ touchAction: "none" }}
             onPointerDown={(e) => {
               const cell = cellAt(e);
               if (!cell) return;
@@ -160,7 +179,8 @@ export function Grid() {
           />
         </div>
         <p className="nx-label mt-2 text-center">
-          {snap.seq.playing ? "scan" : "idle"} · {snap.seq.scale} · drag to write
+          {snap.seq.playing ? "scan" : "idle"} · {snap.seq.scale}
+          {snap.frontier ? " · analog pen" : " · drag to write"}
         </p>
       </div>
     </ModuleFrame>

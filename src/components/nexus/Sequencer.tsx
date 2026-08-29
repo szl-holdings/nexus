@@ -25,28 +25,28 @@ export function Sequencer() {
   }, []);
 
   return (
-    <ModuleFrame title="Sequencer" serial="OURO-16">
+    <ModuleFrame title="Sequencer" serial="CLK-16">
       <div className="flex h-full flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            className={`nx-btn px-3 py-2 ${seq.playing ? "nx-btn-on" : ""}`}
+            className={`nx-btn min-h-11 px-3 py-2 ${seq.playing ? "nx-btn-on" : ""}`}
             onClick={() => engine.togglePlay()}
           >
             {seq.playing ? "Stop" : "Run"}
           </button>
-          <button type="button" className="nx-btn px-3 py-2" onClick={() => engine.applyEuclid()}>
+          <button type="button" className="nx-btn min-h-11 px-3 py-2" onClick={() => engine.applyEuclid()}>
             Euclid
           </button>
           <button
             type="button"
-            className={`nx-btn px-3 py-2 ${seq.arp ? "nx-btn-on" : ""}`}
+            className={`nx-btn min-h-11 px-3 py-2 ${seq.arp ? "nx-btn-on" : ""}`}
             onClick={() => engine.setSeq({ arp: !seq.arp })}
           >
             Arp
           </button>
           <select
-            className="nx-btn bg-panel px-2 py-2 text-fg"
+            className="nx-btn min-h-11 bg-panel px-2 py-2 text-fg"
             value={seq.scale}
             onChange={(e) => engine.setSeq({ scale: e.target.value as typeof seq.scale })}
           >
@@ -54,14 +54,9 @@ export function Sequencer() {
             <option value="minor">Minor</option>
             <option value="chromatic">Chrom</option>
           </select>
-          <span className="nx-led ml-auto" data-on={seq.playing} />
-          <span className={`nx-led ${seq.playing ? "nx-led-on" : ""}`} />
-          <span className="font-mono text-micro tabular-nums text-amber">
-            tax {snap.kernel.loopTax.toFixed(2)} · cyc {snap.kernel.loopCycle}
-            {snap.kernel.withinBudget ? "" : " · EXHAUST"}
-          </span>
+          <span className={`nx-led ml-auto ${seq.playing ? "nx-led-on" : ""}`} />
         </div>
-        <div className="grid grid-cols-8 gap-1">
+        <div className="grid grid-cols-8 gap-0.5 sm:gap-1">
           {steps.map((s, i) => (
             <button
               key={i}
@@ -71,7 +66,7 @@ export function Sequencer() {
                 e.preventDefault();
                 engine.setStep(i, { accent: !s.accent, note: (s.note + 1) % 8 });
               }}
-              className={`relative h-9 rounded-sm border font-mono text-micro tabular-nums ${
+              className={`relative min-h-10 rounded-sm border font-mono text-micro tabular-nums sm:min-h-11 ${
                 s.gate
                   ? s.accent
                     ? "border-amber bg-amber text-bg"
@@ -84,7 +79,7 @@ export function Sequencer() {
             </button>
           ))}
         </div>
-        <div className="flex flex-wrap justify-between gap-1">
+        <div className="nx-knobs">
           <Knob label="BPM" value={seq.bpm} min={48} max={200} step={1} onChange={(v) => engine.setSeq({ bpm: v })} format={(v) => `${Math.round(v)}`} />
           <Knob label="Swing" value={seq.swing} min={0} max={0.45} onChange={(v) => engine.setSeq({ swing: v })} format={(v) => v.toFixed(2)} />
           <Knob label="Hits" value={seq.euclidHits} min={1} max={16} step={1} onChange={(v) => engine.setSeq({ euclidHits: v })} format={(v) => `${Math.round(v)}`} />

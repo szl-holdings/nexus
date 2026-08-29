@@ -21,7 +21,7 @@ export function Knob({
   onChange,
   unit = "",
   format,
-  size = 56,
+  size = 48,
 }: KnobProps) {
   const rawId = useId();
   const id = rawId.replace(/:/g, "");
@@ -55,7 +55,7 @@ export function Knob({
   const readout = format ? format(value) : `${value.toFixed(value >= 100 ? 0 : 2)}${unit}`;
 
   return (
-    <div className="flex w-[4.5rem] flex-col items-center gap-1">
+    <div className="nx-knob flex w-full max-w-16 flex-col items-center gap-1">
       <div
         role="slider"
         aria-labelledby={id}
@@ -81,8 +81,8 @@ export function Knob({
         style={{ width: size, height: size }}
       >
         <svg viewBox="0 0 80 80" className="h-full w-full">
-          <circle cx="40" cy="40" r="34" fill="#1a1f24" stroke="#3a414c" strokeWidth="2" />
-          <circle cx="40" cy="40" r="28" fill={`url(#${id}face)`} stroke="#2a3138" strokeWidth="1" />
+          <circle cx="40" cy="40" r="34" className="fill-panel-hi stroke-aluminum" strokeWidth="2" />
+          <circle cx="40" cy="40" r="28" fill={`url(#${id}face)`} className="stroke-hairline" strokeWidth="1" />
           {Array.from({ length: 11 }, (_, i) => {
             const a = ((-135 + i * 27) * Math.PI) / 180;
             const x1 = 40 + Math.cos(a) * 31;
@@ -96,14 +96,14 @@ export function Knob({
                 y1={y1}
                 x2={x2}
                 y2={y2}
-                stroke={i === 0 || i === 10 ? "#7cff6b" : "#5c6570"}
+                className={i === 0 || i === 10 ? "stroke-phosphor" : "stroke-aluminum-hi"}
                 strokeWidth="1.2"
               />
             );
           })}
           <g transform={`rotate(${angle} 40 40)`}>
-            <line x1="40" y1="40" x2="40" y2="16" stroke="#ffb000" strokeWidth="2.4" strokeLinecap="round" />
-            <circle cx="40" cy="40" r="5" fill="#0a0c0e" stroke="#5c6570" />
+            <line x1="40" y1="40" x2="40" y2="16" className="stroke-amber" strokeWidth="2.4" strokeLinecap="round" />
+            <circle cx="40" cy="40" r="5" className="fill-bg stroke-aluminum-hi" />
           </g>
           <defs>
             <radialGradient id={`${id}face`} cx="35%" cy="30%">
