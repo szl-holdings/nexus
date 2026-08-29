@@ -27,7 +27,7 @@ import {
   type Waveform,
 } from "./types";
 import { loadPersisted, scheduleSave, type PersistedState } from "./store";
-import { euclid, funcGenStep, midiToHz, analogCell, analogCircuit, analogCoefficients, analogJack, analogStep, scaleAnalog, seedAnalogState, opticalInterfere, opticalReconstruct, type AnalogState } from "./math";
+import { euclid, funcGenStep, midiToHz, analogCell, analogCircuit, analogCoefficients, analogCorrelate, analogJack, analogSchmitt, analogStep, scaleAnalog, seedAnalogState, opticalInterfere, opticalReconstruct, type AnalogState } from "./math";
 import {
   analogDelta,
   appendReceipt,
@@ -219,6 +219,8 @@ class NexusEngine {
   private holoR = 0;
   private analogLast = 0;
   private lastNx = 0;
+  private lastCorr = 0;
+  private lastSchmitt = 1;
   private repAcc = 0;
   private trail = new Float32Array(1800);
   private trailWrite = 0;
@@ -349,7 +351,7 @@ class NexusEngine {
     const program = this.snapshot.analog.program ?? "lorenz";
     const coef = analogCoefficients(this.snapshot.analog.chaos, program);
     const cell = analogCell(this.nx, this.ny, COLS, ROWS);
-    const ckt = analogCircuit(this.nx, this.ny, this.nz);
+    const ckt = analogCircuit(this.nx, this.ny, this.nz, this.lastCorr);
     return {
       x: this.nx,
       y: this.ny,
@@ -359,7 +361,9 @@ class NexusEngine {
       recon: this.holoR,
       program,
       bank: this.analog.bank,
+      hyb: this.snapshot.frontier && this.snapshot.seq.playing,
       ...ckt,
+      cmp: this.lastSchmitt,
       ...cell,
       ...coef,
     };
@@ -787,7 +791,7 @@ class NexusEngine {
     this.orbitGain.gain.setTargetAtTime(this.snapshot.orbit * 0.85, this.ctx.currentTime, 0.08);
   }
 
-  seedAnalog(nudge = Math.random()) {
+  seedAnalog(nudge = Math.random(), keepTrail = false) {
     const program = this.snapshot.analog.program ?? "lorenz";
     this.analog = seedAnalogState(program, nudge);
     this.fg = 0;
@@ -795,10 +799,14 @@ class NexusEngine {
     this.holoI = 0;
     this.holoR = 0;
     this.lastNx = 0;
-    this.trailWrite = 0;
-    this.trailLen = 0;
+    this.lastCorr = 0;
+    this.lastSchmitt = 1;
     this.repAcc = 0;
     this.analogLast = this.ctx?.currentTime ?? 0;
+    if (!keepTrail) {
+      this.trailWrite = 0;
+      this.trailLen = 0;
+    }
     const scaled = scaleAnalog(program, this.analog);
     this.nx = scaled.x;
     this.ny = scaled.y;
@@ -821,7 +829,7 @@ class NexusEngine {
       this.repAcc += dt;
       const period = 2.4 / (0.35 + a.rate);
       if (this.repAcc >= period) {
-        this.seedAnalog(this.repAcc);
+        this.seedAnalog(this.repAcc, true);
         this.repAcc = 0;
       }
     }
@@ -834,6 +842,9 @@ class NexusEngine {
       this.nx = scaled.x;
       this.ny = scaled.y;
       this.nz = scaled.z;
+      this.lastCorr = analogCorrelate(this.nx, this.ny, this.lastCorr, dt);
+      const prevSchmitt = this.lastSchmitt;
+      this.lastSchmitt = analogSchmitt(this.nx, this.lastSchmitt);
       if (a.cycle) {
         const next = funcGenStep(this.fg, this.fgUp, dt, Math.max(0.04, v.attack * 4), Math.max(0.06, v.release));
         this.fg = next.value;
@@ -856,16 +867,18 @@ class NexusEngine {
       this.trail[wi + 2] = this.nz;
       this.trailWrite = (this.trailWrite + 1) % 600;
       this.trailLen = Math.min(600, this.trailLen + 1);
+      this.applyAnalogCv(now, prevSchmitt);
+      return;
     }
 
-    this.applyAnalogCv(now);
+    this.applyAnalogCv(now, this.lastSchmitt);
   }
 
-  private applyAnalogCv(now: number) {
+  private applyAnalogCv(now: number, prevSchmitt = this.lastSchmitt) {
     if (!this.ctx) return;
     const a = this.snapshot.analog;
     const v = this.snapshot.voice;
-    const ckt = analogCircuit(this.nx, this.ny, this.nz);
+    const ckt = analogCircuit(this.nx, this.ny, this.nz, this.lastCorr);
     let jack = analogJack(ckt, this.holoR, a.drive);
     if (a.program === "nemo" && this.analog.bank && this.analog.bank.length >= 2) {
       const heart = analogCircuit((this.analog.bank[1]! + 70) / 55, 0, 0).intg;
@@ -875,8 +888,8 @@ class NexusEngine {
       this.anlgHold.offset.setTargetAtTime(jack, now, 0.02);
       this.funcHold.offset.setTargetAtTime(this.fg * 2 - 1, now, 0.015);
     }
-    if (this.lastNx * this.nx < 0 && this.shHold) {
-      this.shHold.offset.setValueAtTime(ckt.mul, now);
+    if (prevSchmitt !== this.lastSchmitt && this.shHold) {
+      this.shHold.offset.setValueAtTime(ckt.corr, now);
     }
     this.lastNx = this.nx;
     if (!this.snapshot.frontier) return;
@@ -1479,12 +1492,15 @@ class NexusEngine {
 
   private scheduleStep(step: number, time: number) {
     if (this.shHold) {
-      const sample = this.nx;
+      const sample = this.snapshot.frontier ? this.lastCorr : this.nx;
       this.shHold.offset.setValueAtTime(sample, time);
     }
     if (this.snapshot.frontier && !this.snapshot.analog.cycle) this.triggerFunc();
     const s = this.snapshot.steps[step];
     const seq = this.snapshot.seq;
+    if (this.snapshot.frontier && (this.snapshot.analog.mode ?? "op") === "rep" && s?.accent && s?.gate) {
+      this.seedAnalog((s.note + step) * 0.11, true);
+    }
     const scale = scaleFor(seq.scale);
     const gridCol = this.snapshot.grid[step];
     const fire = (row: number, accent: boolean, slide: boolean, gateProb: number) => {

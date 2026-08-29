@@ -247,7 +247,10 @@ export function analogCell(x: number, y: number, cols: number, rows: number) {
 
 /**
  * Analog computing elements (THAT *jobs*, not the circuit): integrator,
- * summer, multiplier, inverter, comparator as live voltages. Not a 7th module.
+ * summer, multiplier, inverter, comparator as live voltages. Analog
+ * correlator is the BrainScaleS analog-correlator *job* (leaky product of
+ * two traces). Analog Schmitt is the analog-computer event detector.
+ * Not a 7th module. Not a chip clone.
  */
 export interface AnalogCircuit {
   intg: number;
@@ -255,6 +258,7 @@ export interface AnalogCircuit {
   mul: number;
   inv: number;
   cmp: number;
+  corr: number;
 }
 
 function clampUnit(n: number) {
@@ -262,7 +266,7 @@ function clampUnit(n: number) {
   return Math.max(-1, Math.min(1, v));
 }
 
-export function analogCircuit(x: number, y: number, z: number): AnalogCircuit {
+export function analogCircuit(x: number, y: number, z: number, corr = 0): AnalogCircuit {
   const xi = clampUnit(x);
   const yi = clampUnit(y);
   const zi = clampUnit(z);
@@ -272,14 +276,33 @@ export function analogCircuit(x: number, y: number, z: number): AnalogCircuit {
     mul: clampUnit(xi * yi),
     inv: clampUnit(-xi),
     cmp: xi >= 0 ? 1 : -1,
+    corr: clampUnit(corr),
   };
 }
 
-/** Analog computer output jack — summer of integrator, multiplier, optical reconstruct. */
+/** Leaky analog correlator: corr ← corr + (pre·post − corr)·(1−e^{−dt/τ}). */
+export function analogCorrelate(pre: number, post: number, corr: number, dt: number, tau = 0.18): number {
+  const product = clampUnit(pre) * clampUnit(post);
+  const t = Math.max(1e-4, tau);
+  const a = 1 - Math.exp(-Math.max(0, dt) / t);
+  const prev = clampUnit(corr);
+  return clampUnit(prev + (product - prev) * a);
+}
+
+/** Analog Schmitt trigger. Holds last polarity through the hysteresis band. */
+export function analogSchmitt(x: number, last: number, hyst = 0.08): number {
+  const h = Math.max(0.01, Math.min(0.45, hyst));
+  const xi = clampUnit(x);
+  if (last >= 0) return xi > -h ? 1 : -1;
+  return xi < h ? -1 : 1;
+}
+
+/** Analog computer output jack — summer of integrator, multiplier, correlator, optical reconstruct. */
 export function analogJack(ckt: AnalogCircuit, recon: number, drive: number): number {
   const d = Math.min(1, Math.max(0, drive));
   const r = clampUnit(recon);
-  return clampUnit(ckt.intg * 0.55 + ckt.mul * 0.28 * d + r * 0.22 * d);
+  const corr = clampUnit(ckt.corr ?? 0);
+  return clampUnit(ckt.intg * 0.55 + ckt.mul * 0.22 * d + corr * 0.12 * d + r * 0.22 * d);
 }
 
 export function funcGenStep(

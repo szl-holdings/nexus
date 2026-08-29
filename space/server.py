@@ -176,7 +176,7 @@ def optical_reconstruct(intensity: float, dphi: float) -> float:
     return max(-1.0, min(1.0, v / 2.0))
 
 
-def analog_circuit(x: float, y: float, z: float) -> dict[str, float]:
+def analog_circuit(x: float, y: float, z: float, corr: float = 0.0) -> dict[str, float]:
     """THAT analog-element *jobs* as live voltages. Not the circuit."""
     def u(n: float) -> float:
         v = float(n) if math.isfinite(float(n)) else 0.0
@@ -189,13 +189,38 @@ def analog_circuit(x: float, y: float, z: float) -> dict[str, float]:
         "mul": u(xi * yi),
         "inv": u(-xi),
         "cmp": 1.0 if xi >= 0 else -1.0,
+        "corr": u(corr),
     }
+
+
+def analog_correlate(pre: float, post: float, corr: float, dt: float, tau: float = 0.18) -> float:
+    """Leaky analog correlator — BrainScaleS analog-correlator *job*, not the chip."""
+    def u(n: float) -> float:
+        v = float(n) if math.isfinite(float(n)) else 0.0
+        return max(-1.0, min(1.0, v))
+
+    product = u(pre) * u(post)
+    t = max(1e-4, float(tau))
+    a = 1.0 - math.exp(-max(0.0, float(dt)) / t)
+    prev = u(corr)
+    return u(prev + (product - prev) * a)
+
+
+def analog_schmitt(x: float, last: float, hyst: float = 0.08) -> float:
+    """Analog Schmitt trigger. Holds last polarity through the hysteresis band."""
+    h = max(0.01, min(0.45, float(hyst)))
+    xi = float(x) if math.isfinite(float(x)) else 0.0
+    xi = max(-1.0, min(1.0, xi))
+    if last >= 0:
+        return 1.0 if xi > -h else -1.0
+    return -1.0 if xi < h else 1.0
 
 
 def analog_jack(ckt: dict[str, float], recon: float, drive: float) -> float:
     d = clamp01(drive)
     r = max(-1.0, min(1.0, float(recon) if math.isfinite(float(recon)) else 0.0))
-    v = ckt["intg"] * 0.55 + ckt["mul"] * 0.28 * d + r * 0.22 * d
+    corr = max(-1.0, min(1.0, float(ckt.get("corr", 0.0) or 0.0)))
+    v = ckt["intg"] * 0.55 + ckt["mul"] * 0.22 * d + corr * 0.12 * d + r * 0.22 * d
     return max(-1.0, min(1.0, v))
 
 
@@ -463,7 +488,15 @@ def analog_payload(data: dict) -> dict:
     intensity = optical_interfere(ao, dphi, ar, 0.0)
     recon = optical_reconstruct(intensity, dphi)
     pots = analog_coefficients(chaos, program)
-    ckt = analog_circuit(sc["x"], sc["y"], sc["z"])
+    corr = 0.0
+    schmitt = 1.0
+    for xyz in trail:
+        tmp = {"x": float(xyz[0]), "y": float(xyz[1]), "z": float(xyz[2]), "t": 0.0}
+        sci = scale_analog(program, tmp)
+        corr = analog_correlate(sci["x"], sci["y"], corr, dt)
+        schmitt = analog_schmitt(sci["x"], schmitt)
+    ckt = analog_circuit(sc["x"], sc["y"], sc["z"], corr)
+    ckt["cmp"] = schmitt
     out: dict[str, Any] = {
         "program": program,
         "label": PROGRAM_LABELS[program],
@@ -524,7 +557,7 @@ class Handler(BaseHTTPRequestHandler):
                     "ok": True,
                     "space": "nexus",
                     "kernel": "hologram",
-                    "analog": "AdEx 5-organ anatomy + WILLAY second brain + analog circuits + 3F STDP",
+                    "analog": "AdEx 5-organ anatomy + WILLAY second brain + analog correlator + hybrid IC + analog circuits + 3F STDP",
                     "programs": list(PROGRAMS),
                     "uniqueness": "Conjecture 1",
                     "energy": "UNAVAILABLE",
@@ -668,8 +701,18 @@ def selftest() -> None:
     ckt = analog_circuit(0.5, -0.4, 0.2)
     assert abs(ckt["mul"] - -0.2) < 1e-9
     assert analog_circuit(-0.2, 0, 0)["cmp"] == -1.0
+    assert ckt["corr"] == 0.0
+    c = 0.0
+    for _ in range(80):
+        c = analog_correlate(0.8, 0.5, c, 0.02, 0.12)
+    assert c > 0.3
+    assert analog_schmitt(-0.04, 1.0) == 1.0
+    assert analog_schmitt(-0.2, 1.0) == -1.0
+    driven = analog_jack(analog_circuit(0.5, 0, 0, 0.8), 0, 1)
+    quiet = analog_jack(analog_circuit(0.5, 0, 0, 0.8), 0, 0)
+    assert driven > quiet
 
-    print("analog selftest ok — AdEx 5ORG, WILLAY 2BRN, analog circuits, 3F STDP, optical (Ao+Ar)²", flush=True)
+    print("analog selftest ok — AdEx 5ORG, WILLAY 2BRN, analog correlator, hybrid IC, analog circuits, 3F STDP, optical (Ao+Ar)²", flush=True)
 
 
 def main() -> None:

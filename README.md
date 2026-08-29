@@ -47,11 +47,11 @@ Inspired by analog computing practice (THE ANALOG THING, CRT holograms, modular 
 | **Tape Deck** | Stereo echo with wow, flutter, saturation. Analog Z modulates delay time. Bounce dumps eight seconds. |
 | **Patchbay** | Sources include **ANLG** and **FUNC**. Drag source → dest. Click a cable to pull it. |
 | **Sequencer** | 16-step clock, Euclidean hits, swing, probability, arp. Ouroboros closes the loop at eight bars in Frontier. |
-| **Voice** | Morph VCO, ladder-ish VCF, ADSR, unison, FM, folder, LFO, S&H, ring. Analog computer: **LRNZ / HARM / VDP / DFFG / LTKA / NEMO**, **IC / OP / HALT / REP**, Rate, Chaos, Drive. Live analog circuits: integrator, summer, multiplier, inverter, comparator. Λ and energy UNAVAILABLE on the panel. |
+| **Voice** | Morph VCO, ladder-ish VCF, ADSR, unison, FM, folder, LFO, S&H, ring. Analog computer: **LRNZ / HARM / VDP / DFFG / LTKA / NEMO**, **IC / OP / HALT / REP**, Rate, Chaos, Drive. Live analog circuits: integrator, summer, multiplier, inverter, comparator, correlator. Analog Schmitt. Hybrid seq→S&H. Λ and energy UNAVAILABLE on the panel. |
 
 Default chain: **VCO → VCF → DELAY → VCA → OUT**. Scope taps the master bus.
 
-Frontier patch: **ANLG → VCF**, **FUNC → PAN**, **S&H → VCF**. ANLG is the analog computer jack (integrator + multiplier + WILLAY reconstruct). The analog comparator clocks S&H on integrator zero-cross. F19: a DOWN organ mutes the VCA. Master cannot compensate.
+Frontier patch: **ANLG → VCF**, **FUNC → PAN**, **S&H → VCF**. ANLG is the analog computer jack (integrator + multiplier + analog correlator + WILLAY reconstruct). Analog Schmitt clocks S&H from the correlator. In Frontier the sequencer samples the correlator (hybrid ADC). REP accent loads analog IC (hybrid IC). F19: a DOWN organ mutes the VCA. Master cannot compensate.
 
 ## Analog computer
 
@@ -71,9 +71,9 @@ Frontier patch: **ANLG → VCF**, **FUNC → PAN**, **S&H → VCF**. ANLG is the
 | **LTKA** | Lotka–Volterra. Prey/predator stay positive. |
 | **NEMO** | Analog anatomy + second brain. Five AdEx organ-neurons: YACHAY cognition, YUYAY pacemaker, YAWAR traveling wave, OTel optical write, KHIPU bound. WILLAY optical ring is conscience — not a sixth organ. Tsodyks–Markram analog STP, three-factor optical STDP. Not a physical chip. |
 
-Coefficient pots: Chaos maps onto the program’s analog coefficient. Rate is computer time (BrainScaleS-style acceleration on NEMO). Drive is injected current on YACHAY (cognition), YUYAY pacemaker If, and the analog neuromodulator (third factor) — not dopamine. YAWAR is the traveling analog wave around the organ ring. Optical analog: object beam (X,Y) interferes with reference beam (FG,Z). Reconstruction is WILLAY, the second brain, and folds the voice. NEMO uses the same optical inner product as a photonic synapse and as analog STDP eligibility. Energy stays UNAVAILABLE — never a fabricated pJ/spike.
+Coefficient pots: Chaos maps onto the program’s analog coefficient. Rate is computer time (BrainScaleS-style acceleration on NEMO). Drive is injected current on YACHAY (cognition), YUYAY pacemaker If, and the analog neuromodulator (third factor) — not dopamine. YAWAR is the traveling analog wave around the organ ring. Optical analog: object beam (X,Y) interferes with reference beam (FG,Z). Reconstruction is WILLAY, the second brain, and folds the voice. NEMO uses the same optical inner product as a photonic synapse and as analog STDP eligibility. Analog correlator is a leaky product of X×Y (BrainScaleS analog-correlator job). Analog Schmitt is the analog event detector. Hybrid: the sequencer is the digital half — it samples the correlator into S&H, and a REP accent writes analog IC. Energy stays UNAVAILABLE — never a fabricated pJ/spike.
 
-Inspired by analog computing practice (THE ANALOG THING, CRT holograms, modular patchbays) and analog neuromorphic literature (Izhikevich 2003; Brette & Gerstner AdEx 2005; BrainScaleS-2 continuous-time analog; Mead analog VLSI) — original analog-computer-native math, not a Loihi/BrainScaleS emulator, not a dashboard, not a generative-audio model.
+Inspired by analog computing practice (THE ANALOG THING, EAI hybrid IC/OP/HOLD, CRT holograms, modular patchbays) and analog neuromorphic literature (Izhikevich 2003; Brette & Gerstner AdEx 2005; BrainScaleS-2 analog correlators; Mead analog VLSI) — original analog-computer-native math, not a Loihi/BrainScaleS/THAT emulator, not a dashboard, not a generative-audio model.
 
 ## Kernel as voltages
 
