@@ -437,6 +437,8 @@ function OrganRail() {
   const probesRef = useRef<HTMLDivElement>(null);
   const lambdaRef = useRef<HTMLSpanElement>(null);
   const reasonRef = useRef<HTMLSpanElement>(null);
+  const goLab = useRef<HTMLSpanElement>(null);
+  const goLed = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     let raf = 0;
@@ -450,6 +452,11 @@ function OrganRail() {
           ? "F19 FAIL-CLOSED"
           : `${k.liveCount}/5 · C1 OPEN`;
         reasonRef.current.className = `nx-label ${k.blocked ? "text-record" : ""}`;
+      }
+      if (goLab.current && goLed.current) {
+        const go = k.liveCount === 5 && !k.blocked;
+        goLab.current.textContent = k.blocked ? "NO-GO" : go ? "GO" : "HOLD";
+        goLed.current.className = `nx-led ${k.blocked ? "nx-led-rec" : go ? "nx-led-on" : "nx-led-amber"}`;
       }
       const root = organsRef.current;
       if (root) {
@@ -471,6 +478,7 @@ function OrganRail() {
           const p = probes.find((x) => x.id === id);
           const led = el.querySelector(".nx-led");
           if (led) led.className = `nx-led ${p?.status === "LIVE" ? "nx-led-on" : ""}`;
+          if (p) el.setAttribute("title", `${p.label} ${p.status} · ${p.detail}`);
         });
       }
     };
@@ -505,6 +513,12 @@ function OrganRail() {
       </span>
       <span ref={reasonRef} className="nx-label">
         {idleK.liveCount}/5 · C1 OPEN
+      </span>
+      <span className="nx-organ" title="Green light · 5/5 organs LIVE, not fail-closed">
+        <span ref={goLed} className="nx-led nx-led-amber" />
+        <span ref={goLab} className="nx-label">
+          HOLD
+        </span>
       </span>
       <div ref={probesRef} className="flex flex-wrap items-center gap-1">
         {idleP.map((p) => (
@@ -572,6 +586,7 @@ function Help({ onClose }: { onClose: () => void }) {
         <li>Ouroboros taxes the VCA in Frontier. Eight bars, then the loop closes. Run starts another.</li>
         <li>F19 fail-closed: a DOWN organ mutes the VCA. Master cannot compensate. Energy stays UNAVAILABLE.</li>
         <li>Λ is advisory. Conjecture 1 remains OPEN. Hatun probes stay LIVE or honestly UNAVAILABLE.</li>
+        <li>GO is 5/5 organs LIVE. HOLD until the kernel settles. NO-GO is F19 fail-closed.</li>
         <li>Scenes F1 F4 F7 F11 F12 F18 F19 F22 · shift-click stores</li>
         <li>
           <kbd>space</kbd> run / stop sequencer
