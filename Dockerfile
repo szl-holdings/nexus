@@ -1,4 +1,7 @@
-# NEXUS MK-III — Hugging Face Space (port 7860)
+# Leftover vite-dev image. NOT the Hugging Face Space image.
+# Space image is space/Dockerfile (prebuilt Nitro node-server, port 7860).
+# Canonical publisher: szl-holdings/yarqa deploy-nexus.yml.
+# Do not point reusable-hf-deploy at this file.
 # Explicit COPY sources: the org deployer forbids bare `COPY .`.
 # Base image: estate HF factory pin (public.ecr.aws), matching yarqa.
 FROM public.ecr.aws/docker/library/node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5
