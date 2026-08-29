@@ -25,7 +25,7 @@ export function Sequencer() {
   }, []);
 
   return (
-    <ModuleFrame title="Sequencer" serial="CLK-16">
+    <ModuleFrame title="Sequencer" serial="OURO-16">
       <div className="flex h-full flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -56,6 +56,10 @@ export function Sequencer() {
           </select>
           <span className="nx-led ml-auto" data-on={seq.playing} />
           <span className={`nx-led ${seq.playing ? "nx-led-on" : ""}`} />
+          <span className="font-mono text-micro tabular-nums text-amber">
+            tax {snap.kernel.loopTax.toFixed(2)} · cyc {snap.kernel.loopCycle}
+            {snap.kernel.withinBudget ? "" : " · EXHAUST"}
+          </span>
         </div>
         <div className="grid grid-cols-8 gap-1">
           {steps.map((s, i) => (

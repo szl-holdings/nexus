@@ -22,8 +22,24 @@ import {
   type TapeParams,
   type VoiceParams,
   type Waveform,
+  type ModuleId,
 } from "./types";
 import { loadPersisted, scheduleSave, type PersistedState } from "./store";
+import {
+  appendReceipt,
+  braidFromPatches,
+  emptyKernel,
+  fifoOk,
+  foldKernel,
+  instantCycles,
+  khipuMerkleRoot,
+  type LockedId,
+  type KernelState,
+  reedSolomonSingleton,
+  rmsFromAnalyser,
+  runGovernedLoop,
+  verifyReceipts,
+} from "./formulas";
 
 export interface EngineSnapshot {
   powered: boolean;
@@ -38,12 +54,13 @@ export interface EngineSnapshot {
   muted: boolean;
   activeNotes: number;
   heldKeys: number[];
-  module: "grid" | "scope" | "tape" | "patch" | "seq" | "voice";
+  module: ModuleId;
   scopeMode: ScopeMode;
   orbit: number;
   sceneSlot: number;
   scenes: (Scene | null)[];
   bouncing: boolean;
+  kernel: KernelState;
   version: number;
 }
 
@@ -165,6 +182,7 @@ class NexusEngine {
   private vca!: GainNode;
   private preMaster!: GainNode;
   private masterGain!: GainNode;
+  private lambdaVca!: GainNode;
   private compressor!: DynamicsCompressorNode;
   private analyser!: AnalyserNode;
   private analyserL!: AnalyserNode;
@@ -199,6 +217,10 @@ class NexusEngine {
   private shAmtGain!: GainNode;
   private bounceDest: MediaStreamAudioDestinationNode | null = null;
   private bounceTimer = 0;
+  private lastKernelMs = 0;
+  private loopCycle = 0;
+  private lastBurst: { midi: number; vel: number; slide: boolean }[] = [];
+  private lastPlayhead = -1;
   private nodes: Partial<Record<PortId, AudioNode>> = {};
   private paramTargets: Partial<Record<PortId, AudioParam>> = {};
   private live: AudioNode[] = [];
@@ -226,6 +248,7 @@ class NexusEngine {
     sceneSlot: 0,
     scenes: Array.from({ length: SCENE_COUNT }, () => null),
     bouncing: false,
+    kernel: emptyKernel(),
     version: 0,
   };
 
@@ -326,6 +349,7 @@ class NexusEngine {
     const lit = this.snapshot.grid.some((col) => col.some(Boolean));
     if (!lit) this.snapshot.grid = emptyGrid();
     this.emit({ powered: true, ready: true });
+    this.tickKernel(true);
   }
 
   private onVis = () => {
@@ -358,6 +382,8 @@ class NexusEngine {
     this.vca = ctx.createGain();
     this.preMaster = ctx.createGain();
     this.masterGain = ctx.createGain();
+    this.lambdaVca = ctx.createGain();
+    this.lambdaVca.gain.value = 1;
     this.compressor = ctx.createDynamicsCompressor();
     this.compressor.threshold.value = -12;
     this.compressor.knee.value = 18;
@@ -427,7 +453,8 @@ class NexusEngine {
     this.cutoffMod.connect(this.filterB.frequency);
     this.preMaster.connect(this.masterPan);
     this.masterPan.connect(this.compressor);
-    this.compressor.connect(this.masterGain);
+    this.compressor.connect(this.lambdaVca);
+    this.lambdaVca.connect(this.masterGain);
     this.masterGain.connect(ctx.destination);
     this.preMaster.connect(this.analyser);
     this.preMaster.connect(this.vuOut);
@@ -669,6 +696,14 @@ class NexusEngine {
     if (!this.ctx) return;
     const g = this.snapshot.muted ? 0 : this.snapshot.master * this.snapshot.master;
     this.masterGain.gain.setTargetAtTime(g, this.ctx.currentTime, 0.03);
+    this.applyLambdaVca();
+  }
+
+  private applyLambdaVca() {
+    if (!this.ctx || !this.lambdaVca) return;
+    const k = this.snapshot.kernel;
+    const gated = k.failClosed ? 0 : (0.36 + 0.64 * k.lambda) * k.loopTax;
+    this.lambdaVca.gain.setTargetAtTime(gated, this.ctx.currentTime, 0.08);
   }
 
   private applyOrbit() {
@@ -688,7 +723,7 @@ class NexusEngine {
   }
 
   cycleScopeMode() {
-    const order: ScopeMode[] = ["yt", "xy", "fft"];
+    const order: ScopeMode[] = ["yt", "xy", "fft", "lambda", "knot"];
     const i = order.indexOf(this.snapshot.scopeMode);
     this.setScopeMode(order[(i + 1) % order.length]!);
   }
@@ -909,7 +944,7 @@ class NexusEngine {
     for (const l of this.listeners) l();
   }
 
-  setModule(module: EngineSnapshot["module"]) {
+  setModule(module: ModuleId) {
     this.emit({ module });
   }
 
@@ -959,8 +994,11 @@ class NexusEngine {
     if (!this.ctx) return;
     if (this.snapshot.seq.playing) return;
     this.stepIndex = 0;
+    this.loopCycle = 0;
+    this.lastPlayhead = -1;
     this.nextNoteTime = this.ctx.currentTime + 0.05;
     this.emit({ seq: { ...this.snapshot.seq, playing: true } });
+    this.tickKernel(true);
   }
 
   stop() {
@@ -1195,6 +1233,8 @@ class NexusEngine {
       if (Math.random() > gateProb * seq.probability) return;
       const midi = scale[row] ?? 48;
       const vel = accent ? 1 : 0.72;
+      this.lastBurst.push({ midi, vel, slide });
+      if (this.lastBurst.length > 24) this.lastBurst = this.lastBurst.slice(-16);
       this.noteOn(midi, vel, time, slide);
       const dur = (60 / seq.bpm / 4) * (slide ? 1.4 : 0.7);
       this.noteOff(midi, time + dur);
@@ -1210,10 +1250,13 @@ class NexusEngine {
       this.noteOn(midi, 0.82, time, false);
       this.noteOff(midi, time + (60 / seq.bpm / 4) * 0.62);
     }
+    if (step % 4 === 0) this.stamp("seq-step", 0.5 + (step / COLS) * 0.4, { step, cycle: this.loopCycle });
+    if (step === COLS - 1) this.stamp("ouroboros", this.snapshot.kernel.loopTax, { cycle: this.loopCycle });
   }
 
   private loop = () => {
     this.raf = requestAnimationFrame(this.loop);
+    this.tickKernel(false);
     if (!this.ctx || !this.snapshot.seq.playing) return;
     const t = this.ctx.currentTime;
     const stepDur = 60 / this.snapshot.seq.bpm / 4;
@@ -1223,7 +1266,10 @@ class NexusEngine {
       this.scheduleStep(step, this.nextNoteTime);
       const odd = step % 2 === 1;
       this.nextNoteTime += odd ? stepDur * (1 + swing) : stepDur * (1 - swing);
-      this.stepIndex = (step + 1) % COLS;
+      const next = (step + 1) % COLS;
+      if (next === 0) this.loopCycle += 1;
+      this.lastPlayhead = step;
+      this.stepIndex = next;
     }
   };
 
@@ -1243,6 +1289,163 @@ class NexusEngine {
       scenes: s.scenes,
       sceneSlot: s.sceneSlot,
     };
+  }
+
+  private senseNow() {
+    const s = this.snapshot;
+    const last = s.kernel.receipts.at(-1);
+    return {
+      powered: s.powered,
+      muted: s.muted,
+      failClosed: s.kernel.failClosed,
+      patches: s.patches,
+      master: s.master,
+      pan: s.voice.pan,
+      fold: s.voice.fold,
+      saturate: s.tape.saturate,
+      motor: s.tape.motor,
+      rmsIn: rmsFromAnalyser(this.vuIn ?? null),
+      rmsOut: rmsFromAnalyser(this.vuOut ?? null),
+      loopTax: s.kernel.loopTax,
+      withinBudget: s.kernel.withinBudget,
+      receiptAgeMs: last ? Date.now() - last.ts : 1e9,
+      receiptCount: s.kernel.receipts.length,
+      replayOk: verifyReceipts(s.kernel.receipts),
+      seqIncreasing: this.lastPlayhead < 0 || this.stepIndex === (this.lastPlayhead + 1) % COLS,
+      hasGates: s.steps.some((st) => st.gate) || s.grid.some((c) => c.some(Boolean)),
+      analyserLive: Boolean(this.analyser),
+    };
+  }
+
+  private stamp(formula: string, scalar: number, extra: unknown = {}) {
+    const receipts = appendReceipt(this.snapshot.kernel.receipts, formula, scalar, extra);
+    this.snapshot = {
+      ...this.snapshot,
+      kernel: { ...this.snapshot.kernel, receipts, rootHash: receipts.at(-1)?.hash ?? this.snapshot.kernel.rootHash },
+    };
+  }
+
+  tickKernel(force = false) {
+    const now = typeof performance !== "undefined" ? performance.now() : 0;
+    if (!force && now - this.lastKernelMs < 140) return;
+    this.lastKernelMs = now;
+    const next = foldKernel(this.senseNow(), this.snapshot.kernel, this.loopCycle);
+    this.snapshot = { ...this.snapshot, kernel: next, version: this.snapshot.version + 1 };
+    this.applyLambdaVca();
+    for (const l of this.listeners) l();
+  }
+
+  setFailClosed(on: boolean) {
+    const kernel = { ...this.snapshot.kernel, failClosed: on, haltReason: on ? "F12 fail-closed latch" : null };
+    this.snapshot = { ...this.snapshot, kernel, version: this.snapshot.version + 1 };
+    this.stamp("F12", on ? 0 : 1, { latch: on });
+    this.applyLambdaVca();
+    for (const l of this.listeners) l();
+  }
+
+  injectLocked(id: LockedId) {
+    if (!this.snapshot.powered) return;
+    switch (id) {
+      case "F1":
+        this.replayLastBurst();
+        break;
+      case "F4":
+        this.pruneInstantCycles();
+        break;
+      case "F7":
+        this.fifoReset();
+        break;
+      case "F11":
+        this.ayniTape();
+        break;
+      case "F12":
+        this.setFailClosed(!this.snapshot.kernel.failClosed);
+        return;
+      case "F18":
+        this.rsLattice();
+        break;
+      case "F19":
+        this.setScopeMode("lambda");
+        break;
+      case "F22":
+        this.stamp("F22", 1, { seq: this.snapshot.kernel.receipts.map((r) => r.index) });
+        break;
+    }
+    this.stamp(id, 1, { inject: id });
+    this.tickKernel(true);
+  }
+
+  runPuriq() {
+    if (!this.snapshot.powered || this.snapshot.kernel.puriqRunning) return;
+    const axes = this.snapshot.kernel.axes.map((a) => a.score);
+    const braid = braidFromPatches(this.snapshot.patches);
+    const chain = runGovernedLoop([
+      { formula_name: "lambda_bounded", args: [axes] },
+      { formula_name: "lambda_homogeneous", args: [0.5, axes] },
+      { formula_name: "schur_concave_lambda_two_axis", args: [this.snapshot.kernel.lambdaMin, this.snapshot.kernel.lambdaMax] },
+      { formula_name: "reed_solomon_singleton", args: [16, 8] },
+      { formula_name: "reidemeister_invariant", args: [braid || "abBA", "R2"] },
+      { formula_name: "madhava_series", args: [0.5, 12] },
+    ]);
+    for (const r of chain.receipts) this.stamp(r.formula_name, r.scalar, { puriq: true });
+    const merkle = khipuMerkleRoot(
+      this.snapshot.kernel.receipts.map((r) => ({ decision_id: r.hash, value: Math.round(r.scalar * 100) })),
+    );
+    this.stamp("khipu_merkle_root", 1, { merkle });
+    if (chain.halted) {
+      this.setFailClosed(true);
+      this.snapshot = {
+        ...this.snapshot,
+        kernel: { ...this.snapshot.kernel, puriqRunning: false, haltReason: chain.halt_reason },
+        version: this.snapshot.version + 1,
+      };
+      this.applyLambdaVca();
+      for (const l of this.listeners) l();
+      return;
+    }
+    this.ayniTape();
+    this.pruneInstantCycles();
+    this.setScopeMode("knot");
+    this.stamp("puriq", chain.lambda, { halted: false });
+    this.tickKernel(true);
+  }
+
+  private replayLastBurst() {
+    if (!this.ctx || !this.lastBurst.length) {
+      const last = this.snapshot.kernel.receipts.at(-1);
+      if (last) this.stamp("F1", 1, { replay: last.hash });
+      return;
+    }
+    const now = this.ctx.currentTime;
+    for (const n of this.lastBurst) this.noteOn(n.midi, n.vel, now, n.slide);
+    for (const n of this.lastBurst) this.noteOff(n.midi, now + 0.18);
+  }
+
+  private pruneInstantCycles() {
+    const bad = new Set(instantCycles(this.snapshot.patches).map((p) => `${p.from}->${p.to}`));
+    if (!bad.size) return;
+    const patches = this.snapshot.patches.filter((p) => !bad.has(`${p.from}->${p.to}`));
+    this.snapshot = { ...this.snapshot, patches, version: this.snapshot.version + 1 };
+    if (this.ctx) this.rebuildPatches();
+  }
+
+  private fifoReset() {
+    this.stepIndex = 0;
+    this.loopCycle = 0;
+    fifoOk(this.snapshot.steps.map((_, i) => i));
+    if (this.ctx) this.nextNoteTime = this.ctx.currentTime + 0.05;
+  }
+
+  private ayniTape() {
+    const t = this.snapshot.tape;
+    const mix = Math.min(0.72, t.mix);
+    this.setTape({ mix, feedback: Math.min(0.62, t.feedback) });
+  }
+
+  private rsLattice() {
+    const d = reedSolomonSingleton(16, 8);
+    this.setSeq({ euclidHits: d, euclidSteps: 16 });
+    this.applyEuclid();
   }
 }
 

@@ -5,6 +5,7 @@ import {
   SOURCE_PORTS,
   type PortId,
 } from "@/lib/nexus/types";
+import { canalOf } from "@/lib/nexus/formulas";
 import { engine, useEngine } from "@/lib/nexus/use-engine";
 import { ModuleFrame } from "./ModuleFrame";
 
@@ -48,9 +49,10 @@ export function Patchbay() {
         if (!a || !b) return null;
         const sag = Math.max(18, Math.abs(b.x - a.x) * 0.28 + 12);
         const d = `M ${a.x} ${a.y} C ${a.x} ${a.y + sag}, ${b.x} ${b.y + sag}, ${b.x} ${b.y}`;
-        return { p, d, color: COLORS[i % COLORS.length]! };
+        const leak = canalOf(p.from) !== canalOf(p.to);
+        return { p, d, color: leak ? "#ffb000" : COLORS[i % COLORS.length]!, leak };
       })
-      .filter(Boolean) as { p: (typeof snap.patches)[number]; d: string; color: string }[];
+      .filter(Boolean) as { p: (typeof snap.patches)[number]; d: string; color: string; leak: boolean }[];
   }, [pts, snap.patches]);
 
   function onJack(id: PortId, kind: "src" | "dst") {
@@ -74,7 +76,7 @@ export function Patchbay() {
   }
 
   return (
-    <ModuleFrame title="Patchbay" serial="PB-24">
+    <ModuleFrame title="Patchbay" serial="YARQA">
       <div
         ref={rootRef}
         className="relative min-h-48 sm:h-full"
@@ -110,7 +112,9 @@ export function Patchbay() {
             />
           ) : null}
         </svg>
-        <p className="nx-label mt-3 text-center">drag source → dest · click cable to pull</p>
+        <p className="nx-label mt-3 text-center">
+          canals voice / tape / out · leak {snap.kernel.yarqaLeak.toFixed(2)} · amber is cross-canal
+        </p>
       </div>
     </ModuleFrame>
   );

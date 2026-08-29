@@ -26,7 +26,7 @@
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;
-  --grid-template-columns-16: repeat(16, minmax(0, 1fr));
+  --grid-template-columns-13: repeat(13, minmax(0, 1fr));
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -326,6 +326,12 @@
 
 .nx-vu {
   background: linear-gradient(to top, #1c3a16, #3d8a34 40%, #7cff6b 78%, #ffb000 92%, #c44a38 100%);
+}
+
+.nx-yuyay {
+  display: grid;
+  grid-template-columns: repeat(13, minmax(0, 1fr));
+  gap: 2px;
 }
 
 .nx-help kbd {
