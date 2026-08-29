@@ -28,6 +28,21 @@ import {
 } from "./types";
 import { loadPersisted, scheduleSave, type PersistedState } from "./store";
 import { euclid, funcGenStep, lorenzStep, midiToHz, scaleLorenz, seedLorenz, analogCell, analogCoefficients, type LorenzState } from "./math";
+import {
+  analogDelta,
+  appendReceipt,
+  emptyKernel,
+  evaluateAnatomy,
+  evaluateLambda,
+  loopTax,
+  runInvariants,
+  tickLoop,
+  yuyayAxes,
+  type KernelSnap,
+  type LedgerRow,
+  type LoopExit,
+} from "./kernel";
+import { idleProbes, probeEstate, type Probe } from "./telemetry";
 
 export { euclid, midiToHz };
 
@@ -199,10 +214,18 @@ class NexusEngine {
   private fgUp = true;
   private analogLast = 0;
   private repAcc = 0;
-  private trail = new Float32Array(1200);
+  private trail = new Float32Array(1800);
   private trailWrite = 0;
   private trailLen = 0;
   private lastUiEmit = 0;
+  private receipts: LedgerRow[] = [];
+  private loopSteps = 0;
+  private loopExit: LoopExit = "running";
+  private kernelSnap: KernelSnap = emptyKernel();
+  private probes: Probe[] = idleProbes();
+  private lastKernelAt = 0;
+  private lastAnalog = { x: 0, y: 0, z: 0 };
+  private probing = false;
   private nodes: Partial<Record<PortId, AudioNode>> = {};
   private paramTargets: Partial<Record<PortId, AudioParam>> = {};
   private live: AudioNode[] = [];
@@ -322,7 +345,13 @@ class NexusEngine {
     return { x: this.nx, y: this.ny, z: this.nz, fg: this.fg, ...cell, ...coef };
   }
   getAnalogTrail() {
-    return { data: this.trail, write: this.trailWrite, len: this.trailLen, cap: 600 };
+    return { data: this.trail, write: this.trailWrite, len: this.trailLen, cap: 600, stride: 3 as const };
+  }
+  getKernel() {
+    return this.kernelSnap;
+  }
+  getProbes() {
+    return this.probes;
   }
 
   setMidi(on: boolean) {
@@ -346,11 +375,14 @@ class NexusEngine {
     this.applyOrbit();
     this.applyMaster();
     this.rebuildPatches();
+    this.seedAnalog();
+    this.refreshKernel(true);
     this.loop();
     document.addEventListener("visibilitychange", this.onVis);
     const lit = this.snapshot.grid.some((col) => col.some(Boolean));
     if (!lit) this.snapshot.grid = emptyGrid();
     this.emit({ powered: true, ready: true });
+    void this.refreshProbes();
     try {
       await resume;
     } catch {
@@ -722,7 +754,11 @@ class NexusEngine {
 
   private applyMaster() {
     if (!this.ctx) return;
-    const g = this.snapshot.muted ? 0 : this.snapshot.master * this.snapshot.master;
+    const s = this.snapshot;
+    const k = this.kernelSnap;
+    const failClosed = s.frontier && k.blocked;
+    const tax = s.frontier ? Math.max(0, k.lambda * k.loopRemain) : 1;
+    const g = s.muted || failClosed ? 0 : s.master * s.master * tax;
     this.masterGain.gain.setTargetAtTime(g, this.ctx.currentTime, 0.03);
   }
 
@@ -783,9 +819,10 @@ class NexusEngine {
         this.fgUp = next.rising;
         if (!next.rising && next.value <= 0) this.fgUp = false;
       }
-      const wi = this.trailWrite * 2;
+      const wi = this.trailWrite * 3;
       this.trail[wi] = this.nx;
       this.trail[wi + 1] = this.ny;
+      this.trail[wi + 2] = this.nz;
       this.trailWrite = (this.trailWrite + 1) % 600;
       this.trailLen = Math.min(600, this.trailLen + 1);
     }
@@ -797,11 +834,12 @@ class NexusEngine {
     if (!this.ctx) return;
     const a = this.snapshot.analog;
     const v = this.snapshot.voice;
-    const drive = a.drive;
     if (this.anlgHold) {
       this.anlgHold.offset.setTargetAtTime(this.nx, now, 0.02);
       this.funcHold.offset.setTargetAtTime(this.fg * 2 - 1, now, 0.015);
     }
+    if (!this.snapshot.frontier) return;
+    const drive = a.drive;
     const cut = Math.max(80, Math.min(8000, v.cutoff * (0.55 + 0.45 * this.fg) * (1 + this.nx * drive * 0.85)));
     const pan = Math.max(-1, Math.min(1, v.pan + this.ny * drive * 0.9));
     const fold = Math.max(0, Math.min(1, v.fold + this.nz * drive * 0.28));
@@ -835,7 +873,7 @@ class NexusEngine {
   }
 
   cycleScopeMode() {
-    const order: ScopeMode[] = ["yt", "xy", "fft"];
+    const order: ScopeMode[] = ["yt", "xy", "fft", "holo"];
     const i = order.indexOf(this.snapshot.scopeMode);
     this.setScopeMode(order[(i + 1) % order.length]!);
   }
@@ -924,7 +962,12 @@ class NexusEngine {
     this.applyVoice();
     this.applyTape();
     this.applyOrbit();
-    if (this.snapshot.frontier) this.seedAnalog();
+    if (this.snapshot.frontier) {
+      this.seedAnalog();
+      this.resetLoop();
+    }
+    this.refreshKernel(true);
+    this.applyMaster();
     if (this.ctx) this.rebuildPatches();
     for (const l of this.listeners) l();
     this.queueSave();
@@ -939,6 +982,8 @@ class NexusEngine {
     if (!this.snapshot.frontier) return;
     this.snapshot = { ...this.snapshot, frontier: false, version: this.snapshot.version + 1 };
     this.applyVoice();
+    this.refreshKernel(true);
+    this.applyMaster();
     for (const l of this.listeners) l();
     this.queueSave();
   }
@@ -946,6 +991,9 @@ class NexusEngine {
   frontier() {
     if (this.snapshot.frontier) {
       this.seedAnalog();
+      this.resetLoop();
+      this.refreshKernel(true);
+      this.applyMaster();
       if (this.snapshot.powered && !this.snapshot.seq.playing) this.play();
       return;
     }
@@ -1011,14 +1059,18 @@ class NexusEngine {
       grid,
       patches: FRONTIER_PATCHES.map((p) => ({ ...p })),
       orbit: 0.46,
-      scopeMode: "xy",
+      scopeMode: "holo",
       frontier: true,
       version: this.snapshot.version + 1,
     };
     this.seedAnalog();
+    this.resetLoop();
+    this.receipts = [];
+    this.refreshKernel(true);
     this.applyVoice();
     this.applyTape();
     this.applyOrbit();
+    this.applyMaster();
     if (this.ctx) this.rebuildPatches();
     for (const l of this.listeners) l();
     this.queueSave();
@@ -1084,6 +1136,7 @@ class NexusEngine {
 
   setMuted(m: boolean) {
     this.snapshot = { ...this.snapshot, muted: m, version: this.snapshot.version + 1 };
+    this.refreshKernel(true);
     this.applyMaster();
     for (const l of this.listeners) l();
   }
@@ -1139,6 +1192,9 @@ class NexusEngine {
     if (this.snapshot.seq.playing) return;
     this.stepIndex = 0;
     this.nextNoteTime = this.ctx.currentTime + 0.05;
+    this.resetLoop();
+    this.refreshKernel(true);
+    this.applyMaster();
     this.emit({ seq: { ...this.snapshot.seq, playing: true } });
   }
 
@@ -1376,7 +1432,7 @@ class NexusEngine {
 
   private scheduleStep(step: number, time: number) {
     if (this.shHold) {
-      const sample = this.snapshot.frontier ? this.nx : Math.random() * 2 - 1;
+      const sample = this.nx;
       this.shHold.offset.setValueAtTime(sample, time);
     }
     if (this.snapshot.frontier && !this.snapshot.analog.cycle) this.triggerFunc();
@@ -1408,7 +1464,8 @@ class NexusEngine {
   private loop = () => {
     this.raf = requestAnimationFrame(this.loop);
     if (!this.ctx) return;
-    if (this.snapshot.frontier) this.stepAnalog();
+    this.stepAnalog();
+    this.refreshKernel();
     if (!this.snapshot.seq.playing) return;
     const t = this.ctx.currentTime;
     const stepDur = 60 / this.snapshot.seq.bpm / 4;
@@ -1419,6 +1476,7 @@ class NexusEngine {
     let guard = 0;
     while (this.nextNoteTime < t + 0.12 && guard < 24) {
       const step = this.stepIndex;
+      if (step === 0) this.ouroborosBar();
       this.scheduleStep(step, this.nextNoteTime);
       const odd = step % 2 === 1;
       this.nextNoteTime += odd ? stepDur * (1 + swing) : stepDur * (1 - swing);
@@ -1426,6 +1484,100 @@ class NexusEngine {
       guard += 1;
     }
   };
+
+  private resetLoop() {
+    this.loopSteps = 0;
+    this.loopExit = "running";
+    this.lastAnalog = { x: this.nx, y: this.ny, z: this.nz };
+  }
+
+  private ouroborosBar() {
+    const analog = { x: this.nx, y: this.ny, z: this.nz, fg: this.fg, step: this.stepIndex };
+    const ok = !this.kernelSnap.blocked;
+    this.receipts = appendReceipt(this.receipts, analog, ok);
+    const delta = analogDelta(this.lastAnalog, analog);
+    this.lastAnalog = { x: analog.x, y: analog.y, z: analog.z };
+    const ticked = tickLoop(this.loopSteps, delta);
+    this.loopSteps = ticked.stepsRun;
+    this.loopExit = ticked.exit;
+    this.refreshKernel(true);
+    this.applyMaster();
+    if (this.snapshot.frontier && (ticked.exit === "budgetExhausted" || this.kernelSnap.blocked)) {
+      this.stop();
+    }
+  }
+
+  private refreshKernel(force = false) {
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (!force && now - this.lastKernelAt < 180) return;
+    this.lastKernelAt = now;
+    const liveN = this.probes.filter((p) => p.status === "LIVE").length;
+    const hatunLive = this.probes.some((p) => p.id === "hatun" && p.status === "LIVE");
+    const lambda = evaluateLambda(
+      yuyayAxes({
+        x: this.nx,
+        y: this.ny,
+        z: this.nz,
+        fg: this.fg,
+        drive: this.snapshot.analog.drive,
+        chaos: this.snapshot.analog.chaos,
+        rate: this.snapshot.analog.rate,
+        gain: this.snapshot.voice.gain,
+        mix: this.snapshot.tape.mix,
+        prob: this.snapshot.seq.probability,
+        liveFrac: liveN / Math.max(1, this.probes.length),
+        frontier: this.snapshot.frontier,
+        muted: this.snapshot.muted,
+      }),
+    );
+    const inv = runInvariants(this.receipts);
+    const chainInv = inv.invariants.find((i) => i.id === "receipt-chain-continuity");
+    const chainOk = chainInv ? chainInv.status !== "VIOLATED" : true;
+    const chainHead = this.receipts.length ? this.receipts[this.receipts.length - 1]!.rowHash : "genesis";
+    const anatomy = evaluateAnatomy({
+      lambda,
+      rows: this.receipts,
+      chainOk,
+      chainHead,
+      leak: 0,
+      fabricateJoule: false,
+      hatunLive,
+    });
+    const tax = loopTax(this.loopSteps);
+    this.kernelSnap = {
+      ...emptyKernel(),
+      lambda: lambda.value,
+      blocked: anatomy.blocked || lambda.blocked,
+      reason: anatomy.reason,
+      liveCount: anatomy.liveCount,
+      organs: anatomy.organs,
+      invariants: inv.invariants,
+      holds: inv.holds,
+      violated: inv.violated,
+      indeterminate: inv.indeterminate,
+      loopSteps: this.loopSteps,
+      maxSteps: 8,
+      loopRemain: tax.remain,
+      exit: this.loopExit,
+      chainHead,
+      chainOk,
+    };
+    if (this.snapshot.frontier) this.applyMaster();
+  }
+
+  private async refreshProbes() {
+    if (this.probing) return;
+    this.probing = true;
+    try {
+      this.probes = await probeEstate();
+      this.refreshKernel(true);
+      this.applyMaster();
+    } catch {
+      this.probes = idleProbes();
+    } finally {
+      this.probing = false;
+    }
+  }
 
   persistNow(): PersistedState {
     const s = this.snapshot;

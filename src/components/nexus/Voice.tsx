@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { engine, useEngine } from "@/lib/nexus/use-engine";
 import type { AnalogMode, Waveform } from "@/lib/nexus/types";
 import { analogCoefficients } from "@/lib/nexus/math";
@@ -66,6 +67,7 @@ export function Voice() {
         <p className="nx-label">
           Analog computer · {(a.mode ?? "op").toUpperCase()} · σ {coef.sigma} · ρ {coef.rho.toFixed(1)} · β {coef.beta.toFixed(2)}
         </p>
+        <KernelVoice />
         <div className="flex flex-wrap gap-1">
           {MODES.map((m) => (
             <button
@@ -141,4 +143,21 @@ export function Voice() {
       </div>
     </ModuleFrame>
   );
+}
+
+function KernelVoice() {
+  const ref = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const k = engine.getKernel();
+      if (ref.current) {
+        ref.current.textContent = `Λ ${k.lambda.toFixed(4)} · ${k.blocked ? "F19 FAIL-CLOSED" : "advisory"} · energy UNAVAILABLE · Conjecture 1 OPEN`;
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return <p ref={ref} className="nx-label tabular-nums" />;
 }
