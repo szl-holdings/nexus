@@ -7,7 +7,7 @@ interface ModuleFrameProps {
   className?: string;
 }
 
-export function ModuleFrame({ title, serial = "MK-I", children, className = "" }: ModuleFrameProps) {
+export function ModuleFrame({ title, serial = "MK-II", children, className = "" }: ModuleFrameProps) {
   return (
     <section className={`nx-panel flex min-h-0 flex-col overflow-hidden p-3 sm:p-4 ${className}`}>
       <span className="nx-screw left-2 top-2" />

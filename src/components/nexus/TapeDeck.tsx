@@ -3,7 +3,7 @@ import { engine, useEngine } from "@/lib/nexus/use-engine";
 import { Knob } from "./Knob";
 import { ModuleFrame } from "./ModuleFrame";
 
-function Reel({ spinning, size = 92 }: { spinning: boolean; size?: number }) {
+function Reel({ spinning, size = 72 }: { spinning: boolean; size?: number }) {
   return (
     <div
       className="nx-reel relative rounded-full"
@@ -33,7 +33,7 @@ export function TapeDeck() {
   const t = snap.tape;
   const inRef = useRef<HTMLDivElement>(null);
   const outRef = useRef<HTMLDivElement>(null);
-  const data = useRef(new Uint8Array(512));
+  const data = useRef(new Uint8Array(new ArrayBuffer(512)));
 
   useEffect(() => {
     let raf = 0;
@@ -64,8 +64,8 @@ export function TapeDeck() {
       <style>{`@keyframes nxReel { to { transform: rotate(360deg); } }`}</style>
       <div className="flex h-full flex-col gap-3">
         <div className="flex items-center justify-between gap-2">
-          <Reel spinning={t.motor} />
-          <svg viewBox="0 0 120 64" className="h-16 flex-1">
+          <Reel spinning={t.motor} size={64} />
+          <svg viewBox="0 0 120 64" className="h-12 flex-1 sm:h-16">
             <path
               d="M8 20 C 40 8, 80 8, 112 20"
               fill="none"
@@ -80,7 +80,7 @@ export function TapeDeck() {
               3-HEAD
             </text>
           </svg>
-          <Reel spinning={t.motor} />
+          <Reel spinning={t.motor} size={64} />
         </div>
         <div className="flex items-end gap-3">
           <Vu label="IN" barRef={inRef} />
@@ -88,24 +88,28 @@ export function TapeDeck() {
           <div className="flex flex-1 flex-wrap justify-end gap-1.5">
             <button
               type="button"
-              className={`nx-btn px-3 py-2 ${t.motor ? "nx-btn-on" : ""}`}
+              className={`nx-btn min-h-11 px-3 py-2 ${t.motor ? "nx-btn-on" : ""}`}
               onClick={() => engine.setTape({ motor: !t.motor })}
             >
               Play
             </button>
-            <button type="button" className="nx-btn px-3 py-2" onClick={() => engine.setTape({ motor: false, rec: false })}>
+            <button
+              type="button"
+              className="nx-btn min-h-11 px-3 py-2"
+              onClick={() => engine.setTape({ motor: false, rec: false })}
+            >
               Stop
             </button>
             <button
               type="button"
-              className={`nx-btn nx-btn-rec px-3 py-2 ${t.rec ? "nx-btn-rec-on" : ""}`}
+              className={`nx-btn nx-btn-rec min-h-11 px-3 py-2 ${t.rec ? "nx-btn-rec-on" : ""}`}
               onClick={() => engine.setTape({ rec: !t.rec, motor: true })}
             >
               Rec
             </button>
             <button
               type="button"
-              className={`nx-btn px-3 py-2 ${snap.bouncing ? "nx-btn-on" : ""}`}
+              className={`nx-btn min-h-11 px-3 py-2 ${snap.bouncing ? "nx-btn-on" : ""}`}
               onClick={() => engine.bounce(8)}
               disabled={snap.bouncing}
             >
@@ -113,7 +117,7 @@ export function TapeDeck() {
             </button>
           </div>
         </div>
-        <div className="flex flex-wrap justify-between gap-1">
+        <div className="nx-knobs">
           <Knob label="Time" value={t.time} min={0.05} max={1.4} onChange={(v) => engine.setTape({ time: v })} format={(v) => `${v.toFixed(2)}s`} />
           <Knob label="Feedback" value={t.feedback} min={0} max={0.92} onChange={(v) => engine.setTape({ feedback: v })} format={(v) => v.toFixed(2)} />
           <Knob label="Wow" value={t.wow} min={0} max={1} onChange={(v) => engine.setTape({ wow: v })} format={(v) => v.toFixed(2)} />

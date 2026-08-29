@@ -1,4 +1,13 @@
-import type { PatchCable, Scene, ScopeMode, SeqParams, SeqStep, TapeParams, VoiceParams } from "./types";
+import type {
+  AnalogParams,
+  PatchCable,
+  Scene,
+  ScopeMode,
+  SeqParams,
+  SeqStep,
+  TapeParams,
+  VoiceParams,
+} from "./types";
 
 const DB = "nexus-v1";
 const STORE = "state";
@@ -8,6 +17,7 @@ export interface PersistedState {
   voice: VoiceParams;
   tape: TapeParams;
   seq: SeqParams;
+  analog?: AnalogParams;
   steps: SeqStep[];
   grid: boolean[][];
   patches: PatchCable[];

@@ -1,5 +1,6 @@
 export type Waveform = "sine" | "triangle" | "sawtooth" | "square" | "pluck";
-export type ScopeMode = "yt" | "xy" | "fft" | "lambda" | "knot";
+export type ScopeMode = "yt" | "xy" | "fft";
+export type AnalogMode = "ic" | "op" | "halt" | "rep";
 
 export type PortId =
   | "vco"
@@ -9,6 +10,8 @@ export type PortId =
   | "tape"
   | "vcfout"
   | "sh"
+  | "anlg"
+  | "func"
   | "vcf"
   | "vca"
   | "delay"
@@ -17,7 +20,7 @@ export type PortId =
   | "scope"
   | "out";
 
-export type ModuleId = "grid" | "scope" | "tape" | "patch" | "seq" | "voice" | "kernel";
+export type ModuleId = "grid" | "scope" | "tape" | "patch" | "seq" | "voice";
 
 export interface VoiceParams {
   waveform: Waveform;
@@ -39,6 +42,14 @@ export interface VoiceParams {
   lfoDepth: number;
   shAmt: number;
   ring: number;
+}
+
+export interface AnalogParams {
+  rate: number;
+  chaos: number;
+  drive: number;
+  cycle: boolean;
+  mode: AnalogMode;
 }
 
 export interface TapeParams {
@@ -82,11 +93,13 @@ export interface Scene {
   voice: VoiceParams;
   tape: TapeParams;
   seq: SeqParams;
+  analog: AnalogParams;
   steps: SeqStep[];
   grid: boolean[][];
   patches: PatchCable[];
   orbit: number;
   scopeMode: ScopeMode;
+  frontier: boolean;
 }
 
 export const SCALE_PENTA = [36, 39, 41, 43, 46, 48, 51, 53];
@@ -117,6 +130,14 @@ export const DEFAULT_VOICE: VoiceParams = {
   lfoDepth: 0.12,
   shAmt: 0,
   ring: 0,
+};
+
+export const DEFAULT_ANALOG: AnalogParams = {
+  rate: 0.62,
+  chaos: 0.58,
+  drive: 0.72,
+  cycle: true,
+  mode: "op",
 };
 
 export const DEFAULT_TAPE: TapeParams = {
@@ -171,6 +192,16 @@ export const DEFAULT_PATCHES: PatchCable[] = [
   { id: "p4", from: "vca", to: "out" },
 ];
 
+export const FRONTIER_PATCHES: PatchCable[] = [
+  { id: "p1", from: "vco", to: "vcf" },
+  { id: "p2", from: "vcfout", to: "delay" },
+  { id: "p3", from: "tape", to: "vca" },
+  { id: "p4", from: "vca", to: "out" },
+  { id: "pf-anlg", from: "anlg", to: "vcf" },
+  { id: "pf-func", from: "func", to: "pan" },
+  { id: "pf-sh", from: "sh", to: "vcf" },
+];
+
 export const PORT_META: Record<
   PortId,
   { label: string; kind: "src" | "dst"; row: number; col: number }
@@ -182,6 +213,8 @@ export const PORT_META: Record<
   tape: { label: "TAPE", kind: "src", row: 0, col: 4 },
   vcfout: { label: "VCF", kind: "src", row: 0, col: 5 },
   sh: { label: "S&H", kind: "src", row: 0, col: 6 },
+  anlg: { label: "ANLG", kind: "src", row: 0, col: 7 },
+  func: { label: "FUNC", kind: "src", row: 0, col: 8 },
   vcf: { label: "VCF IN", kind: "dst", row: 1, col: 0 },
   vca: { label: "VCA", kind: "dst", row: 1, col: 1 },
   delay: { label: "DELAY", kind: "dst", row: 1, col: 2 },
@@ -191,5 +224,5 @@ export const PORT_META: Record<
   out: { label: "OUT", kind: "dst", row: 1, col: 6 },
 };
 
-export const SOURCE_PORTS: PortId[] = ["vco", "noise", "lfo", "grid", "tape", "vcfout", "sh"];
+export const SOURCE_PORTS: PortId[] = ["vco", "noise", "lfo", "grid", "tape", "vcfout", "sh", "anlg", "func"];
 export const DEST_PORTS: PortId[] = ["vcf", "vca", "delay", "pan", "tapein", "scope", "out"];
