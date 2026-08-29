@@ -20,3 +20,5 @@ hf_token
 *.pem
 .node_modules.lock
 .grok/status
+
+public/__grok/install/assets/homescreen/*.png
