@@ -1,4 +1,5 @@
-# NEXUS MK-I — Hugging Face Space (port 7860)
+# NEXUS MK-III — Hugging Face Space (port 7860)
+# Explicit COPY sources: the org deployer forbids bare `COPY .`.
 FROM mirror.gcr.io/library/node:22-bookworm-slim
 
 WORKDIR /app
@@ -6,7 +7,12 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
-COPY . .
+COPY src ./src
+COPY scripts ./scripts
+COPY public ./public
+COPY server ./server
+COPY migrations ./migrations
+COPY vite.config.ts tsconfig.json LICENSE ./
 
 ENV HOST=0.0.0.0
 ENV PORT=7860
