@@ -1,0 +1,46 @@
+# Copyright 2026 SZL Holdings — SPDX-License-Identifier: Apache-2.0
+name: Deploy to HuggingFace Space
+
+# Thin caller for the canonical org deployer. The file set pushed to
+# Space SZLHOLDINGS/nexus is DERIVED from the root Dockerfile COPY
+# sources (package.json, package-lock.json, then COPY . .), then
+# attested live-vs-git after the Space rebuilds. prune=true removes
+# the leftover MK-II python snapshot (server.py / index.html) that is
+# not in this git tree.
+#
+# include-readme = true: the repo README carries HF Space front-matter
+# and is the Space card.
+#
+# No source-revision-variable: this instrument has no /api/build-info
+# route. Do not add one as a deploy-side product change.
+#
+# Requires org/repo secret HF_ORG_TOKEN or HF_TOKEN (HF write token,
+# org write to SZLHOLDINGS). The deployer FAILS LOUDLY if it is absent.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hf-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    uses: szl-holdings/.github/.github/workflows/reusable-hf-deploy.yml@e3ec47ad2e99a535839afe0f30fefbd8973d52da
+    with:
+      hf-repo: SZLHOLDINGS/nexus
+      ref: ${{ github.sha }}
+      dockerfile-path: Dockerfile
+      include-readme: true
+      prune: true
+      wait-running: 900
+      restart-space: true
+      require-default-branch-tip: true
+      smoke-paths: '["/"]'
+    secrets:
+      HF_TOKEN: ${{ secrets.HF_ORG_TOKEN || secrets.HF_TOKEN }}
