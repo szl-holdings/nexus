@@ -69,9 +69,9 @@ Frontier patch: **ANLG → VCF**, **FUNC → PAN**, **S&H → VCF**. F19: a DOWN
 | **VDP** | van der Pol. Nonlinear damping μ from Chaos. |
 | **DFFG** | Duffing. Cubic restoring + driven cosine. |
 | **LTKA** | Lotka–Volterra. Prey/predator stay positive. |
-| **NEMO** | Analog neuromorphic core. Five Izhikevich-style quadratic integrators, exponential synapses, optical ring, analog optical STDP correlator. Not a physical chip. |
+| **NEMO** | Analog anatomy + second brain. Five AdEx organ-neurons: YACHAY cognition, YUYAY pacemaker, YAWAR traveling wave, OTel optical write, KHIPU bound. WILLAY optical ring is conscience — not a sixth organ. Tsodyks–Markram analog STP, three-factor optical STDP. Not a physical chip. |
 
-Coefficient pots: Chaos maps onto the program’s analog coefficient. Rate is computer time (BrainScaleS-style acceleration on NEMO). Drive is how hard the voltages hit the voice and tape — on NEMO it is injected current. Optical analog: object beam (X,Y) interferes with reference beam (FG,Z). Reconstruction folds the voice. NEMO uses the same optical inner product as a photonic synapse and as analog STDP eligibility. Energy stays UNAVAILABLE — never a fabricated pJ/spike.
+Coefficient pots: Chaos maps onto the program’s analog coefficient. Rate is computer time (BrainScaleS-style acceleration on NEMO). Drive is injected current on YACHAY (cognition), YUYAY pacemaker If, and the analog neuromodulator (third factor) — not dopamine. YAWAR is the traveling analog wave around the organ ring. Optical analog: object beam (X,Y) interferes with reference beam (FG,Z). Reconstruction is WILLAY, the second brain, and folds the voice. NEMO uses the same optical inner product as a photonic synapse and as analog STDP eligibility. Energy stays UNAVAILABLE — never a fabricated pJ/spike.
 
 Inspired by analog computing practice (THE ANALOG THING, CRT holograms, modular patchbays) and analog neuromorphic literature (Izhikevich 2003; Brette & Gerstner AdEx 2005; BrainScaleS-2 continuous-time analog; Mead analog VLSI) — original analog-computer-native math, not a Loihi/BrainScaleS emulator, not a dashboard, not a generative-audio model.
 
@@ -85,7 +85,7 @@ Inspired by analog computing practice (THE ANALOG THING, CRT holograms, modular 
 | NERVOUS | OTel | F12 | Loop-tax. Energy UNAVAILABLE. Hatun probe. |
 | SKELETON | KHIPU | F18 F19 | Locked-8. CHECKED ≠ Lean PROVEN @ c7c0ba17. |
 
-WILLAY is conscience, not a sixth organ — the hologram ring. Locked-proven exactly eight: F1 F4 F7 F11 F12 F18 F19 F22. ed25519 and flywheel stay UNAVAILABLE without a key or samples.
+WILLAY is conscience, not a sixth organ — the hologram ring. Analog anatomy lives on NEMO: YACHAY cognition, YUYAY pacemaker, YAWAR traveling wave, OTel optical write, KHIPU bound. Locked-proven exactly eight: F1 F4 F7 F11 F12 F18 F19 F22. ed25519 and flywheel stay UNAVAILABLE without a key or samples.
 
 ## Run it
 

@@ -121,6 +121,15 @@ export const ANALOG_PROGRAMS: { id: AnalogProgram; label: string }[] = [
   { id: "nemo", label: "NEMO" },
 ];
 
+/** Analog faces of the five organs. WILLAY is the optical ring — second brain, not a sixth organ. */
+export const NEMO_ORGANS: { id: "brain" | "heart" | "circulatory" | "nervous" | "skeleton"; q: string; job: string }[] = [
+  { id: "brain", q: "YACHAY", job: "cognition" },
+  { id: "heart", q: "YUYAY", job: "pacemaker" },
+  { id: "circulatory", q: "YAWAR", job: "traveling wave" },
+  { id: "nervous", q: "OTel", job: "optical write" },
+  { id: "skeleton", q: "KHIPU", job: "bound" },
+];
+
 export const DEFAULT_VOICE: VoiceParams = {
   waveform: "sawtooth",
   morph: 0.35,
