@@ -1,0 +1,326 @@
+import { useEffect, useState } from "react";
+import type { ModuleId } from "@/lib/nexus/types";
+import { engine, useEngine } from "@/lib/nexus/use-engine";
+import { Grid } from "./Grid";
+import { Oscilloscope } from "./Oscilloscope";
+import { Patchbay } from "./Patchbay";
+import { Sequencer } from "./Sequencer";
+import { TapeDeck } from "./TapeDeck";
+import { Voice } from "./Voice";
+
+const KEY_NOTES: Record<string, number> = {
+  KeyZ: 48,
+  KeyS: 49,
+  KeyX: 50,
+  KeyD: 51,
+  KeyC: 52,
+  KeyV: 53,
+  KeyG: 54,
+  KeyB: 55,
+  KeyH: 56,
+  KeyN: 57,
+  KeyJ: 58,
+  KeyM: 59,
+  Comma: 60,
+  KeyQ: 60,
+  Digit2: 61,
+  KeyW: 62,
+  Digit3: 63,
+  KeyE: 64,
+  KeyR: 65,
+  Digit5: 66,
+  KeyT: 67,
+  Digit6: 68,
+  KeyY: 69,
+  Digit7: 70,
+  KeyU: 71,
+  KeyI: 72,
+};
+
+const MODULES: { id: ModuleId; label: string }[] = [
+  { id: "grid", label: "Grid" },
+  { id: "scope", label: "Scope" },
+  { id: "tape", label: "Tape" },
+  { id: "patch", label: "Patch" },
+  { id: "seq", label: "Seq" },
+  { id: "voice", label: "Voice" },
+];
+
+export function Workstation() {
+  const snap = useEngine();
+  const [help, setHelp] = useState(false);
+  const [booting, setBooting] = useState(false);
+
+  useEffect(() => {
+    void engine.hydrate();
+  }, []);
+
+  useEffect(() => {
+    const down = new Set<string>();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (snap.powered) engine.togglePlay();
+        return;
+      }
+      if (e.code === "Escape") {
+        engine.panic();
+        engine.stop();
+        setHelp(false);
+        return;
+      }
+      if (e.key === "?" || (e.shiftKey && e.code === "Slash")) {
+        setHelp((h) => !h);
+        return;
+      }
+      if (e.code === "KeyM" && e.metaKey) return;
+      const digit = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6"].indexOf(e.code);
+      if (digit >= 0 && !e.shiftKey && !KEY_NOTES[e.code]) {
+        const mod = MODULES[digit];
+        if (mod) engine.setModule(mod.id);
+        return;
+      }
+      const midi = KEY_NOTES[e.code];
+      if (midi != null && snap.powered && !down.has(e.code)) {
+        down.add(e.code);
+        engine.noteOn(midi + (e.shiftKey ? 12 : 0));
+      }
+    };
+    const onUp = (e: KeyboardEvent) => {
+      down.delete(e.code);
+      const midi = KEY_NOTES[e.code];
+      if (midi != null) {
+        engine.noteOff(midi);
+        engine.noteOff(midi + 12);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("keyup", onUp);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onUp);
+    };
+  }, [snap.powered]);
+
+  useEffect(() => {
+    if (!snap.powered || !navigator.requestMIDIAccess) return;
+    let access: MIDIAccess | null = null;
+    void navigator.requestMIDIAccess({ sysex: false }).then((midi) => {
+      access = midi;
+      const hook = (ev: MIDIMessageEvent) => {
+        const d = ev.data;
+        if (!d || d.length < 2) return;
+        const st = d[0]! & 0xf0;
+        const n = d[1]!;
+        const vel = d[2] ?? 0;
+        if (st === 0x90 && vel > 0) engine.noteOn(n, vel / 127);
+        else if (st === 0x80 || (st === 0x90 && vel === 0)) engine.noteOff(n);
+      };
+      const bind = () => {
+        midi.inputs.forEach((input) => {
+          input.onmidimessage = hook;
+        });
+      };
+      bind();
+      midi.onstatechange = bind;
+    });
+    return () => {
+      access?.inputs.forEach((input) => {
+        input.onmidimessage = null;
+      });
+    };
+  }, [snap.powered]);
+
+  async function engage() {
+    setBooting(true);
+    await engine.powerOn();
+    setBooting(false);
+  }
+
+  return (
+    <div className="nx-chassis relative min-h-dvh overflow-x-hidden">
+      <div className="nx-grain" />
+      <div className="nx-scan" />
+      <div className="nx-flicker" />
+
+      {!snap.powered ? (
+        <PowerGate booting={booting} onEngage={() => void engage()} />
+      ) : (
+        <div className="relative z-10 mx-auto flex min-h-dvh max-w-[1600px] flex-col gap-3 px-3 py-3 sm:px-5 sm:py-4">
+          <Header help={help} onHelp={() => setHelp((h) => !h)} />
+          <SignalStrip />
+          <div className="hidden min-h-[46rem] flex-1 grid-cols-3 grid-rows-2 gap-3 lg:grid">
+            <Grid />
+            <Oscilloscope />
+            <TapeDeck />
+            <Patchbay />
+            <Sequencer />
+            <Voice />
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col gap-3 lg:hidden">
+            <nav className="flex gap-1 overflow-x-auto pb-1">
+              {MODULES.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  className={`nx-btn min-h-11 shrink-0 px-3 ${snap.module === m.id ? "nx-btn-on" : ""}`}
+                  onClick={() => engine.setModule(m.id)}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </nav>
+            <div className="min-h-[28rem] flex-1">
+              {snap.module === "grid" && <Grid />}
+              {snap.module === "scope" && <Oscilloscope />}
+              {snap.module === "tape" && <TapeDeck />}
+              {snap.module === "patch" && <Patchbay />}
+              {snap.module === "seq" && <Sequencer />}
+              {snap.module === "voice" && <Voice />}
+            </div>
+          </div>
+          {help ? <Help onClose={() => setHelp(false)} /> : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Header({ help, onHelp }: { help: boolean; onHelp: () => void }) {
+  const snap = useEngine();
+  return (
+    <header className="nx-panel flex flex-wrap items-center gap-3 px-4 py-3">
+      <span className="nx-screw left-2 top-2" />
+      <span className="nx-screw right-2 top-2" />
+      <div>
+        <p className="nx-wordmark text-xl leading-tight sm:text-2xl">Nexus</p>
+        <p className="nx-label">Analog computing workstation · MK-I</p>
+      </div>
+      <div className="mx-auto flex items-center gap-2">
+        <button
+          type="button"
+          className={`nx-btn min-h-11 px-4 ${snap.seq.playing ? "nx-btn-on" : ""}`}
+          onClick={() => engine.togglePlay()}
+        >
+          {snap.seq.playing ? "Stop" : "Run"}
+        </button>
+        <button
+          type="button"
+          className={`nx-btn nx-btn-rec min-h-11 px-4 ${snap.tape.rec ? "nx-btn-rec-on" : ""}`}
+          onClick={() => engine.setTape({ rec: !snap.tape.rec, motor: true })}
+        >
+          Rec
+        </button>
+        <button
+          type="button"
+          className={`nx-btn min-h-11 px-4 ${snap.muted ? "nx-btn-on" : ""}`}
+          onClick={() => engine.setMuted(!snap.muted)}
+        >
+          {snap.muted ? "Muted" : "Mute"}
+        </button>
+      </div>
+      <div className="ml-auto flex items-center gap-3">
+        <label className="nx-label flex items-center gap-2">
+          Master
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={snap.master}
+            onChange={(e) => engine.setMaster(Number(e.target.value))}
+            className="w-24 accent-phosphor"
+          />
+        </label>
+        <span className={`nx-led ${snap.activeNotes > 0 ? "nx-led-on" : ""}`} />
+        <span className={`nx-led ${snap.tape.motor ? "nx-led-amber" : ""}`} />
+        <button type="button" className={`nx-btn min-h-11 px-3 ${help ? "nx-btn-on" : ""}`} onClick={onHelp}>
+          Key
+        </button>
+      </div>
+    </header>
+  );
+}
+
+function SignalStrip() {
+  const snap = useEngine();
+  const blocks = [
+    { id: "vco", label: "VCO" },
+    { id: "vcf", label: "VCF" },
+    { id: "tape", label: "TAPE" },
+    { id: "vca", label: "VCA" },
+    { id: "out", label: "OUT" },
+  ] as const;
+  return (
+    <div className="nx-panel flex flex-wrap items-center gap-2 px-4 py-2">
+      {blocks.map((b, i) => {
+        const live = snap.patches.some(
+          (p) => p.from === b.id || p.to === b.id || (b.id === "vco" && p.from === "vco") || (b.id === "tape" && (p.from === "tape" || p.to === "delay")),
+        );
+        return (
+          <div key={b.id} className="flex items-center gap-2">
+            <div className="flex items-center gap-2 rounded-sm border border-hairline bg-panel-hi px-3 py-1.5">
+              <span className={`nx-led ${live ? "nx-led-on" : ""}`} />
+              <span className="nx-label">{b.label}</span>
+            </div>
+            {i < blocks.length - 1 ? <span className="font-mono text-micro text-phosphor-dim">→</span> : null}
+          </div>
+        );
+      })}
+      <span className="ml-auto font-mono text-micro tabular-nums text-amber">
+        {Math.round(snap.seq.bpm)} BPM · {snap.voice.waveform.toUpperCase()}
+      </span>
+    </div>
+  );
+}
+
+function PowerGate({ booting, onEngage }: { booting: boolean; onEngage: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onEngage}
+      className="relative z-10 flex min-h-dvh w-full flex-col items-center justify-center gap-6 px-6 text-center"
+    >
+      <p className="nx-wordmark text-4xl sm:text-6xl">Nexus</p>
+      <p className="nx-label max-w-sm text-pretty">
+        Analog computing workstation · six instruments · phosphor CRT · local memory
+      </p>
+      <span className={`nx-btn min-h-12 px-8 py-3 text-sm ${booting ? "nx-btn-on" : ""}`}>
+        {booting ? "Warming heaters…" : "Press to engage"}
+      </span>
+      <span className={`nx-led ${booting ? "nx-led-amber" : ""}`} />
+    </button>
+  );
+}
+
+function Help({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="nx-help nx-panel absolute inset-x-4 top-24 z-30 mx-auto max-w-lg p-5 sm:inset-x-auto">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="nx-label">Key map</h2>
+        <button type="button" className="nx-btn px-2 py-1" onClick={onClose}>
+          Close
+        </button>
+      </div>
+      <ul className="space-y-1.5 font-mono text-sm text-fg">
+        <li>
+          <kbd>space</kbd> run / stop sequencer
+        </li>
+        <li>
+          <kbd>Z</kbd>–<kbd>M</kbd> voice keys · shift = octave
+        </li>
+        <li>
+          <kbd>1</kbd>–<kbd>6</kbd> modules on compact view
+        </li>
+        <li>
+          <kbd>esc</kbd> panic / all notes off
+        </li>
+        <li>
+          <kbd>?</kbd> this legend
+        </li>
+        <li>Grid: tap cells to write. Tape play engages echo. Patch cables reroute the chain.</li>
+      </ul>
+    </div>
+  );
+}

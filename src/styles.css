@@ -1,0 +1,340 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0a0c0e;
+  --color-chassis: #0d1014;
+  --color-panel: #14181e;
+  --color-panel-hi: #1c222a;
+  --color-aluminum: #3a414c;
+  --color-aluminum-hi: #5c6570;
+  --color-screw: #2a3038;
+  --color-phosphor: #7cff6b;
+  --color-phosphor-dim: #3d8a34;
+  --color-amber: #ffb000;
+  --color-amber-dim: #a06e00;
+  --color-oxide: #6b3a28;
+  --color-oxide-tape: #8b4a32;
+  --color-fg: #c5d0be;
+  --color-muted: #6e7868;
+  --color-hairline: #2a3238;
+  --color-record: #c44a38;
+  --font-display: "Syne", ui-sans-serif, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --text-micro: 0.625rem;
+  --text-engraved: 0.6875rem;
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --grid-template-columns-16: repeat(16, minmax(0, 1fr));
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background: #0a0c0e;
+    color: #c5d0be;
+  }
+
+  html,
+  body,
+  #app {
+    min-height: 100dvh;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-mono);
+    background: #0a0c0e;
+    color: #c5d0be;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-phosphor) 35%, transparent);
+    color: var(--color-bg);
+  }
+}
+
+.nx-chassis {
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(124, 255, 107, 0.04), transparent 55%),
+    linear-gradient(180deg, #12161c 0%, #0a0c0e 40%, #08090b 100%);
+}
+
+.nx-grain {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  opacity: 0.07;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.5  0 0 0 0 0.55  0 0 0 0 0.45  0 0 0 0.55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+.nx-scan {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0.08) 0px,
+      rgba(0, 0, 0, 0.08) 1px,
+      transparent 1px,
+      transparent 3px
+    ),
+    radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, 0.38) 100%);
+  mix-blend-mode: multiply;
+  opacity: 0.55;
+}
+
+.nx-flicker {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 51;
+  background: rgba(124, 255, 107, 0.012);
+  animation: nxFlicker 7.4s steps(2, end) infinite;
+}
+
+@keyframes nxFlicker {
+  0%,
+  92%,
+  100% {
+    opacity: 0.4;
+  }
+  93% {
+    opacity: 0.15;
+  }
+  96% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nx-flicker,
+  .nx-scan {
+    animation: none;
+  }
+  .nx-cable {
+    stroke-dasharray: none !important;
+    animation: none !important;
+  }
+  .nx-reel {
+    animation: none !important;
+  }
+}
+
+.nx-panel {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 28%),
+    linear-gradient(180deg, #1a1f26 0%, #13171c 100%);
+  border: 1px solid color-mix(in oklab, var(--color-aluminum) 55%, black);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+    0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+.nx-screw {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 35% 30%, #8a929c, #3a414c 55%, #1c2026 100%);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.35),
+    0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+
+.nx-screw::after {
+  content: "";
+  position: absolute;
+  inset: 3px 1.5px;
+  background: rgba(0, 0, 0, 0.45);
+  transform: rotate(28deg);
+}
+
+.nx-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--color-phosphor) 55%, var(--color-muted));
+}
+
+.nx-wordmark {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-phosphor);
+  text-shadow: 0 0 18px color-mix(in oklab, var(--color-phosphor) 55%, transparent);
+}
+
+.nx-btn {
+  font-family: var(--font-mono);
+  font-size: var(--text-engraved);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-fg);
+  background: linear-gradient(180deg, #2a3138, #1a1f24);
+  border: 1px solid #3a424a;
+  border-radius: var(--radius-sm);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 2px 0 #0a0c0e;
+  transition:
+    transform 150ms var(--ease-out-soft),
+    color 150ms var(--ease-out-soft),
+    box-shadow 150ms var(--ease-out-soft);
+}
+
+.nx-btn:hover {
+  color: var(--color-phosphor);
+}
+
+.nx-btn:active {
+  transform: scale(0.96) translateY(1px);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.55);
+}
+
+.nx-btn-on {
+  color: var(--color-bg);
+  background: linear-gradient(180deg, #9cff90, #4ad13c);
+  border-color: #7cff6b;
+  text-shadow: none;
+  box-shadow:
+    0 0 12px color-mix(in oklab, var(--color-phosphor) 45%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.nx-btn-rec {
+  color: #f5d0c8;
+}
+
+.nx-btn-rec-on {
+  color: #fff4f0;
+  background: linear-gradient(180deg, #e06858, #a83828);
+  border-color: #c44a38;
+  box-shadow: 0 0 12px color-mix(in oklab, var(--color-record) 50%, transparent);
+}
+
+.nx-led {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #1a1e14;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.nx-led-on {
+  background: var(--color-phosphor);
+  box-shadow:
+    0 0 8px var(--color-phosphor),
+    0 0 16px color-mix(in oklab, var(--color-phosphor) 50%, transparent);
+}
+
+.nx-led-amber {
+  background: var(--color-amber);
+  box-shadow:
+    0 0 8px var(--color-amber),
+    0 0 16px color-mix(in oklab, var(--color-amber) 50%, transparent);
+}
+
+.nx-led-rec {
+  background: var(--color-record);
+  box-shadow: 0 0 8px var(--color-record);
+}
+
+.nx-jack {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 50% 50%, #0a0c0e 0 6px, #2a3138 7px, #5c6570 9px, #1a1f24 11px);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.8),
+    0 0 0 1px #0a0c0e,
+    0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.nx-jack-hot {
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.8),
+    0 0 0 1px var(--color-phosphor),
+    0 0 10px color-mix(in oklab, var(--color-phosphor) 55%, transparent);
+}
+
+.nx-key {
+  background: linear-gradient(180deg, #d8d2c4, #b7b09e);
+  color: #1a1a16;
+  border-radius: 0 0 4px 4px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 6px 0 #6d685c;
+}
+
+.nx-key:active,
+.nx-key-on {
+  transform: translateY(3px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 3px 0 #6d685c;
+}
+
+.nx-key-black {
+  background: linear-gradient(180deg, #2a2c30, #0e1012);
+  color: var(--color-fg);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 6px 0 #050607;
+}
+
+.nx-key-black:active,
+.nx-key-black.nx-key-on {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 3px 0 #050607;
+}
+
+.nx-cable {
+  fill: none;
+  stroke-linecap: round;
+  stroke-width: 2.4;
+  pointer-events: stroke;
+  filter: drop-shadow(0 0 4px rgba(124, 255, 107, 0.45));
+  animation: nxDash 2.8s linear infinite;
+}
+
+@keyframes nxDash {
+  to {
+    stroke-dashoffset: -28;
+  }
+}
+
+.nx-vu {
+  background: linear-gradient(to top, #1c3a16, #3d8a34 40%, #7cff6b 78%, #ffb000 92%, #c44a38 100%);
+}
+
+.nx-help kbd {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+  padding: 1px 5px;
+  border: 1px solid var(--color-hairline);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  color: var(--color-amber);
+}
