@@ -7,7 +7,7 @@ sdk: docker
 app_port: 7860
 pinned: false
 license: apache-2.0
-short_description: "Holographic analog computer: Lorenz, ouroboros, organs"
+short_description: "Holographic analog computer: 6 programs, optical"
 tags:
   - web-audio
   - synthesizer
@@ -30,9 +30,9 @@ tags:
 
 # NEXUS MK-II
 
-Holographic analog computer. Lorenz core. Ouroboros. Five organs. Phosphor CRT.
+Holographic analog computer. Six programs. Optical core. Analog neuromorphic. Ouroboros. Five organs. Phosphor CRT.
 
-Frontier is not a preset dump — it is a running analog computer. Three integrators solve Lorenz (σ, ρ, β). The function generator is a rise/fall triangle. Those voltages drive voice cutoff, pan, fold, tape delay, the grid pen, and the holographic CRT.
+Frontier is not a preset dump — it is a running analog computer. Six integrator programs (Lorenz, harmonic oscillator, van der Pol, Duffing, Lotka–Volterra, NEMO analog neuromorphic) with IC / OP / HALT / REP. A two-beam optical analog inner product reconstructs on the holographic CRT and folds the voice. The function generator is a rise/fall triangle. Those voltages drive voice cutoff, pan, fold, tape delay, the grid pen, and the hologram.
 
 The SZL kernel is analog physics, not a seventh module. Ouroboros taxes amplitude over eight bounded bars. Eight falsifiable invariants hash the analog receipt chain. Five organs (YACHAY, YUYAY, YAWAR, OTel, KHIPU) fail-close the VCA. Hatun probes stay LIVE or honestly UNAVAILABLE. Energy is UNAVAILABLE — never a fabricated joule. Λ is advisory. Conjecture 1 remains OPEN.
 
@@ -42,12 +42,12 @@ Inspired by analog computing practice (THE ANALOG THING, CRT holograms, modular 
 
 | Module | Role |
 | --- | --- |
-| **The Grid** | 16×8 phosphor matrix. Write cells. Analog pen tracks Lorenz X×Y. |
-| **Oscilloscope** | Y-T, X-Y, FFT, **HOLO**. Hologram is a 3D Lorenz volume plus five organ nodes and a WILLAY conscience ring. |
+| **The Grid** | 16×8 phosphor matrix. Write cells. Analog pen tracks analog X×Y. |
+| **Oscilloscope** | Y-T, X-Y, FFT, **HOLO**. Hologram is a two-beam optical analog plus five organ nodes and a WILLAY conscience ring. |
 | **Tape Deck** | Stereo echo with wow, flutter, saturation. Analog Z modulates delay time. Bounce dumps eight seconds. |
 | **Patchbay** | Sources include **ANLG** and **FUNC**. Drag source → dest. Click a cable to pull it. |
 | **Sequencer** | 16-step clock, Euclidean hits, swing, probability, arp. Ouroboros closes the loop at eight bars in Frontier. |
-| **Voice** | Morph VCO, ladder-ish VCF, ADSR, unison, FM, folder, LFO, S&H, ring. Analog computer: **IC / OP / HALT / REP**, Rate, Chaos, Drive. Λ and energy UNAVAILABLE on the panel. |
+| **Voice** | Morph VCO, ladder-ish VCF, ADSR, unison, FM, folder, LFO, S&H, ring. Analog computer: **LRNZ / HARM / VDP / DFFG / LTKA / NEMO**, **IC / OP / HALT / REP**, Rate, Chaos, Drive. Λ and energy UNAVAILABLE on the panel. |
 
 Default chain: **VCO → VCF → DELAY → VCA → OUT**. Scope taps the master bus.
 
@@ -62,7 +62,18 @@ Frontier patch: **ANLG → VCF**, **FUNC → PAN**, **S&H → VCF**. F19: a DOWN
 | **HALT** | Freeze the current state. CV stays put. |
 | **REP** | Repetitive operation. Reseed the attractor on a period set by Rate. |
 
-Coefficient pots: **σ = 10**, **ρ = 18…40** (Chaos), **β = 8/3**. Rate is computer time. Drive is how hard the voltages hit the voice and tape.
+| Program | What it integrates |
+| --- | --- |
+| **LRNZ** | Lorenz (σ, ρ, β). Three integrators. |
+| **HARM** | Harmonic oscillator. Two integrators, ω from Chaos. |
+| **VDP** | van der Pol. Nonlinear damping μ from Chaos. |
+| **DFFG** | Duffing. Cubic restoring + driven cosine. |
+| **LTKA** | Lotka–Volterra. Prey/predator stay positive. |
+| **NEMO** | Analog neuromorphic core. Five Izhikevich-style quadratic integrators, exponential synapses, optical ring coupling. Not a physical chip. |
+
+Coefficient pots: Chaos maps onto the program’s analog coefficient. Rate is computer time (BrainScaleS-style acceleration on NEMO). Drive is how hard the voltages hit the voice and tape — on NEMO it is injected current. Optical analog: object beam (X,Y) interferes with reference beam (FG,Z). Reconstruction folds the voice. NEMO also uses the same optical inner product as a photonic synapse. Energy stays UNAVAILABLE — never a fabricated pJ/spike.
+
+Inspired by analog computing practice (THE ANALOG THING, CRT holograms, modular patchbays) and analog neuromorphic literature (Izhikevich 2003; Brette & Gerstner AdEx 2005; BrainScaleS-2 continuous-time analog; Mead analog VLSI) — original analog-computer-native math, not a Loihi/BrainScaleS emulator, not a dashboard, not a generative-audio model.
 
 ## Kernel as voltages
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { ScopeMode } from "@/lib/nexus/types";
+import { ANALOG_PROGRAMS } from "@/lib/nexus/types";
 import { engine, useEngine } from "@/lib/nexus/use-engine";
 import { ModuleFrame } from "./ModuleFrame";
 
@@ -104,12 +105,13 @@ export function Oscilloscope() {
     };
   }, []);
 
+  const prog = ANALOG_PROGRAMS.find((p) => p.id === (snap.analog.program ?? "lorenz"))?.label ?? "LRNZ";
   const caption =
     snap.scopeMode === "holo"
-      ? "HOLO"
+      ? `OPTICAL · ${prog} · Λ ${engine.getKernel().lambda.toFixed(3)} · C1 OPEN`
       : snap.scopeMode === "xy"
         ? snap.frontier
-          ? `LORENZ · X×Y · ${(snap.analog.mode ?? "op").toUpperCase()}`
+          ? `${prog} · X×Y · ${(snap.analog.mode ?? "op").toUpperCase()}`
           : "LISSAJOUS · L×R"
         : snap.scopeMode === "fft"
           ? "SPECTRUM · 0–8 kHz"
@@ -319,6 +321,27 @@ function drawHolo(ctx: CanvasRenderingContext2D, w: number, h: number) {
       d: rz2,
     };
   };
+
+  const cols = w < 220 ? 16 : 24;
+  const rows = w < 220 ? 10 : 14;
+  const cw = w / cols;
+  const ch = h / rows;
+  const wave = 3.6 + a.z * 2.8;
+  const ao = Math.hypot(a.x, a.y) * 0.55 + 0.12;
+  const ar = 0.28 + a.fg * 0.5;
+  const po = Math.atan2(a.y, a.x);
+  const pr = a.z * Math.PI * 2;
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) {
+      const u = (i / cols) * 2 - 1;
+      const v = (j / rows) * 2 - 1;
+      const dphi = wave * (a.x * u + a.y * v) + (po - pr);
+      const I = ao * ao + ar * ar + 2 * ao * ar * Math.cos(dphi);
+      const n = Math.min(1, I / 2.4);
+      ctx.fillStyle = `rgba(124,255,107,${0.035 + n * 0.2})`;
+      ctx.fillRect(i * cw, j * ch, cw + 0.6, ch + 0.6);
+    }
+  }
 
   ctx.save();
   ctx.strokeStyle = "rgba(124,255,107,0.1)";

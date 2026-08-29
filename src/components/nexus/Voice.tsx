@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { engine, useEngine } from "@/lib/nexus/use-engine";
 import type { AnalogMode, Waveform } from "@/lib/nexus/types";
+import { ANALOG_PROGRAMS } from "@/lib/nexus/types";
 import { analogCoefficients } from "@/lib/nexus/math";
 import { Knob } from "./Knob";
 import { ModuleFrame } from "./ModuleFrame";
@@ -35,7 +36,8 @@ export function Voice() {
   const a = snap.analog;
   const whites = KEYS.filter((k) => k.white);
   const blacks = KEYS.filter((k) => !k.white);
-  const coef = analogCoefficients(a.chaos);
+  const coef = analogCoefficients(a.chaos, a.program ?? "lorenz");
+  const prog = ANALOG_PROGRAMS.find((p) => p.id === (a.program ?? "lorenz"))?.label ?? "LRNZ";
 
   return (
     <ModuleFrame title="Voice" serial={snap.frontier ? "ANLG-1" : "VCO-A"}>
@@ -65,9 +67,21 @@ export function Voice() {
           <Knob label="Det" value={v.detune} min={0} max={40} onChange={(n) => engine.setVoice({ detune: n })} format={(n) => n.toFixed(0)} />
         </div>
         <p className="nx-label">
-          Analog computer · {(a.mode ?? "op").toUpperCase()} · σ {coef.sigma} · ρ {coef.rho.toFixed(1)} · β {coef.beta.toFixed(2)}
+          Analog computer · {prog} · {(a.mode ?? "op").toUpperCase()} · {coef.label}
         </p>
         <KernelVoice />
+        <div className="flex flex-wrap gap-1">
+          {ANALOG_PROGRAMS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className={`nx-btn min-h-11 px-2 py-1.5 ${a.program === p.id ? "nx-btn-on" : ""}`}
+              onClick={() => engine.setAnalog({ program: p.id })}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
         <div className="flex flex-wrap gap-1">
           {MODES.map((m) => (
             <button

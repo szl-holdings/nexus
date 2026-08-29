@@ -1,6 +1,7 @@
 export type Waveform = "sine" | "triangle" | "sawtooth" | "square" | "pluck";
 export type ScopeMode = "yt" | "xy" | "fft" | "holo";
 export type AnalogMode = "ic" | "op" | "halt" | "rep";
+export type AnalogProgram = "lorenz" | "harmonic" | "vanderpol" | "duffing" | "lotka" | "nemo";
 
 export type PortId =
   | "vco"
@@ -50,6 +51,7 @@ export interface AnalogParams {
   drive: number;
   cycle: boolean;
   mode: AnalogMode;
+  program: AnalogProgram;
 }
 
 export interface TapeParams {
@@ -110,6 +112,15 @@ export const COLS = 16;
 export const ROWS = 8;
 export const SCENE_COUNT = 8;
 
+export const ANALOG_PROGRAMS: { id: AnalogProgram; label: string }[] = [
+  { id: "lorenz", label: "LRNZ" },
+  { id: "harmonic", label: "HARM" },
+  { id: "vanderpol", label: "VDP" },
+  { id: "duffing", label: "DFFG" },
+  { id: "lotka", label: "LTKA" },
+  { id: "nemo", label: "NEMO" },
+];
+
 export const DEFAULT_VOICE: VoiceParams = {
   waveform: "sawtooth",
   morph: 0.35,
@@ -138,6 +149,7 @@ export const DEFAULT_ANALOG: AnalogParams = {
   drive: 0.72,
   cycle: true,
   mode: "op",
+  program: "lorenz",
 };
 
 export const DEFAULT_TAPE: TapeParams = {
