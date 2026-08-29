@@ -14,7 +14,7 @@ export const Route = createRootRoute({
       { name: "theme-color", content: "#0A0C0E" },
       {
         name: "description",
-        content: "NEXUS MK-I — analog computing workstation. Grid, oscilloscope, tape, patchbay, sequencer, voice.",
+        content: "NEXUS MK-III — analog formula computer. Locked-8 voltages, F19 VCA, F12 fail-closed, Khipu CRT.",
       },
     ],
     links: [

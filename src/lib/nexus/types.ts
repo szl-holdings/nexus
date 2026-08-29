@@ -1,5 +1,5 @@
 export type Waveform = "sine" | "triangle" | "sawtooth" | "square" | "pluck";
-export type ScopeMode = "yt" | "xy" | "fft";
+export type ScopeMode = "yt" | "xy" | "fft" | "lambda" | "knot";
 
 export type PortId =
   | "vco"
@@ -17,7 +17,7 @@ export type PortId =
   | "scope"
   | "out";
 
-export type ModuleId = "grid" | "scope" | "tape" | "patch" | "seq" | "voice";
+export type ModuleId = "grid" | "scope" | "tape" | "patch" | "seq" | "voice" | "kernel";
 
 export interface VoiceParams {
   waveform: Waveform;

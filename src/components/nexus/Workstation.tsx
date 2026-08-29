@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ModuleId } from "@/lib/nexus/types";
 import { engine, useEngine } from "@/lib/nexus/use-engine";
 import { Grid } from "./Grid";
+import { Kernel, KernelRail } from "./Kernel";
 import { Oscilloscope } from "./Oscilloscope";
 import { Patchbay } from "./Patchbay";
 import { Sequencer } from "./Sequencer";
@@ -44,6 +45,7 @@ const MODULES: { id: ModuleId; label: string }[] = [
   { id: "patch", label: "Patch" },
   { id: "seq", label: "Seq" },
   { id: "voice", label: "Voice" },
+  { id: "kernel", label: "Λ" },
 ];
 
 export function Workstation() {
@@ -79,6 +81,11 @@ export function Workstation() {
         engine.frontier();
         return;
       }
+      if (e.code === "KeyP" && engine.getSnapshot().powered) {
+        e.preventDefault();
+        engine.runPuriq();
+        return;
+      }
       if (e.code === "Tab" && engine.getSnapshot().powered) {
         e.preventDefault();
         engine.cycleScopeMode();
@@ -98,7 +105,7 @@ export function Workstation() {
         return;
       }
       if (e.code === "KeyM" && e.metaKey) return;
-      const digit = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6"].indexOf(e.code);
+      const digit = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Digit7"].indexOf(e.code);
       if (digit >= 0 && !e.shiftKey && !KEY_NOTES[e.code]) {
         const mod = MODULES[digit];
         if (mod) engine.setModule(mod.id);
@@ -170,10 +177,11 @@ export function Workstation() {
       {!snap.powered ? (
         <PowerGate booting={booting} onEngage={() => void engage()} />
       ) : (
-        <div className="relative z-10 mx-auto flex min-h-dvh max-w-[1600px] flex-col gap-3 px-3 py-3 sm:px-5 sm:py-4">
+        <div className="relative z-10 mx-auto flex min-h-dvh max-w-[1600px] flex-col gap-2 px-3 py-2 sm:px-5 sm:py-3">
           <Header help={help} onHelp={() => setHelp((h) => !h)} />
+          <KernelRail />
           <SignalStrip />
-          <div className="hidden min-h-[46rem] flex-1 grid-cols-3 grid-rows-2 gap-3 lg:grid">
+          <div className="hidden min-h-[34rem] flex-1 grid-cols-3 grid-rows-2 gap-3 lg:grid">
             <Grid />
             <Oscilloscope />
             <TapeDeck />
@@ -201,6 +209,7 @@ export function Workstation() {
               {snap.module === "patch" && <Patchbay />}
               {snap.module === "seq" && <Sequencer />}
               {snap.module === "voice" && <Voice />}
+              {snap.module === "kernel" && <Kernel />}
             </div>
           </div>
           {help ? <Help onClose={() => setHelp(false)} /> : null}
@@ -218,7 +227,7 @@ function Header({ help, onHelp }: { help: boolean; onHelp: () => void }) {
       <span className="nx-screw right-2 top-2" />
       <div>
         <p className="nx-wordmark text-xl leading-tight sm:text-2xl">Nexus</p>
-        <p className="nx-label">Analog computing workstation · MK-II</p>
+        <p className="nx-label">Analog formula computer · MK-III</p>
       </div>
       <div className="mx-auto flex items-center gap-2">
         <button
@@ -241,6 +250,20 @@ function Header({ help, onHelp }: { help: boolean; onHelp: () => void }) {
           onClick={() => engine.frontier()}
         >
           Frontier
+        </button>
+        <button
+          type="button"
+          className="nx-btn min-h-11 px-4"
+          onClick={() => engine.runPuriq()}
+        >
+          Puriq
+        </button>
+        <button
+          type="button"
+          className={`nx-btn min-h-11 px-4 ${snap.kernel.failClosed ? "nx-btn-rec-on" : ""}`}
+          onClick={() => engine.setFailClosed(!snap.kernel.failClosed)}
+        >
+          {snap.kernel.failClosed ? "F12 latched" : "F12"}
         </button>
         <button
           type="button"
@@ -327,11 +350,10 @@ function SignalStrip() {
         );
       })}
       <span className="ml-auto font-mono text-micro tabular-nums text-amber">
-        {Math.round(snap.seq.bpm)} BPM · {snap.voice.waveform.toUpperCase()} · {snap.scopeMode.toUpperCase()}
+        Λ {snap.kernel.lambda.toFixed(3)} · {Math.round(snap.seq.bpm)} BPM · {snap.voice.waveform.toUpperCase()} ·{" "}
+        {snap.scopeMode.toUpperCase()}
         {snap.seq.arp ? " · ARP" : ""}
-        {snap.voice.fold > 0.05 ? " · FOLD" : ""}
-        {snap.voice.shAmt > 0.05 ? " · S&H" : ""}
-        {snap.voice.ring > 0.05 ? " · RING" : ""}
+        {snap.kernel.failClosed ? " · F12" : ""}
         {snap.bouncing ? " · BOUNCE" : ""}
       </span>
     </div>
@@ -347,9 +369,9 @@ function PowerGate({ booting, onEngage }: { booting: boolean; onEngage: () => vo
     >
       <p className="nx-wordmark text-4xl sm:text-6xl">Nexus</p>
       <p className="nx-label max-w-sm text-pretty">
-        Analog computing workstation · six instruments · phosphor CRT · local memory
+        Analog formula computer · voltages are the locked-8 · phosphor CRT
         <br />
-        MK-II: sample & hold, wavefolder, ring multiplier, function generator, tape bounce
+        MK-III: F19 VCA · F12 fail-closed · YARQA canals · Khipu knots · Ouroboros tax
       </p>
       <span className={`nx-btn min-h-12 px-8 py-3 text-sm ${booting ? "nx-btn-on" : ""}`}>
         {booting ? "Warming heaters…" : "Press to engage"}
@@ -370,16 +392,16 @@ function Help({ onClose }: { onClose: () => void }) {
       </div>
       <ul className="space-y-1.5 font-mono text-sm text-fg">
         <li>
-          <kbd>F</kbd> Frontier — launch the analog-computer patch
+          <kbd>F</kbd> Frontier — analog-computer patch
         </li>
         <li>
-          Voice computer: Fold, LFO, S&H, Ring · Tape Bounce dumps eight seconds
+          <kbd>P</kbd> PURIQ — run the governed formula loop; receipts knot the CRT
         </li>
         <li>
-          Patch <span className="text-phosphor">S&H</span> into VCF or PAN — clocked by the sequencer
+          Locked-8 crystals on the kernel rail inject voltages. F12 latches a mute the master cannot override.
         </li>
         <li>
-          <kbd>Tab</kbd> cycle scope Y-T / X-Y / FFT
+          <kbd>Tab</kbd> cycle scope Y-T / X-Y / FFT / Λ radar / Khipu knot
         </li>
         <li>
           Scenes <kbd>1</kbd>–<kbd>8</kbd> on the header · shift-click stores
@@ -391,7 +413,7 @@ function Help({ onClose }: { onClose: () => void }) {
           <kbd>Z</kbd>–<kbd>M</kbd> voice keys · shift = octave
         </li>
         <li>
-          <kbd>1</kbd>–<kbd>6</kbd> modules on compact view
+          <kbd>1</kbd>–<kbd>7</kbd> modules on compact view
         </li>
         <li>
           <kbd>esc</kbd> panic / all notes off
