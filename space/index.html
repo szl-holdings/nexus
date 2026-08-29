@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>NEXUS hologram</title>
+  <style>
+    :root { --bg:#05070a; --fg:#d7efe4; --muted:#7f9a8e; --accent:#3af4c8; --false:#e07a6a; --line:rgba(215,239,228,.12); --surf:#0b1410; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 "Segoe UI",system-ui,sans-serif; }
+    header, main { max-width:960px; margin:0 auto; padding:24px 20px; }
+    h1 { font-family:Georgia,serif; font-weight:500; letter-spacing:-.03em; }
+    .kicker { font:11px/1 ui-monospace,Menlo,monospace; letter-spacing:.22em; text-transform:uppercase; color:var(--muted); }
+    .grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); }
+    .card { background:var(--surf); border:1px solid var(--line); border-radius:16px; padding:16px; }
+    canvas { width:100%; height:220px; background:#030504; border-radius:12px; display:block; }
+    button { min-height:44px; padding:0 16px; border:0; border-radius:999px; background:var(--accent); color:#04110d; font-weight:600; cursor:pointer; }
+    .muted { color:var(--muted); font-size:14px; }
+    .mono { font-family:ui-monospace,Menlo,monospace; }
+    a { color:var(--accent); }
+    .lamp { display:inline-block; width:8px; height:8px; border-radius:99px; margin-right:8px; background:var(--accent); }
+    .lamp.down { background:var(--false); }
+  </style>
+</head>
+<body>
+  <header>
+    <p class="kicker">Analog computer · CRT hologram · not npm</p>
+    <h1>NEXUS</h1>
+    <p class="muted">Lorenz RK4 on stdlib HTTP. Full Web Audio instrument is GitHub-only. Energy UNAVAILABLE. Λ uniqueness is Conjecture 1.</p>
+  </header>
+  <main>
+    <section class="card">
+      <h2>Phosphor trail</h2>
+      <canvas id="crt" width="720" height="220" aria-label="Lorenz attractor"></canvas>
+      <p class="mono muted" id="vec">—</p>
+      <button type="button" id="step">Integrate</button>
+    </section>
+    <div class="grid" style="margin-top:12px">
+      <section class="card">
+        <h2>Λ</h2>
+        <p class="mono" id="lam" style="font-size:28px;color:var(--accent)">—</p>
+        <p class="muted">Advisory. Uniqueness OPEN.</p>
+      </section>
+      <section class="card">
+        <h2>Organs</h2>
+        <div id="organs" class="muted"></div>
+      </section>
+      <section class="card">
+        <h2>Ouroboros</h2>
+        <p class="mono" id="tax">—</p>
+        <p class="muted">Loop-tax on eight bars. Joule UNAVAILABLE.</p>
+      </section>
+    </div>
+    <p class="muted" style="margin-top:20px">Source: <a href="https://github.com/szl-holdings/nexus">szl-holdings/nexus</a> · Flagship: <a href="https://huggingface.co/spaces/SZLHOLDINGS/a11oy">a11oy</a></p>
+  </main>
+  <script>
+    const canvas = document.getElementById("crt");
+    const ctx = canvas.getContext("2d");
+    async function post(path, body) {
+      const r = await fetch(path, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body||{}) });
+      return r.json();
+    }
+    function draw(trail) {
+      ctx.fillStyle = "rgba(3,5,4,0.35)";
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.strokeStyle = "#3af4c8";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      trail.forEach((p,i) => {
+        const x = 360 + p[0] * 10;
+        const y = 110 + (p[1] - p[2] * 0.35) * 4.2;
+        if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      });
+      ctx.stroke();
+    }
+    async function tick() {
+      const j = await post("/api/lorenz", { steps: 480, x: 0.1 });
+      draw(j.trail||[]);
+      const last = j.last || [0,0,0];
+      document.getElementById("vec").textContent = `σ=10  ρ=28  β=8/3   last ${last.map(n=>n.toFixed(2)).join("  ")}`;
+      const lam = await post("/api/lambda", { axes: [0.97,0.96,0.93,0.91,0.9,0.92,0.88,0.91,0.9,0.94,0.9,0.89,0.91] });
+      document.getElementById("lam").textContent = (lam.lambda||0).toFixed(4) + "  " + (lam.decision||"");
+      const org = await post("/api/organs", {});
+      document.getElementById("organs").innerHTML = Object.entries(org.organs||{}).map(([k,v]) =>
+        `<div><span class="lamp ${v?"":"down"}"></span>${k} ${v?"LIVE":"DOWN"}</div>`
+      ).join("");
+      const tax = await post("/api/ouroboros", { amplitude: 1, bars: 8 });
+      document.getElementById("tax").textContent = "tax " + Number(tax.tax).toFixed(4);
+    }
+    document.getElementById("step").onclick = tick;
+    tick();
+  </script>
+</body>
+</html>
