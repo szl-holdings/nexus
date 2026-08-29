@@ -1,18 +1,8 @@
-# NEXUS MK-II holographic analog computer — Hugging Face Space (port 7860)
-# Prebuilt Nitro node-server bundle. The HF factory BUILD_ERRORs on `npm ci`
-# (3s cache-miss dump). GitHub Actions builds space-dist/; this image only
-# copies it. Explicit COPY: the org deployer forbids bare `COPY .`.
-# Canonical publisher: szl-holdings/yarqa deploy-nexus.yml.
-FROM public.ecr.aws/docker/library/node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5
-
+# NEXUS MK-II — Python CRT hologram. No space-dist. No npm ci.
+FROM public.ecr.aws/docker/library/python:3.11-slim
 WORKDIR /app
-COPY space-dist ./space-dist
-WORKDIR /app/space-dist
-
-ENV HOST=0.0.0.0
-ENV PORT=7860
-ENV NODE_ENV=production
-
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PORT=7860
+COPY server.py ./server.py
+COPY index.html ./index.html
 EXPOSE 7860
-
-CMD ["node", "server/index.mjs"]
+CMD ["python", "-u", "server.py"]

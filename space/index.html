@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>NEXUS MK-II</title>
+  <style>
+    :root { --bg:#050704; --fg:#c8f5b0; --muted:#6f8a63; --accent:#7cff6b; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.45 "IBM Plex Mono", ui-monospace, Menlo, monospace; }
+    header, main { max-width:920px; margin:0 auto; padding:24px 20px; }
+    h1 { font-weight:500; letter-spacing:.08em; }
+    canvas { width:100%; height:240px; background:#020301; border:1px solid #1d3a18; border-radius:8px; }
+    .muted { color:var(--muted); font-size:13px; }
+    a { color:var(--accent); }
+  </style>
+</head>
+<body>
+  <header>
+    <p class="muted">PHOSPHOR CRT · LORENZ CORE · FIVE ORGANS</p>
+    <h1>NEXUS MK-II</h1>
+    <p class="muted">Holographic analog computer. Audio stays in the browser. Full instrument on GitHub. This Space no longer requires space-dist.</p>
+  </header>
+  <main>
+    <canvas id="crt" width="900" height="240" aria-label="Lorenz attractor"></canvas>
+    <p class="muted">σ=10 β=8/3 ρ=28. Local integration. No CDN.</p>
+    <p class="muted">Source: <a href="https://github.com/szl-holdings/nexus">szl-holdings/nexus</a></p>
+  </main>
+  <script>
+    const c = document.getElementById("crt").getContext("2d");
+    let x=0.1,y=0,z=0;
+    const dt=0.008, s=10, b=8/3, r=28;
+    function tick() {
+      const dx=s*(y-x), dy=x*(r-z)-y, dz=x*y-b*z;
+      x+=dx*dt; y+=dy*dt; z+=dz*dt;
+      c.fillStyle="rgba(5,7,4,0.08)";
+      c.fillRect(0,0,900,240);
+      c.fillStyle="#7cff6b";
+      c.fillRect(450+x*12, 120+y*8, 2, 2);
+      requestAnimationFrame(tick);
+    }
+    tick();
+  </script>
+</body>
+</html>
