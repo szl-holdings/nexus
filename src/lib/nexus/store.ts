@@ -1,8 +1,7 @@
-import type { PatchCable, SeqParams, SeqStep, TapeParams, VoiceParams } from "./types";
+import type { PatchCable, Scene, ScopeMode, SeqParams, SeqStep, TapeParams, VoiceParams } from "./types";
 
 const DB = "nexus-v1";
 const STORE = "state";
-const VERSION = 1;
 
 export interface PersistedState {
   v: number;
@@ -13,6 +12,10 @@ export interface PersistedState {
   grid: boolean[][];
   patches: PatchCable[];
   master: number;
+  orbit?: number;
+  scopeMode?: ScopeMode;
+  scenes?: (Scene | null)[];
+  sceneSlot?: number;
 }
 
 function openDb(): Promise<IDBDatabase> {
@@ -36,7 +39,7 @@ export async function loadPersisted(): Promise<PersistedState | null> {
       const q = tx.objectStore(STORE).get("session");
       q.onsuccess = () => {
         const val = q.result as PersistedState | undefined;
-        resolve(val && val.v === VERSION ? val : null);
+        resolve(val && val.v >= 1 ? val : null);
       };
       q.onerror = () => reject(q.error);
     });
@@ -76,7 +79,7 @@ function readLocal(): PersistedState | null {
     const raw = localStorage.getItem("nexus-v1");
     if (!raw) return null;
     const val = JSON.parse(raw) as PersistedState;
-    return val.v === VERSION ? val : null;
+    return val.v >= 1 ? val : null;
   } catch {
     return null;
   }

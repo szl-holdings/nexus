@@ -1,4 +1,5 @@
 export type Waveform = "sine" | "triangle" | "sawtooth" | "square" | "pluck";
+export type ScopeMode = "yt" | "xy" | "fft";
 
 export type PortId =
   | "vco"
@@ -7,6 +8,7 @@ export type PortId =
   | "grid"
   | "tape"
   | "vcfout"
+  | "sh"
   | "vcf"
   | "vca"
   | "delay"
@@ -32,6 +34,11 @@ export interface VoiceParams {
   pan: number;
   glide: number;
   gain: number;
+  fold: number;
+  lfoRate: number;
+  lfoDepth: number;
+  shAmt: number;
+  ring: number;
 }
 
 export interface TapeParams {
@@ -62,6 +69,7 @@ export interface SeqParams {
   euclidRot: number;
   probability: number;
   scale: "penta" | "minor" | "chromatic";
+  arp: boolean;
 }
 
 export interface PatchCable {
@@ -70,12 +78,24 @@ export interface PatchCable {
   to: PortId;
 }
 
+export interface Scene {
+  voice: VoiceParams;
+  tape: TapeParams;
+  seq: SeqParams;
+  steps: SeqStep[];
+  grid: boolean[][];
+  patches: PatchCable[];
+  orbit: number;
+  scopeMode: ScopeMode;
+}
+
 export const SCALE_PENTA = [36, 39, 41, 43, 46, 48, 51, 53];
 export const SCALE_MINOR = [36, 38, 39, 41, 43, 44, 46, 48];
 export const SCALE_CHROMATIC = [36, 37, 38, 39, 40, 41, 42, 43];
 
 export const COLS = 16;
 export const ROWS = 8;
+export const SCENE_COUNT = 8;
 
 export const DEFAULT_VOICE: VoiceParams = {
   waveform: "sawtooth",
@@ -92,6 +112,11 @@ export const DEFAULT_VOICE: VoiceParams = {
   pan: 0,
   glide: 0.02,
   gain: 0.7,
+  fold: 0,
+  lfoRate: 0.35,
+  lfoDepth: 0.12,
+  shAmt: 0,
+  ring: 0,
 };
 
 export const DEFAULT_TAPE: TapeParams = {
@@ -114,6 +139,7 @@ export const DEFAULT_SEQ: SeqParams = {
   euclidRot: 0,
   probability: 1,
   scale: "penta",
+  arp: false,
 };
 
 export function emptyGrid(): boolean[][] {
@@ -155,6 +181,7 @@ export const PORT_META: Record<
   grid: { label: "GRID", kind: "src", row: 0, col: 3 },
   tape: { label: "TAPE", kind: "src", row: 0, col: 4 },
   vcfout: { label: "VCF", kind: "src", row: 0, col: 5 },
+  sh: { label: "S&H", kind: "src", row: 0, col: 6 },
   vcf: { label: "VCF IN", kind: "dst", row: 1, col: 0 },
   vca: { label: "VCA", kind: "dst", row: 1, col: 1 },
   delay: { label: "DELAY", kind: "dst", row: 1, col: 2 },
@@ -164,5 +191,5 @@ export const PORT_META: Record<
   out: { label: "OUT", kind: "dst", row: 1, col: 6 },
 };
 
-export const SOURCE_PORTS: PortId[] = ["vco", "noise", "lfo", "grid", "tape", "vcfout"];
+export const SOURCE_PORTS: PortId[] = ["vco", "noise", "lfo", "grid", "tape", "vcfout", "sh"];
 export const DEST_PORTS: PortId[] = ["vcf", "vca", "delay", "pan", "tapein", "scope", "out"];

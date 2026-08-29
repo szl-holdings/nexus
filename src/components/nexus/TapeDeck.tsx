@@ -103,6 +103,14 @@ export function TapeDeck() {
             >
               Rec
             </button>
+            <button
+              type="button"
+              className={`nx-btn px-3 py-2 ${snap.bouncing ? "nx-btn-on" : ""}`}
+              onClick={() => engine.bounce(8)}
+              disabled={snap.bouncing}
+            >
+              {snap.bouncing ? "Dump…" : "Bounce"}
+            </button>
           </div>
         </div>
         <div className="flex flex-wrap justify-between gap-1">
