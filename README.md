@@ -36,6 +36,8 @@ Frontier is not a preset dump — it is a running analog computer. Three integra
 
 The SZL kernel is analog physics, not a seventh module. Ouroboros taxes amplitude over eight bounded bars. Eight falsifiable invariants hash the analog receipt chain. Five organs (YACHAY, YUYAY, YAWAR, OTel, KHIPU) fail-close the VCA. Hatun probes stay LIVE or honestly UNAVAILABLE. Energy is UNAVAILABLE — never a fabricated joule. Λ is advisory. Conjecture 1 remains OPEN.
 
+Three aggregators run on the same 13 analog voltages: **Λw** (F19 weighted geometric mean), **Λs** (symmetric 1/13, A5 permutation invariance), **Λe** (Egyptian Horus-Eye 1/2+…+1/64 = 63/64, Theorem U). **maxAgg** is the live counterexample — same vector, different score. Disagreement is analog, not a mute. Unconditional uniqueness stays OPEN and false as stated.
+
 Inspired by analog computing practice (THE ANALOG THING, CRT holograms, modular patchbays) — not a dashboard, not a generative-audio model.
 
 | Module | Role |
@@ -67,7 +69,7 @@ Coefficient pots: **σ = 10**, **ρ = 18…40** (Chaos), **β = 8/3**. Rate is c
 | Organ | Quechua | Formulas | Analog face |
 | --- | --- | --- | --- |
 | BRAIN | YACHAY | F1 | Function generator. Read-only cortex. |
-| HEART | YUYAY | F4 F11 | Λ weighted geometric mean. Zero axis fail-closes. |
+| HEART | YUYAY | F4 F11 | Λw weighted geometric mean. Zero axis fail-closes. Λs / Λe / maxAgg on the same 13 voltages. Disagreement is analog. Uniqueness OPEN. |
 | CIRCULATORY | YAWAR | F7 F22 | SHA-256 analog receipt chain. |
 | NERVOUS | OTel | F12 | Loop-tax. Energy UNAVAILABLE. Hatun probe. |
 | SKELETON | KHIPU | F18 F19 | Locked-8. CHECKED ≠ Lean PROVEN @ c7c0ba17. |

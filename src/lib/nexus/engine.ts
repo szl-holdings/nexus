@@ -34,6 +34,7 @@ import {
   emptyKernel,
   evaluateAnatomy,
   evaluateLambda,
+  evaluatePuriq,
   instantCycles,
   loopTax,
   runInvariants,
@@ -1516,23 +1517,23 @@ class NexusEngine {
     this.lastKernelAt = now;
     const liveN = this.probes.filter((p) => p.status === "LIVE").length;
     const hatunLive = this.probes.some((p) => p.id === "hatun" && p.status === "LIVE");
-    const lambda = evaluateLambda(
-      yuyayAxes({
-        x: this.nx,
-        y: this.ny,
-        z: this.nz,
-        fg: this.fg,
-        drive: this.snapshot.analog.drive,
-        chaos: this.snapshot.analog.chaos,
-        rate: this.snapshot.analog.rate,
-        gain: this.snapshot.voice.gain,
-        mix: this.snapshot.tape.mix,
-        prob: this.snapshot.seq.probability,
-        liveFrac: liveN / Math.max(1, this.probes.length),
-        frontier: this.snapshot.frontier,
-        muted: this.snapshot.muted,
-      }),
-    );
+    const axes = yuyayAxes({
+      x: this.nx,
+      y: this.ny,
+      z: this.nz,
+      fg: this.fg,
+      drive: this.snapshot.analog.drive,
+      chaos: this.snapshot.analog.chaos,
+      rate: this.snapshot.analog.rate,
+      gain: this.snapshot.voice.gain,
+      mix: this.snapshot.tape.mix,
+      prob: this.snapshot.seq.probability,
+      liveFrac: liveN / Math.max(1, this.probes.length),
+      frontier: this.snapshot.frontier,
+      muted: this.snapshot.muted,
+    });
+    const lambda = evaluateLambda(axes);
+    const puriq = evaluatePuriq(axes);
     const inv = runInvariants(this.receipts);
     const chainInv = inv.invariants.find((i) => i.id === "receipt-chain-continuity");
     const chainOk = chainInv ? chainInv.status !== "VIOLATED" : true;
@@ -1551,6 +1552,12 @@ class NexusEngine {
     this.kernelSnap = {
       ...emptyKernel(),
       lambda: lambda.value,
+      lambdaSym: puriq.symmetric,
+      lambdaEgy: puriq.egyptian,
+      maxAgg: puriq.maxAgg,
+      minAgg: puriq.minAgg,
+      gap: puriq.gap,
+      disagree: puriq.disagree,
       blocked: anatomy.blocked || lambda.blocked,
       reason: anatomy.reason,
       liveCount: anatomy.liveCount,
