@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { ModuleId } from "@/lib/nexus/types";
+import { LOCKED_EIGHT } from "@/lib/nexus/kernel";
 import { engine, useEngine } from "@/lib/nexus/use-engine";
 import { Grid } from "./Grid";
 import { Oscilloscope } from "./Oscilloscope";
@@ -227,7 +228,7 @@ function Header({ help, onHelp }: { help: boolean; onHelp: () => void }) {
       <div className="flex items-center justify-between gap-3 lg:contents">
         <div>
           <p className="nx-wordmark text-xl leading-tight sm:text-2xl">Nexus</p>
-          <p className="nx-label">{snap.frontier ? "Analog computer · live" : "Analog computing workstation · MK-II"}</p>
+          <p className="nx-label">{snap.frontier ? "Holographic analog computer · live" : "Holographic analog computer · MK-II"}</p>
         </div>
         <div className="flex items-center gap-2 lg:hidden">
           <span className={`nx-led ${snap.activeNotes > 0 ? "nx-led-on" : ""}`} title="voice" />
@@ -270,18 +271,18 @@ function Header({ help, onHelp }: { help: boolean; onHelp: () => void }) {
       </div>
       <div className="flex flex-col gap-3 lg:ml-auto lg:flex-row lg:flex-wrap lg:items-center">
         <div className="grid grid-cols-8 gap-1 lg:flex">
-          {Array.from({ length: 8 }, (_, i) => (
+          {LOCKED_EIGHT.map((fid, i) => (
             <button
-              key={i}
+              key={fid}
               type="button"
-              title={snap.scenes[i] ? `Recall scene ${i + 1}` : `Empty scene ${i + 1} · shift-click to store`}
-              className={`nx-btn min-h-11 min-w-0 px-0 lg:min-w-11 ${snap.sceneSlot === i ? "nx-btn-on" : ""} ${snap.scenes[i] ? "text-phosphor" : ""}`}
+              title={snap.scenes[i] ? `Recall ${fid}` : `Empty ${fid} · shift-click to store`}
+              className={`nx-btn min-h-11 min-w-0 px-0 text-micro lg:min-w-11 ${snap.sceneSlot === i ? "nx-btn-on" : ""} ${snap.scenes[i] ? "text-phosphor" : ""}`}
               onClick={(e) => {
                 if (e.shiftKey) engine.saveScene(i);
                 else engine.loadScene(i);
               }}
             >
-              {i + 1}
+              {fid}
             </button>
           ))}
         </div>
@@ -330,12 +331,14 @@ function AnalogMeters({ live }: { live: boolean }) {
   const yRef = useRef<HTMLSpanElement>(null);
   const zRef = useRef<HTMLSpanElement>(null);
   const fRef = useRef<HTMLSpanElement>(null);
+  const lRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     let raf = 0;
     const tick = () => {
       raf = requestAnimationFrame(tick);
       const a = engine.getAnalog();
+      const k = engine.getKernel();
       const set = (el: HTMLSpanElement | null, v: number) => {
         if (!el) return;
         el.style.transform = `scaleY(${Math.max(0.04, Math.min(1, Math.abs(v)))})`;
@@ -344,17 +347,19 @@ function AnalogMeters({ live }: { live: boolean }) {
       set(yRef.current, a.y);
       set(zRef.current, a.z);
       set(fRef.current, a.fg);
+      set(lRef.current, k.lambda);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, []);
 
   return (
-    <div className={`flex items-end gap-1.5 ${live ? "opacity-100" : "opacity-40"}`} title="Analog computer X Y Z FG">
+    <div className={`flex items-end gap-1.5 ${live ? "opacity-100" : "opacity-40"}`} title="Analog computer X Y Z FG Λ">
       <MeterBar barRef={xRef} label="X" />
       <MeterBar barRef={yRef} label="Y" />
       <MeterBar barRef={zRef} label="Z" />
       <MeterBar barRef={fRef} label="FG" amber />
+      <MeterBar barRef={lRef} label="Λ" amber />
     </div>
   );
 }
@@ -397,20 +402,23 @@ function SignalStrip() {
             (b.id === "vco" && p.from === "vco") ||
             (b.id === "tape" && (p.from === "tape" || p.to === "delay")),
         );
+        const vcaClosed = b.id === "vca" && snap.frontier && engine.getKernel().blocked;
         return (
           <div key={b.id} className="flex items-center gap-2">
             <div className="flex items-center gap-2 rounded-sm border border-hairline bg-panel-hi px-3 py-1.5">
-              <span className={`nx-led ${live ? "nx-led-on" : ""}`} />
+              <span className={`nx-led ${vcaClosed ? "nx-led-rec" : live ? "nx-led-on" : ""}`} />
               <span className="nx-label">{b.label}</span>
             </div>
             {i < blocks.length - 1 ? <span className="font-mono text-micro text-phosphor-dim">→</span> : null}
           </div>
         );
       })}
-      <AnalogMeters live={snap.frontier} />
+      <AnalogMeters live />
+      <OrganRail />
       <span className="basis-full font-mono text-micro tabular-nums text-amber sm:ml-auto sm:basis-auto">
         {Math.round(snap.seq.bpm)} BPM · {snap.voice.waveform.toUpperCase()} · {snap.scopeMode.toUpperCase()}
         {snap.frontier ? ` · FRONTIER · ${(snap.analog.mode ?? "op").toUpperCase()}` : ""}
+        {snap.muted ? " · F12 MUTE" : ""}
         {snap.seq.arp ? " · ARP" : ""}
         {snap.voice.fold > 0.05 ? " · FOLD" : ""}
         {snap.voice.shAmt > 0.05 ? " · S&H" : ""}
@@ -418,7 +426,94 @@ function SignalStrip() {
         {snap.analog.cycle ? " · FG" : ""}
         {snap.midi ? " · MIDI" : ""}
         {snap.bouncing ? " · BOUNCE" : ""}
+        {" · E UNAVAILABLE"}
       </span>
+    </div>
+  );
+}
+
+function OrganRail() {
+  const organsRef = useRef<HTMLDivElement>(null);
+  const probesRef = useRef<HTMLDivElement>(null);
+  const lambdaRef = useRef<HTMLSpanElement>(null);
+  const reasonRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const k = engine.getKernel();
+      const probes = engine.getProbes();
+      if (lambdaRef.current) lambdaRef.current.textContent = `Λ ${k.lambda.toFixed(3)}`;
+      if (reasonRef.current) {
+        reasonRef.current.textContent = k.blocked
+          ? "F19 FAIL-CLOSED"
+          : `${k.liveCount}/5 · C1 OPEN`;
+        reasonRef.current.className = `nx-label ${k.blocked ? "text-record" : ""}`;
+      }
+      const root = organsRef.current;
+      if (root) {
+        const chips = root.querySelectorAll("[data-organ]");
+        chips.forEach((el) => {
+          const id = el.getAttribute("data-organ");
+          const organ = k.organs.find((o) => o.id === id);
+          const led = el.querySelector(".nx-led");
+          if (led) {
+            led.className = `nx-led ${organ?.status === "LIVE" ? "nx-led-on" : organ?.status === "DOWN" ? "nx-led-rec" : ""}`;
+          }
+        });
+      }
+      const pr = probesRef.current;
+      if (pr) {
+        const chips = pr.querySelectorAll("[data-probe]");
+        chips.forEach((el) => {
+          const id = el.getAttribute("data-probe");
+          const p = probes.find((x) => x.id === id);
+          const led = el.querySelector(".nx-led");
+          if (led) led.className = `nx-led ${p?.status === "LIVE" ? "nx-led-on" : ""}`;
+        });
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const idleK = engine.getKernel();
+  const idleP = engine.getProbes();
+
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+      <div ref={organsRef} className="flex flex-wrap items-center gap-1">
+        {(idleK.organs.length
+          ? idleK.organs
+          : [
+              { id: "brain", quechua: "YACHAY" },
+              { id: "heart", quechua: "YUYAY" },
+              { id: "circulatory", quechua: "YAWAR" },
+              { id: "nervous", quechua: "OTel" },
+              { id: "skeleton", quechua: "KHIPU" },
+            ]
+        ).map((o) => (
+          <span key={o.id} data-organ={o.id} className="nx-organ" title={o.quechua}>
+            <span className="nx-led" />
+            <span className="nx-label">{o.quechua}</span>
+          </span>
+        ))}
+      </div>
+      <span ref={lambdaRef} className="font-mono text-micro tabular-nums text-amber">
+        Λ {idleK.lambda.toFixed(3)}
+      </span>
+      <span ref={reasonRef} className="nx-label">
+        {idleK.liveCount}/5 · C1 OPEN
+      </span>
+      <div ref={probesRef} className="flex flex-wrap items-center gap-1">
+        {idleP.map((p) => (
+          <span key={p.id} data-probe={p.id} className="nx-organ" title={`${p.label} ${p.status} · ${p.detail}`}>
+            <span className="nx-led" />
+            <span className="nx-label">{p.id === "hatun" ? "Hatun" : p.id === "anatomy" ? "Anat" : "Space"}</span>
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -436,9 +531,9 @@ function PowerGate({
     <div className="relative z-10 flex min-h-dvh w-full flex-col items-center justify-center gap-6 px-6 text-center">
       <p className="nx-wordmark text-4xl sm:text-6xl">Nexus</p>
       <p className="nx-label max-w-md text-pretty">
-        Analog computing workstation · Lorenz core · function generator · phosphor CRT
+        Holographic analog computer · Lorenz core · Ouroboros · five organs · Hatun
         <br />
-        MK-II Frontier: live analog computer — IC / OP / HALT / REP — driving voice, tape, grid, and scope
+        MK-II Frontier: live analog computer — IC / OP / HALT / REP — driving voice, tape, grid, and hologram
       </p>
       <div className="flex flex-wrap items-center justify-center gap-3">
         <button type="button" onClick={onEngage} className={`nx-btn min-h-12 px-8 py-3 text-sm ${booting ? "nx-btn-on" : ""}`}>
@@ -464,17 +559,20 @@ function Help({ onClose }: { onClose: () => void }) {
       </div>
       <ul className="space-y-1.5 font-mono text-sm text-fg">
         <li>
-          <kbd>F</kbd> Frontier — live Lorenz analog computer. Shift-F disengages. Press again to reseed.
+          <kbd>F</kbd> Frontier — live Lorenz analog computer. Shift-F disengages. Press again to reseed the loop.
         </li>
         <li>IC holds initial conditions. OP integrates. HALT freezes. REP reseeds the attractor.</li>
-        <li>X Y Z meters are the attractor. Attack / Release are the function generator rise and fall.</li>
+        <li>X Y Z FG Λ meters. Attack / Release are the function generator rise and fall.</li>
         <li>
           Patch <span className="text-phosphor">ANLG</span> and <span className="text-phosphor">FUNC</span> into VCF or PAN
         </li>
         <li>
-          <kbd>Tab</kbd> cycle scope Y-T / X-Y / FFT — XY draws the attractor in Frontier
+          <kbd>Tab</kbd> cycle scope Y-T / X-Y / FFT / HOLO — hologram is the attractor plus five organs
         </li>
-        <li>Scenes on the header · shift-click stores</li>
+        <li>Ouroboros taxes the VCA in Frontier. Eight bars, then the loop closes. Run starts another.</li>
+        <li>F19 fail-closed: a DOWN organ mutes the VCA. Master cannot compensate. Energy stays UNAVAILABLE.</li>
+        <li>Λ is advisory. Conjecture 1 remains OPEN. Hatun probes stay LIVE or honestly UNAVAILABLE.</li>
+        <li>Scenes F1 F4 F7 F11 F12 F18 F19 F22 · shift-click stores</li>
         <li>
           <kbd>space</kbd> run / stop sequencer
         </li>

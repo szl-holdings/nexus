@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { COLS } from "@/lib/nexus/types";
 import { engine, useEngine } from "@/lib/nexus/use-engine";
 import { Knob } from "./Knob";
@@ -56,6 +56,7 @@ export function Sequencer() {
           </select>
           <span className={`nx-led ml-auto ${seq.playing ? "nx-led-on" : ""}`} />
         </div>
+        <LoopReadout />
         <div className="grid grid-cols-8 gap-0.5 sm:gap-1">
           {steps.map((s, i) => (
             <button
@@ -87,8 +88,25 @@ export function Sequencer() {
           <Knob label="Rotate" value={seq.euclidRot} min={0} max={15} step={1} onChange={(v) => engine.setSeq({ euclidRot: v })} format={(v) => `${Math.round(v)}`} />
           <Knob label="Prob" value={seq.probability} min={0.1} max={1} onChange={(v) => engine.setSeq({ probability: v })} format={(v) => v.toFixed(2)} />
         </div>
-        <p className="nx-label text-center">{COLS}-step · right-click accent/row · space to run</p>
+        <p className="nx-label text-center">{COLS}-step · right-click accent/row · space to run · ouroboros 8</p>
       </div>
     </ModuleFrame>
   );
+}
+
+function LoopReadout() {
+  const remainRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const k = engine.getKernel();
+      if (remainRef.current) {
+        remainRef.current.textContent = `Ouroboros ${k.loopSteps}/${k.maxSteps} · ${k.exit} · tax ${k.loopRemain.toFixed(2)}`;
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return <p ref={remainRef} className="nx-label tabular-nums" />;
 }

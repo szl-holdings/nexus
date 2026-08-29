@@ -100,7 +100,7 @@ export function Grid() {
             ctx.stroke();
           }
 
-          const analog = engine.getSnapshot().frontier;
+          const analog = engine.getSnapshot().powered;
           if (analog) {
             const a = engine.getAnalog();
             const x = pad + (a.col + 0.5) * gw;

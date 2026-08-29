@@ -1,5 +1,5 @@
 export type Waveform = "sine" | "triangle" | "sawtooth" | "square" | "pluck";
-export type ScopeMode = "yt" | "xy" | "fft";
+export type ScopeMode = "yt" | "xy" | "fft" | "holo";
 export type AnalogMode = "ic" | "op" | "halt" | "rep";
 
 export type PortId =

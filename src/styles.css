@@ -354,6 +354,16 @@
   box-shadow: 0 0 8px color-mix(in oklab, var(--color-amber) 55%, transparent) !important;
 }
 
+.nx-organ {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--color-hairline);
+  background: var(--color-panel-hi);
+  padding: 0.2rem 0.45rem;
+  border-radius: 2px;
+}
+
 .nx-help kbd {
   font-family: var(--font-mono);
   font-size: 0.625rem;

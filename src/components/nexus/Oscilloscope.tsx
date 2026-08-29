@@ -7,6 +7,15 @@ const MODES: { id: ScopeMode; label: string }[] = [
   { id: "yt", label: "Y-T" },
   { id: "xy", label: "X-Y" },
   { id: "fft", label: "FFT" },
+  { id: "holo", label: "Holo" },
+];
+
+const ORGAN_DRAW: { id: "brain" | "heart" | "circulatory" | "nervous" | "skeleton"; q: string }[] = [
+  { id: "brain", q: "YACHAY" },
+  { id: "heart", q: "YUYAY" },
+  { id: "circulatory", q: "YAWAR" },
+  { id: "nervous", q: "OTel" },
+  { id: "skeleton", q: "KHIPU" },
 ];
 
 export function Oscilloscope() {
@@ -45,37 +54,41 @@ export function Oscilloscope() {
       const h = canvas.height / scale;
       if (w < 8 || h < 8) return;
       const mode = modeRef.current;
+      const persist = mode === "xy" || mode === "holo";
 
       ctx.globalCompositeOperation = "destination-out";
-      ctx.fillStyle = mode === "xy" ? "rgba(0,0,0,0.08)" : "rgba(0,0,0,0.12)";
+      ctx.fillStyle = persist ? "rgba(0,0,0,0.08)" : "rgba(0,0,0,0.12)";
       ctx.fillRect(0, 0, w, h);
       ctx.globalCompositeOperation = "source-over";
       ctx.fillStyle = "rgba(6,10,8,0.18)";
       ctx.fillRect(0, 0, w, h);
 
-      ctx.strokeStyle = "rgba(124,255,107,0.12)";
-      ctx.lineWidth = 1;
-      const divs = 8;
-      for (let i = 0; i <= divs; i++) {
-        const y = (h / divs) * i;
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(w, y);
-        ctx.stroke();
-      }
-      for (let i = 0; i <= 10; i++) {
-        const x = (w / 10) * i;
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, h);
-        ctx.stroke();
+      if (mode !== "holo") {
+        ctx.strokeStyle = "rgba(124,255,107,0.12)";
+        ctx.lineWidth = 1;
+        const divs = 8;
+        for (let i = 0; i <= divs; i++) {
+          const y = (h / divs) * i;
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(w, y);
+          ctx.stroke();
+        }
+        for (let i = 0; i <= 10; i++) {
+          const x = (w / 10) * i;
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, h);
+          ctx.stroke();
+        }
       }
 
       if (mode === "yt") drawYt(ctx, w, h, time);
       else if (mode === "xy") {
         if (engine.getSnapshot().frontier) drawAnalogXy(ctx, w, h);
         else drawXy(ctx, w, h, left, right);
-      } else drawFft(ctx, w, h, freq);
+      } else if (mode === "holo") drawHolo(ctx, w, h);
+      else drawFft(ctx, w, h, freq);
 
       ctx.globalAlpha = 0.07;
       for (let y = 0; y < h; y += 3) {
@@ -91,19 +104,22 @@ export function Oscilloscope() {
     };
   }, []);
 
+  const k = engine.getKernel();
   const caption =
-    snap.scopeMode === "xy"
-      ? snap.frontier
-        ? `LORENZ · X×Y · ${(snap.analog.mode ?? "op").toUpperCase()}`
-        : "LISSAJOUS · L×R"
-      : snap.scopeMode === "fft"
-        ? "SPECTRUM · 0–8 kHz"
-        : "0.5 V/DIV · TRIG ↑";
+    snap.scopeMode === "holo"
+      ? `HOLO · Λ ${k.lambda.toFixed(3)} · ${k.liveCount}/5 · C1 OPEN`
+      : snap.scopeMode === "xy"
+        ? snap.frontier
+          ? `LORENZ · X×Y · ${(snap.analog.mode ?? "op").toUpperCase()}`
+          : "LISSAJOUS · L×R"
+        : snap.scopeMode === "fft"
+          ? "SPECTRUM · 0–8 kHz"
+          : "0.5 V/DIV · TRIG ↑";
 
   return (
-    <ModuleFrame title="Oscilloscope" serial="CRT-2A">
+    <ModuleFrame title="Oscilloscope" serial={snap.scopeMode === "holo" ? "HOLO-3" : "CRT-2A"}>
       <div className="relative flex h-full min-h-40 flex-col gap-2">
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {MODES.map((m) => (
             <button
               key={m.id}
@@ -199,6 +215,7 @@ function drawAnalogXy(ctx: CanvasRenderingContext2D, w: number, h: number) {
   const cy = h / 2;
   const sx = w * 0.42;
   const sy = h * 0.42;
+  const stride = trail.stride;
   ctx.save();
   ctx.shadowColor = "#7cff6b";
   ctx.shadowBlur = 8;
@@ -210,8 +227,8 @@ function drawAnalogXy(ctx: CanvasRenderingContext2D, w: number, h: number) {
   const start = (trail.write - trail.len + cap) % cap;
   for (let i = 0; i < trail.len; i++) {
     const idx = (start + i) % cap;
-    const x = cx + (trail.data[idx * 2] ?? 0) * sx;
-    const y = cy - (trail.data[idx * 2 + 1] ?? 0) * sy;
+    const x = cx + (trail.data[idx * stride] ?? 0) * sx;
+    const y = cy - (trail.data[idx * stride + 1] ?? 0) * sy;
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   }
@@ -251,5 +268,128 @@ function drawFft(ctx: CanvasRenderingContext2D, w: number, h: number, freq: Byte
   ctx.closePath();
   ctx.fillStyle = "rgba(124,255,107,0.12)";
   ctx.fill();
+  ctx.restore();
+}
+
+function drawHolo(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const trail = engine.getAnalogTrail();
+  const a = engine.getAnalog();
+  const k = engine.getKernel();
+  const reduce =
+    typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const t = reduce ? 0.9 : (typeof performance !== "undefined" ? performance.now() : 0) * 0.00028;
+  const yaw = t;
+  const pitch = 0.42;
+  const cy = Math.cos(yaw);
+  const sy = Math.sin(yaw);
+  const cp = Math.cos(pitch);
+  const sp = Math.sin(pitch);
+  const project = (x: number, y: number, z: number) => {
+    const rx = x * cy - z * sy;
+    const rz = x * sy + z * cy;
+    const ry = y * cp - rz * sp;
+    const rz2 = y * sp + rz * cp;
+    const persp = 2.15 / (2.15 + rz2 + 1.35);
+    return {
+      x: w / 2 + rx * persp * w * 0.26,
+      y: h / 2 - ry * persp * h * 0.26,
+      s: persp,
+      d: rz2,
+    };
+  };
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(124,255,107,0.1)";
+  ctx.lineWidth = 1;
+  for (let r = 0.18; r <= 0.72; r += 0.18) {
+    ctx.beginPath();
+    for (let i = 0; i <= 48; i++) {
+      const ang = (i / 48) * Math.PI * 2;
+      const p = project(Math.cos(ang) * r, 0, Math.sin(ang) * r);
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke();
+  }
+
+  const stride = trail.stride;
+  const cap = trail.cap;
+  const start = (trail.write - trail.len + cap) % cap;
+  if (trail.len > 2) {
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    for (let i = 0; i < trail.len; i++) {
+      const idx = (start + i) % cap;
+      const x = trail.data[idx * stride] ?? 0;
+      const y = trail.data[idx * stride + 1] ?? 0;
+      const z = (trail.data[idx * stride + 2] ?? 0) * 2 - 1;
+      const p = project(x, y, z);
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    }
+    ctx.shadowColor = "#7cff6b";
+    ctx.shadowBlur = 10;
+    ctx.strokeStyle = "rgba(124,255,107,0.92)";
+    ctx.lineWidth = 1.35;
+    ctx.stroke();
+  }
+
+  const beam = project(a.x, a.y, a.z * 2 - 1);
+  ctx.shadowColor = "#ffb000";
+  ctx.shadowBlur = 16;
+  ctx.fillStyle = "#ffb000";
+  ctx.beginPath();
+  ctx.arc(beam.x, beam.y, 3.4 * beam.s, 0, Math.PI * 2);
+  ctx.fill();
+
+  const R = 0.58;
+  const nodes = ORGAN_DRAW.map((o, i) => {
+    const ang = -Math.PI / 2 + (i * Math.PI * 2) / 5;
+    const p = project(Math.cos(ang) * R, Math.sin(ang) * 0.12, Math.sin(ang) * R);
+    const organ = k.organs.find((g) => g.id === o.id);
+    return { ...o, p, live: organ?.status !== "DOWN", metric: organ?.metric ?? 0 };
+  });
+
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = "rgba(255,176,0,0.28)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  nodes.forEach((n, i) => {
+    if (i === 0) ctx.moveTo(n.p.x, n.p.y);
+    else ctx.lineTo(n.p.x, n.p.y);
+  });
+  ctx.closePath();
+  ctx.stroke();
+
+  const heart = project(0, 0, 0);
+  const ringR = Math.min(w, h) * 0.28 * (0.78 + k.lambda * 0.14);
+  ctx.beginPath();
+  ctx.strokeStyle = k.blocked ? "rgba(196,74,56,0.45)" : "rgba(124,255,107,0.35)";
+  ctx.lineWidth = 1.2;
+  ctx.arc(heart.x, heart.y, ringR, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = k.blocked ? "rgba(196,74,56,0.7)" : "rgba(255,176,0,0.75)";
+  ctx.font = "8px 'IBM Plex Mono', monospace";
+  ctx.textAlign = "center";
+  ctx.fillText("WILLAY", heart.x, heart.y + 14);
+  ctx.fillStyle = k.blocked ? "#c44a38" : "#ffb000";
+  ctx.font = "9px 'IBM Plex Mono', monospace";
+  ctx.fillText(`Λ ${k.lambda.toFixed(3)}`, heart.x, heart.y + 3);
+
+  for (const n of nodes) {
+    const rad = 5.5 * n.p.s * (n.live ? 1 : 0.7);
+    ctx.shadowColor = n.live ? "#7cff6b" : "#c44a38";
+    ctx.shadowBlur = n.live ? 12 : 4;
+    ctx.fillStyle = n.live ? "#7cff6b" : "#c44a38";
+    ctx.beginPath();
+    ctx.arc(n.p.x, n.p.y, rad, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = n.live ? "#7cff6b" : "#c44a38";
+    ctx.font = "8px 'IBM Plex Mono', monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(n.q, n.p.x, n.p.y - 10);
+  }
+
   ctx.restore();
 }

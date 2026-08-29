@@ -15,7 +15,7 @@ export const Route = createRootRoute({
       {
         name: "description",
         content:
-          "NEXUS MK-II — analog computing workstation. Lorenz Frontier core, function generator, phosphor CRT, tape echo, patchbay, sequencer, voice.",
+          "NEXUS MK-II — holographic analog computer. Lorenz Frontier, Ouroboros, five organs, Hatun telemetry, phosphor CRT.",
       },
     ],
     links: [
