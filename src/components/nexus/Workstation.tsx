@@ -598,7 +598,7 @@ function Help({ onClose }: { onClose: () => void }) {
         </li>
         <li>Programs: LRNZ · HARM · VDP · DFFG · LTKA · NEMO. IC holds. OP integrates. HALT freezes. REP reseeds.</li>
         <li>NEMO: five analog organs — YACHAY cognition, YUYAY pacemaker, YAWAR traveling wave, OTel optical write, KHIPU bound. WILLAY is the holographic second brain, not a sixth organ. 3-factor optical STDP. Not a chip. Energy UNAVAILABLE.</li>
-        <li>Analog circuits (THAT jobs, live voltages): integrator, summer, multiplier, inverter, comparator. ANLG is the analog jack. Comparator clocks S&H. Not a seventh module.</li>
+        <li>Analog circuits (THAT jobs, live voltages): integrator, summer, multiplier, inverter, comparator, correlator. Analog Schmitt clocks S&H from the correlator. Hybrid: sequencer samples correlator into S&H; REP accent loads analog IC. ANLG is the analog jack. Not a seventh module.</li>
         <li>X Y Z FG Λ meters. Attack / Release are the function generator rise and fall.</li>
         <li>
           Patch <span className="text-phosphor">ANLG</span> and <span className="text-phosphor">FUNC</span> into VCF or PAN

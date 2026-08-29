@@ -169,7 +169,8 @@ function CircuitVoice() {
       const a = engine.getAnalog();
       if (ref.current) {
         const cmp = (a.cmp ?? 0) >= 0 ? "+" : "−";
-        ref.current.textContent = `INT ${(a.intg ?? 0).toFixed(2)} · Σ ${(a.sum ?? 0).toFixed(2)} · × ${(a.mul ?? 0).toFixed(2)} · INV ${(a.inv ?? 0).toFixed(2)} · CMP ${cmp}`;
+        const hyb = a.hyb ? " · HYB" : "";
+        ref.current.textContent = `INT ${(a.intg ?? 0).toFixed(2)} · Σ ${(a.sum ?? 0).toFixed(2)} · × ${(a.mul ?? 0).toFixed(2)} · INV ${(a.inv ?? 0).toFixed(2)} · CMP ${cmp} · CORR ${(a.corr ?? 0).toFixed(2)}${hyb}`;
       }
     };
     raf = requestAnimationFrame(tick);

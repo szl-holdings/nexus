@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { analogCell, analogCircuit, analogCoefficients, analogJack, analogStep, euclid, funcGenStep, lorenzStep, midiToHz, opticalInterfere, opticalReconstruct, scaleAnalog, scaleLorenz, seedAnalogState, seedLorenz } from "./math.ts";
+import { analogCell, analogCircuit, analogCoefficients, analogCorrelate, analogJack, analogSchmitt, analogStep, euclid, funcGenStep, lorenzStep, midiToHz, opticalInterfere, opticalReconstruct, scaleAnalog, scaleLorenz, seedAnalogState, seedLorenz } from "./math.ts";
 import {
   ANALOG_PROGRAMS,
   COLS,
@@ -296,6 +296,7 @@ describe("analog computing circuits", () => {
     assert.ok(Math.abs(c.inv - -0.5) < 1e-9);
     assert.equal(c.cmp, 1);
     assert.equal(analogCircuit(-0.2, 0, 0).cmp, -1);
+    assert.equal(c.corr, 0);
   });
   it("ANLG jack summers integrator, multiplier, and reconstruct", () => {
     const c = analogCircuit(0.8, 0.5, 0);
@@ -304,5 +305,34 @@ describe("analog computing circuits", () => {
     assert.ok(Math.abs(quiet - 0.8 * 0.55) < 1e-9);
     assert.ok(driven > quiet);
     assert.ok(driven >= -1 && driven <= 1);
+  });
+});
+
+describe("analog correlator and Schmitt", () => {
+  it("correlator leaks toward the analog product", () => {
+    let c = 0;
+    for (let i = 0; i < 80; i++) c = analogCorrelate(0.8, 0.5, c, 0.02, 0.12);
+    assert.ok(c > 0.3);
+    assert.ok(c <= 0.4 + 1e-6);
+  });
+  it("anticorrelated traces go negative", () => {
+    let c = 0;
+    for (let i = 0; i < 80; i++) c = analogCorrelate(0.9, -0.7, c, 0.02);
+    assert.ok(c < -0.3);
+  });
+  it("Schmitt holds through the hysteresis band", () => {
+    assert.equal(analogSchmitt(-0.04, 1, 0.08), 1);
+    assert.equal(analogSchmitt(-0.2, 1, 0.08), -1);
+    assert.equal(analogSchmitt(0.04, -1, 0.08), -1);
+    assert.equal(analogSchmitt(0.2, -1, 0.08), 1);
+  });
+  it("jack includes correlator when driven", () => {
+    const base = analogCircuit(0.5, 0, 0, 0);
+    const withCorr = analogCircuit(0.5, 0, 0, 0.8);
+    const quiet = analogJack(withCorr, 0, 0);
+    const driven = analogJack(withCorr, 0, 1);
+    const drivenNo = analogJack(base, 0, 1);
+    assert.ok(Math.abs(quiet - 0.5 * 0.55) < 1e-9);
+    assert.ok(driven > drivenNo);
   });
 });
