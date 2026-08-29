@@ -15,7 +15,7 @@ export const Route = createRootRoute({
       {
         name: "description",
         content:
-          "NEXUS MK-II — holographic analog computer. Six programs, five-organ analog anatomy, WILLAY second brain, optical 3-factor STDP, Ouroboros, Hatun telemetry, phosphor CRT.",
+          "NEXUS MK-II — holographic analog computer. Six programs, analog circuits, five-organ anatomy, WILLAY second brain, optical 3-factor STDP, Ouroboros, Hatun telemetry, phosphor CRT.",
       },
     ],
     links: [

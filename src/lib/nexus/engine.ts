@@ -27,7 +27,7 @@ import {
   type Waveform,
 } from "./types";
 import { loadPersisted, scheduleSave, type PersistedState } from "./store";
-import { euclid, funcGenStep, midiToHz, analogCell, analogCoefficients, analogStep, scaleAnalog, seedAnalogState, opticalInterfere, opticalReconstruct, type AnalogState } from "./math";
+import { euclid, funcGenStep, midiToHz, analogCell, analogCircuit, analogCoefficients, analogJack, analogStep, scaleAnalog, seedAnalogState, opticalInterfere, opticalReconstruct, type AnalogState } from "./math";
 import {
   analogDelta,
   appendReceipt,
@@ -218,6 +218,7 @@ class NexusEngine {
   private holoI = 0;
   private holoR = 0;
   private analogLast = 0;
+  private lastNx = 0;
   private repAcc = 0;
   private trail = new Float32Array(1800);
   private trailWrite = 0;
@@ -348,6 +349,7 @@ class NexusEngine {
     const program = this.snapshot.analog.program ?? "lorenz";
     const coef = analogCoefficients(this.snapshot.analog.chaos, program);
     const cell = analogCell(this.nx, this.ny, COLS, ROWS);
+    const ckt = analogCircuit(this.nx, this.ny, this.nz);
     return {
       x: this.nx,
       y: this.ny,
@@ -357,6 +359,7 @@ class NexusEngine {
       recon: this.holoR,
       program,
       bank: this.analog.bank,
+      ...ckt,
       ...cell,
       ...coef,
     };
@@ -791,6 +794,7 @@ class NexusEngine {
     this.fgUp = true;
     this.holoI = 0;
     this.holoR = 0;
+    this.lastNx = 0;
     this.trailWrite = 0;
     this.trailLen = 0;
     this.repAcc = 0;
@@ -861,20 +865,33 @@ class NexusEngine {
     if (!this.ctx) return;
     const a = this.snapshot.analog;
     const v = this.snapshot.voice;
+    const ckt = analogCircuit(this.nx, this.ny, this.nz);
+    let jack = analogJack(ckt, this.holoR, a.drive);
+    if (a.program === "nemo" && this.analog.bank && this.analog.bank.length >= 2) {
+      const heart = analogCircuit((this.analog.bank[1]! + 70) / 55, 0, 0).intg;
+      jack = Math.max(-1, Math.min(1, jack + 0.12 * a.drive * heart));
+    }
     if (this.anlgHold) {
-      this.anlgHold.offset.setTargetAtTime(this.nx, now, 0.02);
+      this.anlgHold.offset.setTargetAtTime(jack, now, 0.02);
       this.funcHold.offset.setTargetAtTime(this.fg * 2 - 1, now, 0.015);
     }
+    if (this.lastNx * this.nx < 0 && this.shHold) {
+      this.shHold.offset.setValueAtTime(ckt.mul, now);
+    }
+    this.lastNx = this.nx;
     if (!this.snapshot.frontier) return;
     const drive = a.drive;
-    const cut = Math.max(80, Math.min(8000, v.cutoff * (0.55 + 0.45 * this.fg) * (1 + this.nx * drive * 0.85)));
-    const pan = Math.max(-1, Math.min(1, v.pan + this.ny * drive * 0.9));
+    const cut = Math.max(80, Math.min(8000, v.cutoff * (0.55 + 0.45 * this.fg) * (1 + ckt.intg * drive * 0.85)));
+    const pan = Math.max(-1, Math.min(1, v.pan + ckt.inv * drive * 0.55 + this.ny * drive * 0.35));
     const fold = Math.max(0, Math.min(1, v.fold + this.nz * drive * 0.22 + this.holoR * drive * 0.18));
     this.filterA.frequency.setTargetAtTime(cut, now, 0.05);
     this.filterB.frequency.setTargetAtTime(cut * 0.96, now, 0.05);
     this.masterPan.pan.setTargetAtTime(pan, now, 0.06);
     this.foldWet.gain.setTargetAtTime(fold, now, 0.08);
     this.foldDry.gain.setTargetAtTime(Math.max(0.12, 1 - fold * 0.78), now, 0.08);
+    if (this.ringOsc) {
+      this.ringOsc.frequency.setTargetAtTime(110 + Math.abs(ckt.mul) * 520, now, 0.1);
+    }
     if (this.snapshot.tape.motor) {
       const t = this.snapshot.tape.time;
       const zmod = 1 + this.nz * drive * 0.2;
@@ -1081,7 +1098,7 @@ class NexusEngine {
         arp: true,
         playing: wasPlaying,
       },
-      analog: { rate: 0.68, chaos: 0.64, drive: 0.78, cycle: true, mode: "op", program: "lorenz" },
+      analog: { rate: 0.68, chaos: 0.64, drive: 0.78, cycle: true, mode: "op", program: "nemo" },
       steps,
       grid,
       patches: FRONTIER_PATCHES.map((p) => ({ ...p })),
