@@ -1,11 +1,13 @@
 # NEXUS MK-III — Hugging Face Space (port 7860)
 # Explicit COPY sources: the org deployer forbids bare `COPY .`.
-FROM mirror.gcr.io/library/node:22-bookworm-slim
+FROM node:22-bookworm-slim
 
-# Bust the leftover MK-II python factory cache on first MK-III rebuild.
-ARG HF_CACHE_BUST=mkiii-2
+# Bust leftover MK-II factory cache after the python -> node switch.
+ARG HF_CACHE_BUST=mkiii-3
 
 WORKDIR /app
+
+ENV npm_config_cache=/tmp/npm-cache
 
 COPY package.json package-lock.json ./
 RUN npm ci
