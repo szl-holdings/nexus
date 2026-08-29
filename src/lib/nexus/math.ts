@@ -1,3 +1,5 @@
+import type { AnalogProgram } from "./types";
+
 export function midiToHz(m: number) {
   return 440 * Math.pow(2, (m - 69) / 12);
 }
@@ -25,6 +27,19 @@ export interface LorenzState {
   z: number;
 }
 
+export interface AnalogState {
+  x: number;
+  y: number;
+  z: number;
+  t: number;
+  /** NEMO: 5 membranes + 5 recovery + 5 synaptic traces. Absent on other programs. */
+  bank?: number[];
+}
+
+function clamp01(c: number) {
+  return Math.min(1, Math.max(0, c));
+}
+
 export function seedLorenz(nudge = 0): LorenzState {
   return {
     x: 0.12 + nudge * 0.31,
@@ -33,19 +48,70 @@ export function seedLorenz(nudge = 0): LorenzState {
   };
 }
 
+export function seedNemoBank(nudge = 0): number[] {
+  const n = nudge % 1;
+  const v = [-65 + n * 6, -62 - n * 4, -70 + n * 5, -58 - n * 3, -67 + n * 8];
+  const u = v.map((m) => 0.2 * m);
+  return [...v, ...u, 0, 0, 0, 0, 0];
+}
+
+export function seedAnalogState(program: AnalogProgram, nudge = 0): AnalogState {
+  const n = nudge % 1;
+  if (program === "harmonic") return { x: 1, y: 0.02 + n * 0.08, z: 0.5, t: 0 };
+  if (program === "vanderpol") return { x: 0.12 + n * 0.2, y: 0.04, z: 0.4, t: 0 };
+  if (program === "duffing") return { x: 0.18 + n * 0.12, y: 0, z: 0.5, t: 0 };
+  if (program === "lotka") return { x: 1.15 + n * 0.25, y: 0.82 + n * 0.12, z: 0.5, t: 0 };
+  if (program === "nemo") {
+    const bank = seedNemoBank(nudge);
+    return { x: bank[0] ?? -65, y: bank[2] ?? -70, z: 0.06, t: 0, bank };
+  }
+  const L = seedLorenz(nudge);
+  return { x: L.x, y: L.y, z: L.z, t: 0 };
+}
+
 /** Coefficient pots: σ fixed, ρ from chaos 0–1, β classic 8/3. */
-export function analogCoefficients(chaos: number) {
-  const c = Math.min(1, Math.max(0, chaos));
+export function analogCoefficients(chaos: number, program: AnalogProgram = "lorenz") {
+  const c = clamp01(chaos);
+  if (program === "harmonic") {
+    const omega = 1 + c * 3;
+    return { sigma: 10, rho: 18 + c * 22, beta: 8 / 3, omega, mu: 0, delta: 0, gamma: 0, alpha: 0, label: `ω ${omega.toFixed(2)}` };
+  }
+  if (program === "vanderpol") {
+    const mu = 0.25 + c * 2.7;
+    return { sigma: 10, rho: 18 + c * 22, beta: 8 / 3, omega: 1, mu, delta: 0, gamma: 0, alpha: 0, label: `μ ${mu.toFixed(2)}` };
+  }
+  if (program === "duffing") {
+    const delta = 0.08 + c * 0.32;
+    const gamma = 0.18 + c * 0.55;
+    return { sigma: 10, rho: 18 + c * 22, beta: 8 / 3, omega: 1.2, mu: 0, delta, gamma, alpha: 0, label: `δ ${delta.toFixed(2)} · γ ${gamma.toFixed(2)}` };
+  }
+  if (program === "lotka") {
+    const alpha = 0.85 + c * 0.55;
+    const beta = 0.42 + c * 0.7;
+    return { sigma: 10, rho: 18 + c * 22, beta: 8 / 3, omega: 1, mu: 0, delta: 0.4 + c * 0.35, gamma: 0.62, alpha, label: `α ${alpha.toFixed(2)} · β ${beta.toFixed(2)}` };
+  }
+  if (program === "nemo") {
+    const a = 0.02 + c * 0.08;
+    const w = 3.5 + c * 14;
+    const tau = 3 + (1 - c) * 9;
+    return { sigma: 10, rho: 18 + c * 22, beta: 8 / 3, omega: 1, mu: a, delta: w, gamma: tau, alpha: 0.2, label: `a ${a.toFixed(3)} · w ${w.toFixed(1)}` };
+  }
   return {
     sigma: 10,
     rho: 18 + c * 22,
     beta: 8 / 3,
+    omega: 1,
+    mu: 0,
+    delta: 0,
+    gamma: 0,
+    alpha: 0,
+    label: `σ 10 · ρ ${(18 + c * 22).toFixed(1)} · β ${(8 / 3).toFixed(2)}`,
   };
 }
 
 /** One integration tick of the Lorenz analog computer. `chaos` 0–1 maps ρ. */
 export function lorenzStep(s: LorenzState, dt: number, chaos: number): LorenzState {
-  const { sigma, rho, beta } = analogCoefficients(chaos);
+  const { sigma, rho, beta } = analogCoefficients(chaos, "lorenz");
   let { x, y, z } = s;
   const n = 4;
   const h = Math.max(0.0004, Math.min(0.08, dt)) / n;
@@ -61,12 +127,102 @@ export function lorenzStep(s: LorenzState, dt: number, chaos: number): LorenzSta
   return { x, y, z };
 }
 
+export function analogStep(program: AnalogProgram, s: AnalogState, dt: number, chaos: number, drive = 0.5): AnalogState {
+  if (program === "nemo") return analogNemoStep(s, dt, chaos, drive);
+  const pots = analogCoefficients(chaos, program);
+  const n = 4;
+  const h = Math.max(0.0004, Math.min(0.08, dt)) / n;
+  let { x, y, z, t } = s;
+  for (let i = 0; i < n; i++) {
+    let dx = 0;
+    let dy = 0;
+    let dz = 0;
+    if (program === "harmonic") {
+      const w2 = pots.omega * pots.omega;
+      dx = y;
+      dy = -w2 * x;
+      dz = 0;
+    } else if (program === "vanderpol") {
+      dx = y;
+      dy = pots.mu * (1 - x * x) * y - x;
+      dz = 0;
+    } else if (program === "duffing") {
+      const force = pots.gamma * (0.45 + drive * 0.7) * Math.cos(pots.omega * t);
+      dx = y;
+      dy = x - x * x * x - pots.delta * y + force;
+      dz = 0;
+    } else if (program === "lotka") {
+      const prey = Math.max(0.02, x);
+      const pred = Math.max(0.02, y);
+      dx = pots.alpha * prey - pots.beta * prey * pred;
+      dy = pots.delta * prey * pred - pots.gamma * pred;
+      dz = 0;
+    } else {
+      dx = pots.sigma * (y - x);
+      dy = x * (pots.rho - z) - y;
+      dz = x * y - pots.beta * z;
+    }
+    x += dx * h;
+    y += dy * h;
+    z += dz * h;
+    t += h;
+  }
+  if (program === "lotka") {
+    x = Math.max(0.02, x);
+    y = Math.max(0.02, y);
+  }
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z) || !Number.isFinite(t)) {
+    return seedAnalogState(program);
+  }
+  return { x, y, z, t };
+}
+
 export function scaleLorenz(s: LorenzState) {
   return {
     x: Math.max(-1, Math.min(1, s.x / 24)),
     y: Math.max(-1, Math.min(1, s.y / 24)),
     z: Math.max(0, Math.min(1, s.z / 48)),
   };
+}
+
+export function scaleAnalog(program: AnalogProgram, s: AnalogState) {
+  if (program === "harmonic") {
+    const e = 0.5 * (s.y * s.y + s.x * s.x);
+    return {
+      x: Math.max(-1, Math.min(1, s.x)),
+      y: Math.max(-1, Math.min(1, s.y / 3)),
+      z: Math.max(0, Math.min(1, e * 0.5)),
+    };
+  }
+  if (program === "vanderpol") {
+    return {
+      x: Math.max(-1, Math.min(1, s.x / 2.4)),
+      y: Math.max(-1, Math.min(1, s.y / 3.2)),
+      z: Math.max(0, Math.min(1, (s.x * s.x + s.y * s.y) / 10)),
+    };
+  }
+  if (program === "duffing") {
+    return {
+      x: Math.max(-1, Math.min(1, s.x / 2)),
+      y: Math.max(-1, Math.min(1, s.y / 2.4)),
+      z: Math.max(0, Math.min(1, 0.5 + 0.5 * Math.sin(s.t))),
+    };
+  }
+  if (program === "lotka") {
+    return {
+      x: Math.max(-1, Math.min(1, (s.x - 1.4) / 1.8)),
+      y: Math.max(-1, Math.min(1, (s.y - 1.1) / 1.6)),
+      z: Math.max(0, Math.min(1, (s.x + s.y) / 6)),
+    };
+  }
+  if (program === "nemo") {
+    return {
+      x: Math.max(-1, Math.min(1, (s.x + 45) / 40)),
+      y: Math.max(-1, Math.min(1, (s.y + 45) / 40)),
+      z: Math.max(0, Math.min(1, s.z)),
+    };
+  }
+  return scaleLorenz(s);
 }
 
 export function analogCell(x: number, y: number, cols: number, rows: number) {
@@ -103,4 +259,87 @@ export function funcGenStep(
     }
   }
   return { value: v, rising: up };
+}
+
+/** Two-beam analog optical inner product. Not a digital FFT. Energy UNAVAILABLE. */
+export function opticalInterfere(objAmp: number, objPhase: number, refAmp: number, refPhase: number) {
+  const ao = Math.max(0, objAmp);
+  const ar = Math.max(0, refAmp);
+  const I = ao * ao + ar * ar + 2 * ao * ar * Math.cos(objPhase - refPhase);
+  return Number.isFinite(I) ? Math.max(0, I) : 0;
+}
+
+/** First-order diffraction as a signed analog voltage. */
+export function opticalReconstruct(intensity: number, dphi: number) {
+  const v = intensity * Math.cos(dphi);
+  if (!Number.isFinite(v)) return 0;
+  return Math.max(-1, Math.min(1, v / 2));
+}
+
+/**
+ * Analog neuromorphic core. Five Izhikevich-style quadratic integrators
+ * (IEEE TNN 2003 RS→CH via Chaos), exponential synaptic traces
+ * (BrainScaleS-2 analog synapse), opticalInterfere as photonic ring coupling.
+ * Not a physical Loihi / BrainScaleS chip. Energy UNAVAILABLE.
+ */
+function analogNemoStep(s: AnalogState, dt: number, chaos: number, drive: number): AnalogState {
+  const c = clamp01(chaos);
+  const pots = analogCoefficients(c, "nemo");
+  const aRec = pots.mu;
+  const b = 0.2;
+  const cReset = -65 + c * 15;
+  const dJump = 8 - c * 6;
+  const w = pots.delta;
+  const tau = Math.max(1.4, pots.gamma);
+  const I0 = 1.2 + drive * 13.5;
+  const healthy = s.bank && s.bank.length === 15 && s.bank.every((n) => Number.isFinite(n));
+  const bank = healthy ? s.bank!.slice() : seedNemoBank();
+  let rate = Number.isFinite(s.z) ? Math.max(0, Math.min(1, s.z)) : 0;
+  let t = Number.isFinite(s.t) ? s.t : 0;
+  const totalMs = Math.max(0.25, Math.min(80, dt * 1000));
+  const n = Math.max(4, Math.min(48, Math.ceil(totalMs / 0.5)));
+  const h = totalMs / n;
+
+  for (let k = 0; k < n; k++) {
+    const I = [0, 0, 0, 0, 0];
+    for (let i = 0; i < 5; i++) {
+      const opp = (i + 2) % 5;
+      const ao = Math.max(0, (bank[i]! + 70) / 110);
+      const ar = Math.max(0, (bank[opp]! + 70) / 110);
+      const Iopt = opticalInterfere(ao, bank[i]! * 0.035, ar, bank[opp]! * 0.035);
+      I[i] = bank[10 + i]! + Iopt * (1.1 + drive * 0.9) + (i === 0 ? I0 : 0.8 + drive * 2.4);
+    }
+    const fired: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      let vi = bank[i]!;
+      let ui = bank[5 + i]!;
+      let si = bank[10 + i]!;
+      const dv = 0.04 * vi * vi + 5 * vi + 140 - ui + I[i]!;
+      const du = aRec * (b * vi - ui);
+      vi += dv * h;
+      ui += du * h;
+      si += (-si / tau) * h;
+      if (vi >= 30) {
+        vi = cReset;
+        ui += dJump;
+        fired.push(i);
+      }
+      bank[i] = Math.max(-90, Math.min(40, vi));
+      bank[5 + i] = Math.max(-40, Math.min(80, ui));
+      bank[10 + i] = Math.max(0, Math.min(48, si));
+    }
+    for (const i of fired) {
+      const post = (i + 1) % 5;
+      bank[10 + post] = Math.min(48, (bank[10 + post] ?? 0) + w);
+    }
+    const decay = Math.exp(-h / 38);
+    rate = rate * decay + (fired.length / 5) * (1 - decay) * 10;
+    if (rate > 1) rate = 1;
+    t += h * 0.001;
+    if (!Number.isFinite(bank[0]) || !Number.isFinite(rate) || !Number.isFinite(t)) {
+      return seedAnalogState("nemo");
+    }
+  }
+
+  return { x: bank[0]!, y: bank[2]!, z: rate, t, bank };
 }

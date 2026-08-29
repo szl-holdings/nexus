@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { ModuleId } from "@/lib/nexus/types";
+import { ANALOG_PROGRAMS } from "@/lib/nexus/types";
 import { LOCKED_EIGHT, LOCKED_NOTE } from "@/lib/nexus/kernel";
 import { engine, useEngine } from "@/lib/nexus/use-engine";
 import { Grid } from "./Grid";
@@ -433,7 +434,7 @@ function SignalStrip() {
       <OrganRail />
       <span className="basis-full font-mono text-micro tabular-nums text-amber sm:ml-auto sm:basis-auto">
         {Math.round(snap.seq.bpm)} BPM · {snap.voice.waveform.toUpperCase()} · {snap.scopeMode.toUpperCase()}
-        {snap.frontier ? ` · FRONTIER · ${(snap.analog.mode ?? "op").toUpperCase()}` : ""}
+        {snap.frontier ? ` · FRONTIER · ${ANALOG_PROGRAMS.find((p) => p.id === (snap.analog.program ?? "lorenz"))?.label ?? "LRNZ"} · ${(snap.analog.mode ?? "op").toUpperCase()}` : ""}
         {snap.muted ? " · F12 MUTE" : ""}
         {snap.seq.arp ? " · ARP" : ""}
         {snap.voice.fold > 0.05 ? " · FOLD" : ""}
@@ -565,7 +566,7 @@ function PowerGate({
     <div className="relative z-10 flex min-h-dvh w-full flex-col items-center justify-center gap-6 px-6 text-center">
       <p className="nx-wordmark text-4xl sm:text-6xl">Nexus</p>
       <p className="nx-label max-w-md text-pretty">
-        Holographic analog computer · Lorenz core · Ouroboros · five organs · Hatun
+        Holographic analog computer · six programs · analog neuromorphic · optical core · Ouroboros · five organs · Hatun
         <br />
         MK-II Frontier: live analog computer — IC / OP / HALT / REP — driving voice, tape, grid, and hologram
       </p>
@@ -593,15 +594,15 @@ function Help({ onClose }: { onClose: () => void }) {
       </div>
       <ul className="space-y-1.5 font-mono text-sm text-fg">
         <li>
-          <kbd>F</kbd> Frontier — live Lorenz analog computer. Shift-F disengages. Press again to reseed the loop.
+          <kbd>F</kbd> Frontier — live analog computer. Shift-F disengages. Press again to reseed the loop.
         </li>
-        <li>IC holds initial conditions. OP integrates. HALT freezes. REP reseeds the attractor.</li>
+        <li>Programs: LRNZ · HARM · VDP · DFFG · LTKA · NEMO. IC holds. OP integrates. HALT freezes. REP reseeds.</li>
         <li>X Y Z FG Λ meters. Attack / Release are the function generator rise and fall.</li>
         <li>
           Patch <span className="text-phosphor">ANLG</span> and <span className="text-phosphor">FUNC</span> into VCF or PAN
         </li>
         <li>
-          <kbd>Tab</kbd> cycle scope Y-T / X-Y / FFT / HOLO — hologram is the attractor plus five organs
+          <kbd>Tab</kbd> cycle scope Y-T / X-Y / FFT / HOLO — hologram is two-beam optical analog plus five organs
         </li>
         <li>Ouroboros taxes the VCA in Frontier. Eight bars, then the loop closes. Run starts another.</li>
         <li>F19 fail-closed: a DOWN organ mutes the VCA. Master cannot compensate. Energy stays UNAVAILABLE.</li>
@@ -623,7 +624,7 @@ function Help({ onClose }: { onClose: () => void }) {
         <li>
           <kbd>?</kbd> this legend
         </li>
-        <li>Grid: tap cells to write. Analog pen tracks Lorenz X×Y. Tape play engages echo. Patch cables reroute the chain.</li>
+        <li>Grid: tap cells to write. Analog pen tracks analog X×Y. Tape play engages echo. Patch cables reroute the chain.</li>
       </ul>
     </div>
   );

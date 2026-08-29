@@ -1,7 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { analogCell, analogCoefficients, euclid, funcGenStep, lorenzStep, midiToHz, scaleLorenz, seedLorenz } from "./math.ts";
+import { analogCell, analogCoefficients, analogStep, euclid, funcGenStep, lorenzStep, midiToHz, opticalInterfere, opticalReconstruct, scaleAnalog, scaleLorenz, seedAnalogState, seedLorenz } from "./math.ts";
 import {
+  ANALOG_PROGRAMS,
   COLS,
   DEFAULT_ANALOG,
   emptyGrid,
@@ -126,6 +127,9 @@ describe("defaults", () => {
     assert.ok(FRONTIER_PATCHES.some((p) => p.from === "vco" && p.to === "vcf"));
     assert.ok(FRONTIER_PATCHES.some((p) => p.from === "vca" && p.to === "out"));
     assert.equal(DEFAULT_ANALOG.mode, "op");
+    assert.equal(DEFAULT_ANALOG.program, "lorenz");
+    assert.equal(ANALOG_PROGRAMS.length, 6);
+    assert.equal(ANALOG_PROGRAMS[5]?.id, "nemo");
   });
   it("default and frontier patches have no F4 instant cycle", () => {
     assert.equal(instantCycles(DEFAULT_PATCHES).length, 0);
@@ -135,5 +139,88 @@ describe("defaults", () => {
     const leak = yarqaLeak(FRONTIER_PATCHES);
     assert.ok(leak > 0);
     assert.ok(leak < 1);
+  });
+});
+
+describe("analog computer programs", () => {
+  it("harmonic oscillator stays finite and changes sign", () => {
+    let s = seedAnalogState("harmonic");
+    let sawNeg = false;
+    let sawPos = false;
+    for (let i = 0; i < 2400; i++) s = analogStep("harmonic", s, 0.012, 0.4);
+    for (let i = 0; i < 800; i++) {
+      s = analogStep("harmonic", s, 0.012, 0.4);
+      if (s.x < 0) sawNeg = true;
+      if (s.x > 0) sawPos = true;
+    }
+    assert.equal(Number.isFinite(s.x) && Number.isFinite(s.y), true);
+    assert.equal(sawNeg && sawPos, true);
+    const n = scaleAnalog("harmonic", s);
+    assert.ok(n.x >= -1 && n.x <= 1);
+  });
+
+  it("van der Pol stays bounded", () => {
+    let s = seedAnalogState("vanderpol", 0.2);
+    for (let i = 0; i < 3000; i++) s = analogStep("vanderpol", s, 0.01, 0.55);
+    assert.ok(Math.abs(s.x) < 8 && Math.abs(s.y) < 12);
+  });
+
+  it("Duffing stays finite under drive", () => {
+    let s = seedAnalogState("duffing");
+    for (let i = 0; i < 2500; i++) s = analogStep("duffing", s, 0.01, 0.7, 0.8);
+    assert.equal(Number.isFinite(s.x) && Number.isFinite(s.y) && Number.isFinite(s.t), true);
+  });
+
+  it("Lotka-Volterra prey and predator stay positive", () => {
+    let s = seedAnalogState("lotka", 0.1);
+    for (let i = 0; i < 2500; i++) s = analogStep("lotka", s, 0.01, 0.45);
+    assert.ok(s.x > 0 && s.y > 0);
+  });
+
+  it("NEMO analog neuromorphic core stays finite and spikes under drive", () => {
+    let s = seedAnalogState("nemo", 0.2);
+    assert.equal(s.bank?.length, 15);
+    let resets = 0;
+    let prev = s.x;
+    for (let i = 0; i < 2400; i++) {
+      s = analogStep("nemo", s, 0.002, 0.45, 0.92);
+      if (s.x < prev - 20) resets++;
+      prev = s.x;
+    }
+    assert.equal(Number.isFinite(s.x) && Number.isFinite(s.y) && Number.isFinite(s.z), true);
+    assert.ok(resets > 8, `expected spikes, got ${resets}`);
+    assert.equal(s.bank?.length, 15);
+    const n = scaleAnalog("nemo", s);
+    assert.ok(n.x >= -1 && n.x <= 1);
+    assert.ok(n.y >= -1 && n.y <= 1);
+    assert.ok(n.z >= 0 && n.z <= 1);
+  });
+
+  it("NEMO synaptic traces decay with no drive", () => {
+    let s = seedAnalogState("nemo");
+    const bank = (s.bank ?? []).slice();
+    for (let i = 10; i < 15; i++) bank[i] = 12;
+    s = { ...s, bank };
+    for (let i = 0; i < 80; i++) s = analogStep("nemo", s, 0.002, 0, 0);
+    const traces = (s.bank ?? []).slice(10, 15);
+    assert.ok(traces.every((v) => v < 8), `traces should leak, got ${traces.join(",")}`);
+    assert.ok(s.x < 0, "membrane should rest subthreshold without drive");
+  });
+});
+
+describe("optical analog inner product", () => {
+  it("constructive interference is (Ao+Ar)^2", () => {
+    const I = opticalInterfere(0.6, 0, 0.4, 0);
+    assert.ok(Math.abs(I - 1) < 1e-9);
+  });
+  it("destructive interference is (Ao-Ar)^2", () => {
+    const I = opticalInterfere(0.6, 0, 0.4, Math.PI);
+    assert.ok(Math.abs(I - 0.04) < 1e-9);
+  });
+  it("reconstruction is signed and finite", () => {
+    const I = opticalInterfere(0.7, 0.3, 0.5, 1.1);
+    const r = opticalReconstruct(I, 0.3 - 1.1);
+    assert.equal(Number.isFinite(r), true);
+    assert.ok(r >= -1 && r <= 1);
   });
 });

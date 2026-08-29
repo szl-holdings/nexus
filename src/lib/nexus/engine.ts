@@ -27,7 +27,7 @@ import {
   type Waveform,
 } from "./types";
 import { loadPersisted, scheduleSave, type PersistedState } from "./store";
-import { euclid, funcGenStep, lorenzStep, midiToHz, scaleLorenz, seedLorenz, analogCell, analogCoefficients, type LorenzState } from "./math";
+import { euclid, funcGenStep, midiToHz, analogCell, analogCoefficients, analogStep, scaleAnalog, seedAnalogState, opticalInterfere, opticalReconstruct, type AnalogState } from "./math";
 import {
   analogDelta,
   appendReceipt,
@@ -209,12 +209,14 @@ class NexusEngine {
   private anlgOut!: GainNode;
   private funcHold!: ConstantSourceNode;
   private funcOut!: GainNode;
-  private lorenz: LorenzState = seedLorenz();
+  private analog: AnalogState = seedAnalogState("lorenz");
   private nx = 0;
   private ny = 0;
   private nz = 0.4;
   private fg = 0;
   private fgUp = true;
+  private holoI = 0;
+  private holoR = 0;
   private analogLast = 0;
   private repAcc = 0;
   private trail = new Float32Array(1800);
@@ -343,9 +345,20 @@ class NexusEngine {
     return this.stepIndex;
   }
   getAnalog() {
-    const coef = analogCoefficients(this.snapshot.analog.chaos);
+    const program = this.snapshot.analog.program ?? "lorenz";
+    const coef = analogCoefficients(this.snapshot.analog.chaos, program);
     const cell = analogCell(this.nx, this.ny, COLS, ROWS);
-    return { x: this.nx, y: this.ny, z: this.nz, fg: this.fg, ...cell, ...coef };
+    return {
+      x: this.nx,
+      y: this.ny,
+      z: this.nz,
+      fg: this.fg,
+      holo: this.holoI,
+      recon: this.holoR,
+      program,
+      ...cell,
+      ...coef,
+    };
   }
   getAnalogTrail() {
     return { data: this.trail, write: this.trailWrite, len: this.trailLen, cap: 600, stride: 3 as const };
@@ -771,14 +784,17 @@ class NexusEngine {
   }
 
   seedAnalog(nudge = Math.random()) {
-    this.lorenz = seedLorenz(nudge);
+    const program = this.snapshot.analog.program ?? "lorenz";
+    this.analog = seedAnalogState(program, nudge);
     this.fg = 0;
     this.fgUp = true;
+    this.holoI = 0;
+    this.holoR = 0;
     this.trailWrite = 0;
     this.trailLen = 0;
     this.repAcc = 0;
     this.analogLast = this.ctx?.currentTime ?? 0;
-    const scaled = scaleLorenz(this.lorenz);
+    const scaled = scaleAnalog(program, this.analog);
     this.nx = scaled.x;
     this.ny = scaled.y;
     this.nz = scaled.z;
@@ -794,6 +810,7 @@ class NexusEngine {
     const a = this.snapshot.analog;
     const v = this.snapshot.voice;
     const mode = a.mode ?? "op";
+    const program = a.program ?? "lorenz";
 
     if (mode === "rep") {
       this.repAcc += dt;
@@ -807,8 +824,8 @@ class NexusEngine {
     const frozen = mode === "ic" || mode === "halt";
     if (!frozen) {
       const speed = 0.28 + a.rate * 1.9;
-      this.lorenz = lorenzStep(this.lorenz, dt * speed, a.chaos);
-      const scaled = scaleLorenz(this.lorenz);
+      this.analog = analogStep(program, this.analog, dt * speed, a.chaos, a.drive);
+      const scaled = scaleAnalog(program, this.analog);
       this.nx = scaled.x;
       this.ny = scaled.y;
       this.nz = scaled.z;
@@ -822,6 +839,12 @@ class NexusEngine {
         this.fgUp = next.rising;
         if (!next.rising && next.value <= 0) this.fgUp = false;
       }
+      const objA = Math.hypot(this.nx, this.ny) * 0.55 + 0.12;
+      const objP = Math.atan2(this.ny, this.nx);
+      const refA = 0.28 + this.fg * 0.5;
+      const refP = this.nz * Math.PI * 2;
+      this.holoI = opticalInterfere(objA, objP, refA, refP);
+      this.holoR = opticalReconstruct(this.holoI, objP - refP);
       const wi = this.trailWrite * 3;
       this.trail[wi] = this.nx;
       this.trail[wi + 1] = this.ny;
@@ -845,7 +868,7 @@ class NexusEngine {
     const drive = a.drive;
     const cut = Math.max(80, Math.min(8000, v.cutoff * (0.55 + 0.45 * this.fg) * (1 + this.nx * drive * 0.85)));
     const pan = Math.max(-1, Math.min(1, v.pan + this.ny * drive * 0.9));
-    const fold = Math.max(0, Math.min(1, v.fold + this.nz * drive * 0.28));
+    const fold = Math.max(0, Math.min(1, v.fold + this.nz * drive * 0.22 + this.holoR * drive * 0.18));
     this.filterA.frequency.setTargetAtTime(cut, now, 0.05);
     this.filterB.frequency.setTargetAtTime(cut * 0.96, now, 0.05);
     this.masterPan.pan.setTargetAtTime(pan, now, 0.06);
@@ -1057,7 +1080,7 @@ class NexusEngine {
         arp: true,
         playing: wasPlaying,
       },
-      analog: { rate: 0.68, chaos: 0.64, drive: 0.78, cycle: true, mode: "op" },
+      analog: { rate: 0.68, chaos: 0.64, drive: 0.78, cycle: true, mode: "op", program: "lorenz" },
       steps,
       grid,
       patches: FRONTIER_PATCHES.map((p) => ({ ...p })),
@@ -1090,10 +1113,12 @@ class NexusEngine {
   }
 
   setAnalog(partial: Partial<AnalogParams>) {
+    const prev = this.snapshot.analog.program ?? "lorenz";
     const analog = { ...this.snapshot.analog, ...partial };
     this.snapshot = { ...this.snapshot, analog, version: this.snapshot.version + 1 };
     if (partial.mode === "ic") this.seedAnalog(0);
     if (partial.mode === "rep") this.repAcc = 0;
+    if (partial.program && partial.program !== prev) this.seedAnalog();
     for (const l of this.listeners) l();
     this.queueSave();
   }
@@ -1608,7 +1633,7 @@ class NexusEngine {
   persistNow(): PersistedState {
     const s = this.snapshot;
     return {
-      v: 4,
+      v: 5,
       voice: s.voice,
       tape: s.tape,
       seq: { ...s.seq, playing: false },
