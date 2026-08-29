@@ -153,7 +153,9 @@ function KernelVoice() {
       raf = requestAnimationFrame(tick);
       const k = engine.getKernel();
       if (ref.current) {
-        ref.current.textContent = `Λ ${k.lambda.toFixed(4)} · ${k.blocked ? "F19 FAIL-CLOSED" : "advisory"} · energy UNAVAILABLE · Conjecture 1 OPEN`;
+        ref.current.textContent = k.blocked
+          ? `Λw ${k.lambda.toFixed(4)} · F19 FAIL-CLOSED · energy UNAVAILABLE · Conjecture 1 OPEN`
+          : `Λw ${k.lambda.toFixed(4)} · Λs ${k.lambdaSym.toFixed(4)} · Λe ${k.lambdaEgy.toFixed(4)} · max ${k.maxAgg.toFixed(4)}${k.disagree ? " · DISAGREE" : ""} · energy UNAVAILABLE · Conjecture 1 OPEN`;
       }
     };
     raf = requestAnimationFrame(tick);

@@ -18,7 +18,7 @@ export const LOCKED_NOTE: Record<LockedId, { name: string; analog: string }> = {
   F11: { name: "Ayni", analog: "tape wet + dry conserve; receipts.in ≡ receipts.out" },
   F12: { name: "Fail-closed", analog: "zero axis mutes the VCA; master cannot compensate" },
   F18: { name: "Singleton bound", analog: "Euclid hits = n−k+1 on the 16-step lattice" },
-  F19: { name: "Λ geometric mean", analog: "13-axis VCA; uniqueness stays Conjecture 1" },
+  F19: { name: "Λ geometric mean", analog: "13-axis VCA; three aggregators disagree; uniqueness stays Conjecture 1" },
   F22: { name: "Monotone seq", analog: "receipt indices strictly increase" },
 };
 
@@ -95,6 +95,12 @@ export interface Invariant {
 
 export interface KernelSnap {
   lambda: number;
+  lambdaSym: number;
+  lambdaEgy: number;
+  maxAgg: number;
+  minAgg: number;
+  gap: number;
+  disagree: boolean;
   blocked: boolean;
   reason: string;
   liveCount: number;
@@ -143,7 +149,77 @@ export const ORG_AXIS_NAMES = [
 /** Canonical weights (Σ = 1.0) from a11oy szl_org_lambda.py. */
 export const ORG_AXIS_WEIGHTS = [0.12, 0.06, 0.08, 0.11, 0.06, 0.07, 0.07, 0.05, 0.08, 0.1, 0.05, 0.07, 0.08];
 
+/** Horus-Eye unit fractions (PURIQ TH_V18_04): 1/2+1/4+…+1/64 = 63/64. Remainder 1/64 on leftover axes. */
+export const HORUS_6 = [1 / 2, 1 / 4, 1 / 8, 1 / 16, 1 / 32, 1 / 64];
+export const TRUST_CEILING = 0.97;
+const PURIQ_EPS = 1e-12;
+const DISAGREE_EPS = 1e-6;
+
 const WEIGHT_EPS = 1e-9;
+
+/** Uniform 1/n. Satisfies A5 (permutation invariance). */
+export function symmetricWeights(n: number): number[] {
+  if (n <= 0) return [];
+  return Array.from({ length: n }, () => 1 / n);
+}
+
+/** Egyptian / Theorem U. First six axes take Horus-Eye; leftover share 1/64. */
+export function egyptianWeights(n: number): number[] {
+  if (n <= 0) return [];
+  if (n <= 6) {
+    const slice = HORUS_6.slice(0, n);
+    const s = slice.reduce((a, b) => a + b, 0);
+    return slice.map((w) => w / s);
+  }
+  const rem = 1 - HORUS_6.reduce((a, b) => a + b, 0);
+  const extra = rem / (n - 6);
+  return HORUS_6.concat(Array.from({ length: n - 6 }, () => extra));
+}
+
+function puriqWeighted(axes: number[], weights: number[]): number {
+  if (!axes.length) return 0;
+  let log = 0;
+  for (let i = 0; i < axes.length; i++) {
+    const x = axes[i]!;
+    const a = Number.isFinite(x) ? Math.min(1, Math.max(PURIQ_EPS, x)) : PURIQ_EPS;
+    log += (weights[i] ?? 0) * Math.log(a);
+  }
+  return Math.min(TRUST_CEILING, Math.max(0, Math.exp(log)));
+}
+
+/**
+ * PURIQ Live aggregators on the same analog 13-vector.
+ * Symmetric Λ (A5) · Egyptian Λ (Horus-Eye, Theorem U) · maxAgg (live counterexample).
+ * Disagreement does not mute the VCA. Uniqueness stays Conjecture 1.
+ */
+export function evaluatePuriq(axes: number[]) {
+  const k = axes.length;
+  const symmetric = puriqWeighted(axes, symmetricWeights(k));
+  const egyptian = puriqWeighted(axes, egyptianWeights(k));
+  let mx = 0;
+  let mn = k === 0 ? 0 : 1;
+  for (const x of axes) {
+    const a = clamp01(x);
+    if (a > mx) mx = a;
+    if (a < mn) mn = a;
+  }
+  const maxAgg = Math.min(TRUST_CEILING, mx);
+  const minAgg = Math.min(TRUST_CEILING, mn);
+  const gap = maxAgg - symmetric;
+  const disagree = Math.abs(gap) > DISAGREE_EPS || Math.abs(symmetric - egyptian) > DISAGREE_EPS;
+  return {
+    symmetric,
+    egyptian,
+    maxAgg,
+    minAgg,
+    gap,
+    disagree,
+    uniqueness: "CONJECTURE" as const,
+    note: disagree
+      ? "maxAgg ≠ Λ on the same analog vector · uniqueness OPEN"
+      : "aggregators agree this vector · uniqueness still OPEN",
+  };
+}
 
 /** F19 / Λ — weighted geometric mean Λ_w(x)=∏ xᵢ^{wᵢ}. Zero axis fail-closes. Advisory; uniqueness OPEN. */
 export function evaluateLambda(axes: number[], weights?: number[]) {
@@ -407,6 +483,12 @@ export function evaluateAnatomy(input: {
 export function emptyKernel(): KernelSnap {
   return {
     lambda: 0,
+    lambdaSym: 0,
+    lambdaEgy: 0,
+    maxAgg: 0,
+    minAgg: 0,
+    gap: 0,
+    disagree: false,
     blocked: false,
     reason: "idle",
     liveCount: 0,

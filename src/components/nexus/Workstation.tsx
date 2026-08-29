@@ -339,6 +339,9 @@ function AnalogMeters({ live }: { live: boolean }) {
   const zRef = useRef<HTMLSpanElement>(null);
   const fRef = useRef<HTMLSpanElement>(null);
   const lRef = useRef<HTMLSpanElement>(null);
+  const sRef = useRef<HTMLSpanElement>(null);
+  const eRef = useRef<HTMLSpanElement>(null);
+  const mRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     let raf = 0;
@@ -355,18 +358,24 @@ function AnalogMeters({ live }: { live: boolean }) {
       set(zRef.current, a.z);
       set(fRef.current, a.fg);
       set(lRef.current, k.lambda);
+      set(sRef.current, k.lambdaSym);
+      set(eRef.current, k.lambdaEgy);
+      set(mRef.current, k.maxAgg);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, []);
 
   return (
-    <div className={`flex items-end gap-1.5 ${live ? "opacity-100" : "opacity-40"}`} title="Analog computer X Y Z FG Λ">
+    <div className={`flex items-end gap-1.5 ${live ? "opacity-100" : "opacity-40"}`} title="Analog computer X Y Z FG · F19 Λw · PURIQ Λs Λe maxAgg · uniqueness OPEN">
       <MeterBar barRef={xRef} label="X" />
       <MeterBar barRef={yRef} label="Y" />
       <MeterBar barRef={zRef} label="Z" />
       <MeterBar barRef={fRef} label="FG" amber />
-      <MeterBar barRef={lRef} label="Λ" amber />
+      <MeterBar barRef={lRef} label="Λw" amber />
+      <MeterBar barRef={sRef} label="Λs" />
+      <MeterBar barRef={eRef} label="Λe" amber />
+      <MeterBar barRef={mRef} label="MAX" amber />
     </div>
   );
 }
@@ -453,7 +462,11 @@ function OrganRail() {
       raf = requestAnimationFrame(tick);
       const k = engine.getKernel();
       const probes = engine.getProbes();
-      if (lambdaRef.current) lambdaRef.current.textContent = `Λ ${k.lambda.toFixed(3)}`;
+      if (lambdaRef.current) {
+        lambdaRef.current.textContent = k.disagree
+          ? `Λw ${k.lambda.toFixed(3)} · DISAGREE`
+          : `Λw ${k.lambda.toFixed(3)}`;
+      }
       if (reasonRef.current) {
         reasonRef.current.textContent = k.blocked
           ? "F19 FAIL-CLOSED"
@@ -516,7 +529,7 @@ function OrganRail() {
         ))}
       </div>
       <span ref={lambdaRef} className="font-mono text-micro tabular-nums text-amber">
-        Λ {idleK.lambda.toFixed(3)}
+        Λw {idleK.lambda.toFixed(3)}
       </span>
       <span ref={reasonRef} className="nx-label">
         {idleK.liveCount}/5 · C1 OPEN

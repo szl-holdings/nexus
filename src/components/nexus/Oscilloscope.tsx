@@ -104,10 +104,9 @@ export function Oscilloscope() {
     };
   }, []);
 
-  const k = engine.getKernel();
   const caption =
     snap.scopeMode === "holo"
-      ? `HOLO · Λ ${k.lambda.toFixed(3)} · ${k.liveCount}/5 · C1 OPEN`
+      ? "HOLO"
       : snap.scopeMode === "xy"
         ? snap.frontier
           ? `LORENZ · X×Y · ${(snap.analog.mode ?? "op").toUpperCase()}`
@@ -133,9 +132,7 @@ export function Oscilloscope() {
         </div>
         <div className="relative min-h-40 w-full flex-1 overflow-hidden rounded-sm bg-[#07100c]">
           <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
-          <div className="pointer-events-none absolute left-2 top-2 font-mono text-micro tracking-widest text-phosphor-dim">
-            {caption}
-          </div>
+          <HoloCaption live={snap.scopeMode === "holo"} fallback={caption} />
         </div>
       </div>
     </ModuleFrame>
@@ -143,6 +140,31 @@ export function Oscilloscope() {
 }
 
 type Bytes = Uint8Array<ArrayBuffer>;
+
+function HoloCaption({ live, fallback }: { live: boolean; fallback: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!live) {
+      if (ref.current) ref.current.textContent = fallback;
+      return;
+    }
+    let raf = 0;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const k = engine.getKernel();
+      if (ref.current) {
+        ref.current.textContent = `HOLO · Λw ${k.lambda.toFixed(3)} · Λs ${k.lambdaSym.toFixed(3)} · Λe ${k.lambdaEgy.toFixed(3)} · max ${k.maxAgg.toFixed(3)}${k.disagree ? " · DISAGREE" : ""} · C1 OPEN`;
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [live, fallback]);
+  return (
+    <div ref={ref} className="pointer-events-none absolute left-2 top-2 font-mono text-micro tracking-widest text-phosphor-dim">
+      {fallback}
+    </div>
+  );
+}
 
 function drawYt(ctx: CanvasRenderingContext2D, w: number, h: number, time: Bytes) {
   const analyser = engine.getAnalyser();
@@ -362,19 +384,29 @@ function drawHolo(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.stroke();
 
   const heart = project(0, 0, 0);
-  const ringR = Math.min(w, h) * 0.28 * (0.78 + k.lambda * 0.14);
-  ctx.beginPath();
-  ctx.strokeStyle = k.blocked ? "rgba(196,74,56,0.45)" : "rgba(124,255,107,0.35)";
-  ctx.lineWidth = 1.2;
-  ctx.arc(heart.x, heart.y, ringR, 0, Math.PI * 2);
-  ctx.stroke();
+  const base = Math.min(w, h) * 0.28;
+  const rings: { v: number; color: string; dash: number[]; width: number }[] = [
+    { v: k.maxAgg, color: "rgba(255,176,0,0.28)", dash: [3, 3], width: 1 },
+    { v: k.lambdaEgy, color: "rgba(255,176,0,0.45)", dash: [], width: 1 },
+    { v: k.lambdaSym, color: "rgba(124,255,107,0.28)", dash: [], width: 1 },
+    { v: k.lambda, color: k.blocked ? "rgba(196,74,56,0.45)" : "rgba(124,255,107,0.55)", dash: [], width: 1.2 },
+  ];
+  for (const r of rings) {
+    ctx.beginPath();
+    ctx.setLineDash(r.dash);
+    ctx.strokeStyle = r.color;
+    ctx.lineWidth = r.width;
+    ctx.arc(heart.x, heart.y, base * (0.78 + r.v * 0.14), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
   ctx.fillStyle = k.blocked ? "rgba(196,74,56,0.7)" : "rgba(255,176,0,0.75)";
   ctx.font = "8px 'IBM Plex Mono', monospace";
   ctx.textAlign = "center";
   ctx.fillText("WILLAY", heart.x, heart.y + 14);
-  ctx.fillStyle = k.blocked ? "#c44a38" : "#ffb000";
+  ctx.fillStyle = k.blocked ? "#c44a38" : k.disagree ? "#ffb000" : "#7cff6b";
   ctx.font = "9px 'IBM Plex Mono', monospace";
-  ctx.fillText(`Λ ${k.lambda.toFixed(3)}`, heart.x, heart.y + 3);
+  ctx.fillText(k.disagree ? "DISAGREE" : `Λ ${k.lambda.toFixed(3)}`, heart.x, heart.y + 3);
 
   for (const n of nodes) {
     const rad = 5.5 * n.p.s * (n.live ? 1 : 0.7);

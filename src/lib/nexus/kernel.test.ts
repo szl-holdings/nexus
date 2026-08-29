@@ -8,15 +8,20 @@ import {
   LAMBDA_LABEL,
   ORG_AXIS_NAMES,
   ORG_AXIS_WEIGHTS,
+  HORUS_6,
+  TRUST_CEILING,
   appendReceipt,
   canalOf,
+  egyptianWeights,
   evaluateAnatomy,
   evaluateLambda,
+  evaluatePuriq,
   instantCycles,
   loopTax,
   recomputeRowHash,
   runInvariants,
   sha256Hex,
+  symmetricWeights,
   tickLoop,
   yarqaLeak,
   yuyayAxes,
@@ -262,7 +267,73 @@ describe("locked-8 analog faces", () => {
       assert.ok(LOCKED_NOTE[id].analog.length > 0);
     }
     assert.match(LOCKED_NOTE.F19.analog, /Conjecture 1/);
+    assert.match(LOCKED_NOTE.F19.analog, /three aggregators/);
     assert.match(LAMBDA_LABEL, /Conjecture 1/);
     assert.equal(CONJECTURE_1, "OPEN");
+  });
+});
+
+describe("PURIQ aggregators", () => {
+  it("Horus-Eye sums to 63/64 and Egyptian 13-weights sum to 1", () => {
+    const horus = HORUS_6.reduce((a, b) => a + b, 0);
+    assert.ok(Math.abs(horus - 63 / 64) < 1e-12);
+    const egy = egyptianWeights(13);
+    assert.equal(egy.length, 13);
+    assert.equal(egy[0], 1 / 2);
+    assert.equal(egy[5], 1 / 64);
+    assert.ok(Math.abs(egy[6]! - 1 / 448) < 1e-12);
+    const sw = egy.reduce((a, b) => a + b, 0);
+    assert.ok(Math.abs(sw - 1) < 1e-12);
+  });
+  it("symmetric is permutation-invariant (A5); Egyptian is not", () => {
+    const axes = [0.2, 0.4, 0.6, 0.8, 0.5, 0.7, 0.3, 0.9, 0.55, 0.45, 0.65, 0.35, 0.75];
+    const perm = axes.slice().reverse();
+    const a = evaluatePuriq(axes);
+    const b = evaluatePuriq(perm);
+    assert.ok(Math.abs(a.symmetric - b.symmetric) < 1e-12);
+    assert.ok(Math.abs(a.egyptian - b.egyptian) > 1e-4);
+    assert.equal(a.uniqueness, "CONJECTURE");
+    assert.equal(CONJECTURE_1, "OPEN");
+  });
+  it("maxAgg is a live counterexample on the same analog vector", () => {
+    const axes = Array.from({ length: 13 }, (_, i) => (i === 0 ? 0.2 : 0.9));
+    const p = evaluatePuriq(axes);
+    const org = evaluateLambda(axes);
+    assert.equal(p.disagree, true);
+    assert.ok(p.maxAgg > p.symmetric);
+    assert.ok(p.gap > 1e-3);
+    assert.ok(Math.abs(p.maxAgg - Math.min(TRUST_CEILING, 0.9)) < 1e-12);
+    assert.ok(Math.abs(org.value - p.symmetric) > 1e-4);
+    assert.match(p.note, /OPEN/);
+    assert.equal(p.uniqueness, "CONJECTURE");
+    assert.equal(CONJECTURE_1, "OPEN");
+  });
+  it("equal axes agree beneath the trust ceiling and never green uniqueness", () => {
+    const axes = Array.from({ length: 13 }, () => 0.8);
+    const p = evaluatePuriq(axes);
+    const org = evaluateLambda(axes);
+    assert.equal(org.blocked, false);
+    assert.ok(Math.abs(org.value - 0.8) < 1e-9);
+    assert.ok(Math.abs(p.symmetric - 0.8) < 1e-9);
+    assert.ok(Math.abs(p.egyptian - 0.8) < 1e-9);
+    assert.ok(Math.abs(p.maxAgg - 0.8) < 1e-9);
+    assert.equal(p.disagree, false);
+    assert.equal(p.uniqueness, "CONJECTURE");
+    assert.match(p.note, /still OPEN/);
+  });
+  it("trust ceiling caps PURIQ, never F19, never proves uniqueness", () => {
+    const axes = Array.from({ length: 13 }, () => 1);
+    const p = evaluatePuriq(axes);
+    const org = evaluateLambda(axes);
+    assert.ok(Math.abs(org.value - 1) < 1e-12);
+    assert.equal(p.maxAgg, TRUST_CEILING);
+    assert.equal(p.symmetric, TRUST_CEILING);
+    assert.equal(p.uniqueness, "CONJECTURE");
+    assert.equal(CONJECTURE_1, "OPEN");
+  });
+  it("symmetric weights are uniform 1/13", () => {
+    const w = symmetricWeights(13);
+    assert.equal(w.length, 13);
+    assert.ok(w.every((x) => Math.abs(x - 1 / 13) < 1e-12));
   });
 });
