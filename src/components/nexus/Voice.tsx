@@ -69,6 +69,7 @@ export function Voice() {
         <p className="nx-label">
           Analog computer · {prog} · {(a.mode ?? "op").toUpperCase()} · {coef.label}
         </p>
+        <CircuitVoice />
         <KernelVoice />
         <div className="flex flex-wrap gap-1">
           {ANALOG_PROGRAMS.map((p) => (
@@ -157,6 +158,24 @@ export function Voice() {
       </div>
     </ModuleFrame>
   );
+}
+
+function CircuitVoice() {
+  const ref = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const a = engine.getAnalog();
+      if (ref.current) {
+        const cmp = (a.cmp ?? 0) >= 0 ? "+" : "−";
+        ref.current.textContent = `INT ${(a.intg ?? 0).toFixed(2)} · Σ ${(a.sum ?? 0).toFixed(2)} · × ${(a.mul ?? 0).toFixed(2)} · INV ${(a.inv ?? 0).toFixed(2)} · CMP ${cmp}`;
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return <p ref={ref} className="nx-label tabular-nums" />;
 }
 
 function KernelVoice() {

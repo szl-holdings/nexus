@@ -245,6 +245,43 @@ export function analogCell(x: number, y: number, cols: number, rows: number) {
   };
 }
 
+/**
+ * Analog computing elements (THAT *jobs*, not the circuit): integrator,
+ * summer, multiplier, inverter, comparator as live voltages. Not a 7th module.
+ */
+export interface AnalogCircuit {
+  intg: number;
+  sum: number;
+  mul: number;
+  inv: number;
+  cmp: number;
+}
+
+function clampUnit(n: number) {
+  const v = Number.isFinite(n) ? n : 0;
+  return Math.max(-1, Math.min(1, v));
+}
+
+export function analogCircuit(x: number, y: number, z: number): AnalogCircuit {
+  const xi = clampUnit(x);
+  const yi = clampUnit(y);
+  const zi = clampUnit(z);
+  return {
+    intg: xi,
+    sum: clampUnit((xi + yi + zi) / 3),
+    mul: clampUnit(xi * yi),
+    inv: clampUnit(-xi),
+    cmp: xi >= 0 ? 1 : -1,
+  };
+}
+
+/** Analog computer output jack — summer of integrator, multiplier, optical reconstruct. */
+export function analogJack(ckt: AnalogCircuit, recon: number, drive: number): number {
+  const d = Math.min(1, Math.max(0, drive));
+  const r = clampUnit(recon);
+  return clampUnit(ckt.intg * 0.55 + ckt.mul * 0.28 * d + r * 0.22 * d);
+}
+
 export function funcGenStep(
   value: number,
   rising: boolean,

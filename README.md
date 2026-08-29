@@ -47,11 +47,11 @@ Inspired by analog computing practice (THE ANALOG THING, CRT holograms, modular 
 | **Tape Deck** | Stereo echo with wow, flutter, saturation. Analog Z modulates delay time. Bounce dumps eight seconds. |
 | **Patchbay** | Sources include **ANLG** and **FUNC**. Drag source → dest. Click a cable to pull it. |
 | **Sequencer** | 16-step clock, Euclidean hits, swing, probability, arp. Ouroboros closes the loop at eight bars in Frontier. |
-| **Voice** | Morph VCO, ladder-ish VCF, ADSR, unison, FM, folder, LFO, S&H, ring. Analog computer: **LRNZ / HARM / VDP / DFFG / LTKA / NEMO**, **IC / OP / HALT / REP**, Rate, Chaos, Drive. Λ and energy UNAVAILABLE on the panel. |
+| **Voice** | Morph VCO, ladder-ish VCF, ADSR, unison, FM, folder, LFO, S&H, ring. Analog computer: **LRNZ / HARM / VDP / DFFG / LTKA / NEMO**, **IC / OP / HALT / REP**, Rate, Chaos, Drive. Live analog circuits: integrator, summer, multiplier, inverter, comparator. Λ and energy UNAVAILABLE on the panel. |
 
 Default chain: **VCO → VCF → DELAY → VCA → OUT**. Scope taps the master bus.
 
-Frontier patch: **ANLG → VCF**, **FUNC → PAN**, **S&H → VCF**. F19: a DOWN organ mutes the VCA. Master cannot compensate.
+Frontier patch: **ANLG → VCF**, **FUNC → PAN**, **S&H → VCF**. ANLG is the analog computer jack (integrator + multiplier + WILLAY reconstruct). The analog comparator clocks S&H on integrator zero-cross. F19: a DOWN organ mutes the VCA. Master cannot compensate.
 
 ## Analog computer
 

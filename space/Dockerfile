@@ -6,7 +6,7 @@
 FROM mirror.gcr.io/library/python:3.12-slim
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PORT=7860
-ARG HF_CACHE_BUST=adex-5org-2brn-1
+ARG HF_CACHE_BUST=adex-ckt-1
 COPY server.py ./server.py
 COPY index.html ./index.html
 # Not pip-installed. Owns the leftover Lorenz-era file so flatten/prune is honest.

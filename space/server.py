@@ -176,6 +176,29 @@ def optical_reconstruct(intensity: float, dphi: float) -> float:
     return max(-1.0, min(1.0, v / 2.0))
 
 
+def analog_circuit(x: float, y: float, z: float) -> dict[str, float]:
+    """THAT analog-element *jobs* as live voltages. Not the circuit."""
+    def u(n: float) -> float:
+        v = float(n) if math.isfinite(float(n)) else 0.0
+        return max(-1.0, min(1.0, v))
+
+    xi, yi, zi = u(x), u(y), u(z)
+    return {
+        "intg": xi,
+        "sum": u((xi + yi + zi) / 3.0),
+        "mul": u(xi * yi),
+        "inv": u(-xi),
+        "cmp": 1.0 if xi >= 0 else -1.0,
+    }
+
+
+def analog_jack(ckt: dict[str, float], recon: float, drive: float) -> float:
+    d = clamp01(drive)
+    r = max(-1.0, min(1.0, float(recon) if math.isfinite(float(recon)) else 0.0))
+    v = ckt["intg"] * 0.55 + ckt["mul"] * 0.28 * d + r * 0.22 * d
+    return max(-1.0, min(1.0, v))
+
+
 def analog_nemo_step(s: dict[str, Any], dt: float, chaos: float, drive: float) -> dict[str, Any]:
     """AdEx five-organ anatomy + WILLAY optical second brain.
 
@@ -440,6 +463,7 @@ def analog_payload(data: dict) -> dict:
     intensity = optical_interfere(ao, dphi, ar, 0.0)
     recon = optical_reconstruct(intensity, dphi)
     pots = analog_coefficients(chaos, program)
+    ckt = analog_circuit(sc["x"], sc["y"], sc["z"])
     out: dict[str, Any] = {
         "program": program,
         "label": PROGRAM_LABELS[program],
@@ -450,6 +474,8 @@ def analog_payload(data: dict) -> dict:
         "pots": pots,
         "holo": intensity,
         "recon": recon,
+        "circuit": ckt,
+        "jack": analog_jack(ckt, recon, drive),
         "field": optical_field(program, last),
         "honesty": "MEASURED",
         "energy": "UNAVAILABLE",
@@ -498,7 +524,7 @@ class Handler(BaseHTTPRequestHandler):
                     "ok": True,
                     "space": "nexus",
                     "kernel": "hologram",
-                    "analog": "AdEx 5-organ anatomy + WILLAY second brain + traveling wave + 3F STDP",
+                    "analog": "AdEx 5-organ anatomy + WILLAY second brain + analog circuits + 3F STDP",
                     "programs": list(PROGRAMS),
                     "uniqueness": "Conjecture 1",
                     "energy": "UNAVAILABLE",
@@ -639,7 +665,11 @@ def selftest() -> None:
     org = organs_eval({})
     assert org["live_count"] == 0 and org["blocked"] is True
 
-    print("analog selftest ok — AdEx 5ORG, WILLAY 2BRN, traveling wave, 3F STDP, optical (Ao+Ar)²", flush=True)
+    ckt = analog_circuit(0.5, -0.4, 0.2)
+    assert abs(ckt["mul"] - -0.2) < 1e-9
+    assert analog_circuit(-0.2, 0, 0)["cmp"] == -1.0
+
+    print("analog selftest ok — AdEx 5ORG, WILLAY 2BRN, analog circuits, 3F STDP, optical (Ao+Ar)²", flush=True)
 
 
 def main() -> None:

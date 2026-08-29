@@ -1,6 +1,6 @@
 ---
 title: NEXUS
-emoji: 🎹️
+emoji: 🎛️
 colorFrom: green
 colorTo: yellow
 sdk: docker
@@ -21,7 +21,7 @@ Factory COPY resolves `server.py` and `index.html` at **repo root**. Nested `spa
 | Claim | Honesty |
 |---|---|
 | Six-program analog (LRNZ HARM VDP DFFG LTKA NEMO) | LIVE stdlib Euler, matches the instrument |
-| NEMO five-organ AdEx anatomy + WILLAY second brain + traveling wave + 3F STDP | LIVE math — **not** a physical chip |
+| NEMO five-organ AdEx anatomy + WILLAY second brain + analog circuits + 3F STDP | LIVE math — **not** a physical chip |
 | Two-beam optical analog `Ao²+Ar²+2AoAr cos(Δφ)` | LIVE |
 | Kernel organs | **UNAVAILABLE** on hologram — never fabricated LIVE |
 | Λ weighted geometric mean | advisory · uniqueness **Conjecture 1 OPEN** |

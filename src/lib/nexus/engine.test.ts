@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { analogCell, analogCoefficients, analogStep, euclid, funcGenStep, lorenzStep, midiToHz, opticalInterfere, opticalReconstruct, scaleAnalog, scaleLorenz, seedAnalogState, seedLorenz } from "./math.ts";
+import { analogCell, analogCircuit, analogCoefficients, analogJack, analogStep, euclid, funcGenStep, lorenzStep, midiToHz, opticalInterfere, opticalReconstruct, scaleAnalog, scaleLorenz, seedAnalogState, seedLorenz } from "./math.ts";
 import {
   ANALOG_PROGRAMS,
   COLS,
@@ -286,5 +286,23 @@ describe("optical analog inner product", () => {
     const r = opticalReconstruct(I, 0.3 - 1.1);
     assert.equal(Number.isFinite(r), true);
     assert.ok(r >= -1 && r <= 1);
+  });
+});
+
+describe("analog computing circuits", () => {
+  it("multiplier is analog product and inverter negates", () => {
+    const c = analogCircuit(0.5, -0.4, 0.2);
+    assert.ok(Math.abs(c.mul - -0.2) < 1e-9);
+    assert.ok(Math.abs(c.inv - -0.5) < 1e-9);
+    assert.equal(c.cmp, 1);
+    assert.equal(analogCircuit(-0.2, 0, 0).cmp, -1);
+  });
+  it("ANLG jack summers integrator, multiplier, and reconstruct", () => {
+    const c = analogCircuit(0.8, 0.5, 0);
+    const quiet = analogJack(c, 0, 0);
+    const driven = analogJack(c, 0.6, 1);
+    assert.ok(Math.abs(quiet - 0.8 * 0.55) < 1e-9);
+    assert.ok(driven > quiet);
+    assert.ok(driven >= -1 && driven <= 1);
   });
 });
