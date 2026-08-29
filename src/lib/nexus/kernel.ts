@@ -4,8 +4,54 @@
  */
 
 export const LOCKED_EIGHT = ["F1", "F4", "F7", "F11", "F12", "F18", "F19", "F22"] as const;
+export type LockedId = (typeof LOCKED_EIGHT)[number];
 export const KERNEL_COMMIT = "c7c0ba17";
 export const CONJECTURE_1 = "OPEN";
+export const LAMBDA_LABEL =
+  "ADVISORY — Λ = Conjecture 1 (open); non-compensatory roll-up, NOT proven trust";
+
+/** Analog faces of the locked-8. CHECKED ≠ Lean PROVEN. */
+export const LOCKED_NOTE: Record<LockedId, { name: string; analog: string }> = {
+  F1: { name: "Receipt integrity", analog: "same payload → same digest; replay the last burst" },
+  F4: { name: "Acyclic policy", analog: "prune instant feedback; delay loops may remain" },
+  F7: { name: "FIFO clock", analog: "drain the sequencer; playhead returns to 00" },
+  F11: { name: "Ayni", analog: "tape wet + dry conserve; receipts.in ≡ receipts.out" },
+  F12: { name: "Fail-closed", analog: "zero axis mutes the VCA; master cannot compensate" },
+  F18: { name: "Singleton bound", analog: "Euclid hits = n−k+1 on the 16-step lattice" },
+  F19: { name: "Λ geometric mean", analog: "13-axis VCA; uniqueness stays Conjecture 1" },
+  F22: { name: "Monotone seq", analog: "receipt indices strictly increase" },
+};
+
+/** YARQA canals. ANLG/FUNC live on voice — they are analog voltages into the VCF/PAN. Leak is the bound, not forbidden. */
+export const YARQA_CANALS = {
+  voice: ["vco", "noise", "lfo", "sh", "vcf", "vcfout", "anlg", "func"],
+  tape: ["tape", "delay", "tapein"],
+  out: ["grid", "vca", "pan", "scope", "out"],
+} as const;
+
+export function canalOf(port: string): "voice" | "tape" | "out" {
+  if ((YARQA_CANALS.voice as readonly string[]).includes(port)) return "voice";
+  if ((YARQA_CANALS.tape as readonly string[]).includes(port)) return "tape";
+  return "out";
+}
+
+/** Cross-canal mass. Leak is the bound — not forbidden. Tape feedback is a canal, not a crime. */
+export function yarqaLeak(patches: { from: string; to: string }[]): number {
+  if (!patches.length) return 0;
+  let leak = 0;
+  for (const p of patches) if (canalOf(p.from) !== canalOf(p.to)) leak++;
+  return leak / patches.length;
+}
+
+/** Instant (delayless) cycles — analog F4. Delay loops may remain. */
+export function instantCycles(patches: { from: string; to: string }[]): { from: string; to: string }[] {
+  const dual: Record<string, string[]> = {
+    vcfout: ["vcf"],
+    vca: ["vca"],
+    out: ["out", "vca"],
+  };
+  return patches.filter((p) => (dual[p.from] ?? []).includes(p.to));
+}
 
 export type LoopExit = "converged" | "consistent" | "aborted" | "budgetExhausted" | "running";
 export type InvStatus = "HOLDS" | "VIOLATED" | "NO_DATA" | "UNAVAILABLE";
@@ -281,10 +327,12 @@ export function evaluateAnatomy(input: {
   chainOk: boolean;
   chainHead: string;
   leak: number;
+  cycles?: number;
   fabricateJoule: boolean;
   hatunLive: boolean;
 }): { organs: Organ[]; liveCount: number; blocked: boolean; reason: string } {
-  const brainDown = input.leak > 1e-6;
+  const cycles = input.cycles ?? 0;
+  const brainDown = cycles > 0;
   const heartDown = input.lambda.blocked;
   const yawarDown = !input.chainOk;
   const nervousDown = input.fabricateJoule;
@@ -299,8 +347,8 @@ export function evaluateAnatomy(input: {
       honesty: "LIVE",
       metric: input.leak,
       detail: brainDown
-        ? `cross-canal leak ${input.leak.toExponential(2)} — YACHAY cannot reason across a broken partition`
-        : "read-only cortex · function generator · no write authority",
+        ? `F4 instant cycle · ${cycles} delayless loop(s) · YARQA leak ${input.leak.toFixed(2)} bound`
+        : `read-only cortex · YARQA leak ${input.leak.toFixed(2)} bound not forbidden · function generator`,
     },
     {
       id: "heart",

@@ -11,6 +11,7 @@ import {
   SOURCE_PORTS,
   DEST_PORTS,
 } from "./types.ts";
+import { canalOf, instantCycles, yarqaLeak } from "./kernel.ts";
 
 describe("euclid", () => {
   it("Bjorklund 5/16 has five hits", () => {
@@ -125,5 +126,14 @@ describe("defaults", () => {
     assert.ok(FRONTIER_PATCHES.some((p) => p.from === "vco" && p.to === "vcf"));
     assert.ok(FRONTIER_PATCHES.some((p) => p.from === "vca" && p.to === "out"));
     assert.equal(DEFAULT_ANALOG.mode, "op");
+  });
+  it("default and frontier patches have no F4 instant cycle", () => {
+    assert.equal(instantCycles(DEFAULT_PATCHES).length, 0);
+    assert.equal(instantCycles(FRONTIER_PATCHES).length, 0);
+    assert.equal(canalOf("anlg"), "voice");
+    assert.equal(canalOf("func"), "voice");
+    const leak = yarqaLeak(FRONTIER_PATCHES);
+    assert.ok(leak > 0);
+    assert.ok(leak < 1);
   });
 });
