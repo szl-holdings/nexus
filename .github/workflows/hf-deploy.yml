@@ -1,21 +1,14 @@
 # Copyright 2026 SZL Holdings — SPDX-License-Identifier: Apache-2.0
 name: Deploy to HuggingFace Space
 
-# Thin caller for the canonical org deployer. The file set pushed to
-# Space SZLHOLDINGS/nexus is DERIVED from the root Dockerfile COPY
-# sources (package.json, package-lock.json, then COPY . .), then
-# attested live-vs-git after the Space rebuilds. prune=true removes
-# the leftover MK-II python snapshot (server.py / index.html) that is
-# not in this git tree.
+# Canonical Space publisher is szl-holdings/yarqa `.github/workflows/deploy-nexus.yml`.
+# That repo holds HF_ORG_TOKEN. This caller does not. Do not fail-loud on a token
+# that is not bound here — that painted every merge red while the instrument
+# was already live. Skip honestly. If this repo is later granted the token,
+# the reusable deployer runs.
 #
-# include-readme = true: the repo README carries HF Space front-matter
-# and is the Space card.
-#
-# No source-revision-variable: this instrument has no /api/build-info
-# route. Do not add one as a deploy-side product change.
-#
-# Requires org/repo secret HF_ORG_TOKEN or HF_TOKEN (HF write token,
-# org write to SZLHOLDINGS). The deployer FAILS LOUDLY if it is absent.
+# Yarqa builds the Nitro node-server bundle and publishes space/Dockerfile.
+# The root Dockerfile (vite dev) is not the Space image.
 
 on:
   push:
@@ -30,7 +23,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  gate:
+    name: Publisher binding
+    runs-on: ubuntu-latest
+    outputs:
+      bound: ${{ steps.s.outputs.bound }}
+    steps:
+      - id: s
+        env:
+          HF_TOKEN: ${{ secrets.HF_ORG_TOKEN || secrets.HF_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "${HF_TOKEN:-}" ]; then
+            echo "bound=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "bound=false" >> "$GITHUB_OUTPUT"
+            echo "HF_ORG_TOKEN unbound on szl-holdings/nexus."
+            echo "Canonical Space publisher: szl-holdings/yarqa deploy-nexus.yml."
+            echo "GitHub remains source of truth. This is not a failed deploy."
+          fi
+
   deploy:
+    needs: gate
+    if: needs.gate.outputs.bound == 'true'
     uses: szl-holdings/.github/.github/workflows/reusable-hf-deploy.yml@e3ec47ad2e99a535839afe0f30fefbd8973d52da
     with:
       hf-repo: SZLHOLDINGS/nexus
