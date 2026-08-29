@@ -4,6 +4,8 @@ import {
   LOCKED_EIGHT,
   KERNEL_COMMIT,
   CONJECTURE_1,
+  ORG_AXIS_NAMES,
+  ORG_AXIS_WEIGHTS,
   appendReceipt,
   evaluateAnatomy,
   evaluateLambda,
@@ -46,6 +48,43 @@ describe("evaluateLambda", () => {
     const r = evaluateLambda(axes);
     assert.equal(r.blocked, false);
     assert.ok(r.value > 0);
+  });
+  it("canonical 13-axis weights sum to 1 and match a11oy", () => {
+    assert.equal(ORG_AXIS_NAMES.length, 13);
+    assert.equal(ORG_AXIS_WEIGHTS.length, 13);
+    const sw = ORG_AXIS_WEIGHTS.reduce((a, b) => a + b, 0);
+    assert.ok(Math.abs(sw - 1) < 1e-9);
+    assert.equal(ORG_AXIS_WEIGHTS[0], 0.12);
+    assert.equal(ORG_AXIS_WEIGHTS[3], 0.11);
+    assert.equal(ORG_AXIS_WEIGHTS[7], 0.05);
+  });
+  it("13 equal axes recover that value (homogeneous of degree 1)", () => {
+    const r = evaluateLambda(Array.from({ length: 13 }, () => 0.9));
+    assert.equal(r.blocked, false);
+    assert.ok(Math.abs(r.value - 0.9) < 1e-9);
+    assert.match(r.reason, /Conjecture 1 OPEN/);
+    assert.equal(CONJECTURE_1, "OPEN");
+  });
+  it("soundness drop hurts Λ more than fairness drop (weights are live)", () => {
+    const base = Array.from({ length: 13 }, () => 1);
+    const soundness = base.slice();
+    soundness[0] = 0.5;
+    const fairness = base.slice();
+    fairness[7] = 0.5;
+    const s = evaluateLambda(soundness);
+    const f = evaluateLambda(fairness);
+    const unweighted = Math.exp(Math.log(0.5) / 13);
+    assert.equal(s.blocked, false);
+    assert.equal(f.blocked, false);
+    assert.ok(s.value < f.value);
+    assert.ok(Math.abs(s.value - Math.pow(0.5, 0.12)) < 1e-9);
+    assert.ok(Math.abs(f.value - Math.pow(0.5, 0.05)) < 1e-9);
+    assert.ok(Math.abs(s.value - unweighted) > 1e-3);
+  });
+  it("mismatched weights fail-closed", () => {
+    const r = evaluateLambda([0.5, 0.5], [1]);
+    assert.equal(r.blocked, true);
+    assert.equal(r.value, 0);
   });
 });
 

@@ -67,7 +67,7 @@ Coefficient pots: **σ = 10**, **ρ = 18…40** (Chaos), **β = 8/3**. Rate is c
 | Organ | Quechua | Formulas | Analog face |
 | --- | --- | --- | --- |
 | BRAIN | YACHAY | F1 | Function generator. Read-only cortex. |
-| HEART | YUYAY | F4 F11 | Λ geometric mean. Zero axis fail-closes. |
+| HEART | YUYAY | F4 F11 | Λ weighted geometric mean. Zero axis fail-closes. |
 | CIRCULATORY | YAWAR | F7 F22 | SHA-256 analog receipt chain. |
 | NERVOUS | OTel | F12 | Loop-tax. Energy UNAVAILABLE. Hatun probe. |
 | SKELETON | KHIPU | F18 F19 | Locked-8. CHECKED ≠ Lean PROVEN @ c7c0ba17. |

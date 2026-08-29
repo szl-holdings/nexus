@@ -78,18 +78,53 @@ export function clamp01(n: number) {
   return Math.min(1, Math.max(0, n));
 }
 
-/** F19 / Λ — weighted geometric mean. A zero axis fail-closes. Advisory; uniqueness OPEN. */
-export function evaluateLambda(axes: number[]) {
+export const ORG_AXIS_NAMES = [
+  "soundness",
+  "calibration",
+  "robustness",
+  "provenance",
+  "consent",
+  "reversibility",
+  "transparency",
+  "fairness",
+  "containment",
+  "attestation",
+  "freshness",
+  "authority",
+  "auditability",
+] as const;
+
+/** Canonical weights (Σ = 1.0) from a11oy szl_org_lambda.py. */
+export const ORG_AXIS_WEIGHTS = [0.12, 0.06, 0.08, 0.11, 0.06, 0.07, 0.07, 0.05, 0.08, 0.1, 0.05, 0.07, 0.08];
+
+const WEIGHT_EPS = 1e-9;
+
+/** F19 / Λ — weighted geometric mean Λ_w(x)=∏ xᵢ^{wᵢ}. Zero axis fail-closes. Advisory; uniqueness OPEN. */
+export function evaluateLambda(axes: number[], weights?: number[]) {
   if (axes.length === 0) return { value: 0, blocked: true, reason: "no axes" };
-  let log = 0;
-  for (const a of axes) {
-    if (a <= 0) return { value: 0, blocked: true, reason: "F12 fail-closed · zero axis" };
-    log += Math.log(Math.min(1, a));
+  const k = axes.length;
+  const ws = weights ?? (k === ORG_AXIS_WEIGHTS.length ? ORG_AXIS_WEIGHTS : Array.from({ length: k }, () => 1 / k));
+  if (ws.length !== k) {
+    return { value: 0, blocked: true, reason: "F19 weight/axis length mismatch · fail-closed" };
   }
-  const value = Math.exp(log / axes.length);
-  return { value, blocked: false, reason: `Λ ${value.toFixed(4)} · advisory · Conjecture 1 OPEN` };
+  let sw = 0;
+  for (const w of ws) sw += w;
+  if (!Number.isFinite(sw) || Math.abs(sw - 1) > WEIGHT_EPS) {
+    return { value: 0, blocked: true, reason: "F19 weights must sum to 1 · fail-closed" };
+  }
+  let log = 0;
+  for (let i = 0; i < k; i++) {
+    const a = axes[i]!;
+    if (!Number.isFinite(a) || a <= 0) {
+      return { value: 0, blocked: true, reason: "F12 fail-closed · zero axis" };
+    }
+    log += ws[i]! * Math.log(Math.min(1, a));
+  }
+  const value = Math.exp(log);
+  return { value, blocked: false, reason: `Λ ${value.toFixed(4)} · weighted geometric mean · advisory · Conjecture 1 OPEN` };
 }
 
+/** 13 analog voltages mapped onto ORG_AXIS_NAMES in order. live() floors 0.045 so analog never hard-zeroes Λ. */
 export function yuyayAxes(input: {
   x: number;
   y: number;
