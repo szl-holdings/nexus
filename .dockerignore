@@ -1,3 +1,11 @@
+# Hugging Face Space build context. Root-anchored rules drop the leftover
+# MK-II python/static snapshot without touching instrument paths.
+/server.py
+/index.html
+/og.jpg
+/favicon.svg
+/assets
+
 node_modules
 .vercel
 .output

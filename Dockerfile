@@ -2,6 +2,9 @@
 # Explicit COPY sources: the org deployer forbids bare `COPY .`.
 FROM mirror.gcr.io/library/node:22-bookworm-slim
 
+# Bust the leftover MK-II python factory cache on first MK-III rebuild.
+ARG HF_CACHE_BUST=mkiii-2
+
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -12,7 +15,10 @@ COPY scripts ./scripts
 COPY public ./public
 COPY server ./server
 COPY migrations ./migrations
-COPY vite.config.ts tsconfig.json LICENSE ./
+COPY vite.config.ts ./
+COPY tsconfig.json ./
+COPY LICENSE ./
+COPY .dockerignore ./
 
 ENV HOST=0.0.0.0
 ENV PORT=7860
