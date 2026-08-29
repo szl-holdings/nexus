@@ -7,7 +7,7 @@ sdk: docker
 app_port: 7860
 pinned: false
 license: apache-2.0
-short_description: "MK-II analog computer: Lorenz core, IC/OP/HALT/REP, phosphor CRT"
+short_description: "MK-II analog computer: Lorenz, IC/OP/HALT/REP, phosphor CRT"
 tags:
   - web-audio
   - synthesizer
