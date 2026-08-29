@@ -7,7 +7,7 @@ sdk: docker
 app_port: 7860
 pinned: false
 license: apache-2.0
-short_description: Analog computing workstation — CRT grid, scope, tape, patchbay, sequencer, voice
+short_description: "Analog CRT workstation: grid, scope, tape, sequencer"
 tags:
   - web-audio
   - synthesizer
