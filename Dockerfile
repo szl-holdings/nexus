@@ -1,9 +1,9 @@
 # NEXUS MK-III — Hugging Face Space (port 7860)
 # Explicit COPY sources: the org deployer forbids bare `COPY .`.
-FROM node:22-bookworm-slim
+# Base image: estate HF factory pin (public.ecr.aws), matching yarqa.
+FROM public.ecr.aws/docker/library/node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5
 
-# Bust leftover MK-II factory cache after the python -> node switch.
-ARG HF_CACHE_BUST=mkiii-3
+ARG HF_CACHE_BUST=mkiii-4
 
 WORKDIR /app
 
