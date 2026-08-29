@@ -22,3 +22,5 @@ hf_token
 .grok/status
 
 public/__grok/install/assets/homescreen/*.png
+
+__pycache__/
