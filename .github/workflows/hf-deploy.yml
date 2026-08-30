@@ -44,6 +44,7 @@ jobs:
             echo "bound=false" >> "$GITHUB_OUTPUT"
             echo "HF_ORG_TOKEN unbound on szl-holdings/nexus."
             echo "Canonical Space publisher: szl-holdings/yarqa deploy-nexus.yml."
+            echo "::warning::HF_ORG_TOKEN unset — this workflow performed NO Hub upload. Canonical Space publisher is szl-holdings/yarqa deploy-nexus.yml. Green here does not mean the Hub was updated."
             echo "GitHub remains source of truth. This is not a failed deploy."
           fi
 
