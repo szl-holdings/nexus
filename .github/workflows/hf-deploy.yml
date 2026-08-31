@@ -1,63 +1,64 @@
 # Copyright 2026 SZL Holdings — SPDX-License-Identifier: Apache-2.0
-name: Deploy to HuggingFace Space
+name: Hugging Face publication pipeline
 
-# Canonical Space publisher is szl-holdings/yarqa `.github/workflows/deploy-nexus.yml`.
-# That repo holds HF_ORG_TOKEN. This caller does not. Do not fail-loud on a token
-# that is not bound here — that painted every merge red while the instrument
-# was already live. Skip honestly.
-#
-# If this repo is later granted the token, still refuse the root Dockerfile.
-# That image is leftover vite-dev + npm ci. The HF factory BUILD_ERRORs on
-# npm ci (~3s cache-miss dump). Yarqa prebuilds the Nitro node-server bundle
-# and publishes space/Dockerfile. GitHub remains source of truth.
-
+# Pull requests run protected, no-secret workflow validation only. A push to main
+# or an explicit dispatch performs the real publication and cannot report green
+# unless the exact Hub commit, deployed bytes, runtime state, and smoke route
+# are attested by the protected reusable publisher.
 on:
   push:
     branches: [main]
+    paths:
+      - .github/workflows/hf-deploy.yml
+      - .dockerignore
+      - space/Dockerfile
+      - space/Dockerfile.dockerignore
+      - server.py
+      - index.html
+      - requirements.txt
+      - README.md
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/hf-deploy.yml
+      - .dockerignore
+      - space/Dockerfile
+      - space/Dockerfile.dockerignore
+      - server.py
+      - index.html
+      - requirements.txt
+      - README.md
   workflow_dispatch: {}
 
 permissions:
   contents: read
+  security-events: write
 
 concurrency:
-  group: hf-deploy-${{ github.ref }}
+  group: hf-deploy-${{ github.repository }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  gate:
-    name: Publisher binding
-    runs-on: ubuntu-latest
-    outputs:
-      bound: ${{ steps.s.outputs.bound }}
-    steps:
-      - id: s
-        env:
-          HF_TOKEN: ${{ secrets.HF_ORG_TOKEN || secrets.HF_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ -n "${HF_TOKEN:-}" ]; then
-            echo "bound=true" >> "$GITHUB_OUTPUT"
-            echo "Token is bound, but this repo must not publish the root Dockerfile."
-            echo "Canonical Space publisher: szl-holdings/yarqa deploy-nexus.yml"
-            echo "(prebuild + space/Dockerfile). Refusing the vite-dev image."
-          else
-            echo "bound=false" >> "$GITHUB_OUTPUT"
-            echo "HF_ORG_TOKEN unbound on szl-holdings/nexus."
-            echo "Canonical Space publisher: szl-holdings/yarqa deploy-nexus.yml."
-            echo "::warning::HF_ORG_TOKEN unset — this workflow performed NO Hub upload. Canonical Space publisher is szl-holdings/yarqa deploy-nexus.yml. Green here does not mean the Hub was updated."
-            echo "GitHub remains source of truth. This is not a failed deploy."
-          fi
+  validate:
+    name: Validate publisher caller (no provider write)
+    if: github.event_name == 'pull_request'
+    uses: szl-holdings/.github/.github/workflows/reusable-workflow-lint.yml@c889276e51e7d954c4bba8b216f86fc7577721fa
+    with:
+      fail-on-zizmor-warning: false
 
   deploy:
-    needs: gate
-    if: needs.gate.outputs.bound == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Refuse leftover vite-dev image
-        run: |
-          set -euo pipefail
-          echo "HF token is bound on szl-holdings/nexus."
-          echo "This workflow will not call reusable-hf-deploy against Dockerfile."
-          echo "That image is leftover vite-dev (npm ci). Space image is space/Dockerfile."
-          echo "Canonical publisher: szl-holdings/yarqa deploy-nexus.yml."
-          echo "GitHub remains source. This is not a failed deploy."
+    name: Publish exact source and attest live state
+    if: github.event_name != 'pull_request'
+    uses: szl-holdings/.github/.github/workflows/reusable-hf-deploy.yml@c889276e51e7d954c4bba8b216f86fc7577721fa
+    with:
+      hf-repo: SZLHOLDINGS/nexus
+      ref: ${{ github.sha }}
+      dockerfile-path: space/Dockerfile
+      include-readme: true
+      prune: true
+      require-default-branch-tip: true
+      restart-space: true
+      wait-running: 1200
+      smoke-paths: '["/"]'
+    secrets:
+      HF_TOKEN: ${{ secrets.HF_ORG_TOKEN || secrets.HF_TOKEN }}
