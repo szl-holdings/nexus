@@ -32,6 +32,7 @@ on:
 
 permissions:
   contents: read
+  security-events: write
 
 concurrency:
   group: hf-deploy-${{ github.repository }}-${{ github.ref }}
