@@ -2,7 +2,7 @@
 name: Hugging Face publication ownership
 
 # Provider writes for SZLHOLDINGS/nexus are centrally owned by
-# szl-holdings/.github/.github/workflows/publish-nexus-space.yml.  This source
+# szl-holdings/.github/.github/workflows/publish-nexus-space.yml. This source
 # repository keeps only a no-secret ownership/provenance guard so a caller-local
 # token scope can never create a permanent false-red deployment lane again.
 on:
@@ -59,11 +59,11 @@ jobs:
           dockerfile = Path('space/Dockerfile').read_text(encoding='utf-8')
           wrapper = Path('source_bound_server.py').read_text(encoding='utf-8')
           forbidden = (
-              'secrets.HF_',
-              'reusable-hf-deploy.yml',
-              'upload_file(',
-              'create_repo(',
-              'restart_space(',
+              'secrets.' + 'HF_',
+              'reusable-hf-' + 'deploy.yml',
+              'upload_' + 'file(',
+              'create_' + 'repo(',
+              'restart_' + 'space(',
           )
           for fragment in forbidden:
               if fragment in workflow:
