@@ -1,55 +1,88 @@
 # Copyright 2026 SZL Holdings — SPDX-License-Identifier: Apache-2.0
-name: Hugging Face publication pipeline
+name: Hugging Face publication ownership
 
-# Pull requests run protected, no-secret workflow validation only. A push to main
-# or an explicit dispatch performs the real publication and cannot report green
-# unless the exact Hub commit, deployed bytes, runtime state, and smoke route
-# are attested by the protected reusable publisher.
+# Provider writes for SZLHOLDINGS/nexus are centrally owned by
+# szl-holdings/.github/.github/workflows/publish-nexus-space.yml.  This source
+# repository keeps only a no-secret ownership/provenance guard so a caller-local
+# token scope can never create a permanent false-red deployment lane again.
 on:
   push:
     branches: [main]
+    paths:
+      - .github/workflows/hf-deploy.yml
+      - space/Dockerfile
+      - source_bound_server.py
   pull_request:
     branches: [main]
     paths:
       - .github/workflows/hf-deploy.yml
-      - .dockerignore
       - space/Dockerfile
-      - space/Dockerfile.dockerignore
-      - server.py
-      - index.html
-      - requirements.txt
-      - README.md
+      - source_bound_server.py
   workflow_dispatch: {}
 
 permissions:
   contents: read
-  security-events: write
 
 concurrency:
-  group: hf-deploy-${{ github.repository }}-${{ github.ref }}
-  cancel-in-progress: false
+  group: hf-publication-ownership-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   validate:
-    name: Validate publisher caller (no provider write)
-    if: github.event_name == 'pull_request'
-    uses: szl-holdings/.github/.github/workflows/reusable-workflow-lint.yml@c889276e51e7d954c4bba8b216f86fc7577721fa
-    with:
-      fail-on-zizmor-warning: false
+    name: Prove central publication ownership and local source binding
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
 
-  deploy:
-    name: Publish exact source and attest live state
-    if: github.event_name != 'pull_request'
-    uses: szl-holdings/.github/.github/workflows/reusable-hf-deploy.yml@c889276e51e7d954c4bba8b216f86fc7577721fa
-    with:
-      hf-repo: SZLHOLDINGS/nexus
-      ref: ${{ github.sha }}
-      dockerfile-path: space/Dockerfile
-      include-readme: true
-      prune: true
-      require-default-branch-tip: true
-      restart-space: true
-      wait-running: 1200
-      smoke-paths: '["/"]'
-    secrets:
-      HF_TOKEN: ${{ secrets.HF_ORG_TOKEN || secrets.HF_ORG_TOKEN1 || secrets.HF_TOKEN || secrets.HF_WRITE_TOKEN }}
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Validate delegation and source-bound runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile server.py source_bound_server.py
+          python server.py --selftest
+          python source_bound_server.py --selftest
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          workflow = Path('.github/workflows/hf-deploy.yml').read_text(encoding='utf-8')
+          dockerfile = Path('space/Dockerfile').read_text(encoding='utf-8')
+          wrapper = Path('source_bound_server.py').read_text(encoding='utf-8')
+          forbidden = (
+              'secrets.HF_',
+              'reusable-hf-deploy.yml',
+              'upload_file(',
+              'create_repo(',
+              'restart_space(',
+          )
+          for fragment in forbidden:
+              if fragment in workflow:
+                  raise SystemExit(f'local provider writer reintroduced: {fragment}')
+          required = (
+              'publish-nexus-space.yml',
+              'COPY SOURCE_GITHUB_SHA ./SOURCE_GITHUB_SHA',
+              'CMD ["python", "-u", "source_bound_server.py"]',
+              '"source_revision": revision',
+              '"source_bound": revision != "UNAVAILABLE"',
+          )
+          combined = workflow + '\n' + dockerfile + '\n' + wrapper
+          missing = [fragment for fragment in required if fragment not in combined]
+          if missing:
+              raise SystemExit(f'missing Nexus publication/source controls: {missing!r}')
+          uses = re.findall(r'^\s*uses:\s*(\S+)\s*(?:#.*)?$', workflow, re.MULTILINE)
+          bad = [value for value in uses if not re.fullmatch(r'[^@\s]+@[0-9a-f]{40}', value)]
+          if bad:
+              raise SystemExit(f'unpinned actions: {bad!r}')
+          print('Nexus central-publication ownership: PASS')
+          PY
+          git diff --check
