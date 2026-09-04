@@ -22,10 +22,10 @@ tags:
 <p align="center"><a href="https://a-11-oy.com/"><img src="https://huggingface.co/spaces/SZLHOLDINGS/README/resolve/main/assets/estate-banner-v2.svg" alt="SZL Holdings — governed, receipted, verifiable" width="100%"></a></p>
 <p align="center">
   <a href="https://github.com/szl-holdings/.github/tree/main/doctrine"><img src="https://img.shields.io/badge/doctrine-v11%20LOCKED-0B1F3A?style=flat-square" alt="doctrine v11"></a>
-  <a href="https://huggingface.co/spaces/SZLHOLDINGS/nexus"><img src="https://img.shields.io/badge/space-NEXUS%20MK--II-7CFF6B?style=flat-square" alt="NEXUS space"></a>
+  <a href="https://szlholdings-immune.hf.space/nexus.html"><img src="https://img.shields.io/badge/runtime-IMMUNE%20NEXUS%20plane-7CFF6B?style=flat-square" alt="IMMUNE NEXUS plane"></a>
   <a href="https://github.com/szl-holdings/nexus"><img src="https://img.shields.io/badge/source-szl--holdings%2Fnexus-3A414C?style=flat-square" alt="GitHub source"></a>
 </p>
-<p align="center"><sub>Part of the <a href="https://huggingface.co/SZLHOLDINGS">SZL Holdings</a> estate. NEXUS is a local-first instrument — audio and patterns stay in the browser.</sub></p>
+<p align="center"><sub>Part of the <a href="https://huggingface.co/SZLHOLDINGS">SZL Holdings</a> estate. Public runtime is IMMUNE Channel A <a href="https://szlholdings-immune.hf.space/nexus.html">/nexus.html</a> — SZLHOLDINGS/nexus is not a public product Space. Energy UNAVAILABLE. Λ = Conjecture 1 OPEN.</sub></p>
 <!-- SZL-ESTATE-CARD:v2:END -->
 
 # NEXUS MK-II
