@@ -121,6 +121,8 @@ export interface KernelSnap {
   provenTrust: false;
   lockedProven: 8;
   kernelCommit: typeof KERNEL_COMMIT;
+  slack: number;
+  fisherRao: number;
 }
 
 const DEFAULT_MAX = 8;
@@ -219,6 +221,34 @@ export function evaluatePuriq(axes: number[]) {
       ? "maxAgg ≠ Λ on the same analog vector · uniqueness OPEN"
       : "aggregators agree this vector · uniqueness still OPEN",
   };
+}
+
+/** A4 bounded AM-GM. slack = ((√a−√b)²)/2 ≡ AM−GM. Never a uniqueness proof. */
+export function amgmSlack(a: number, b: number) {
+  const x = Math.max(0, Number.isFinite(a) ? a : 0);
+  const y = Math.max(0, Number.isFinite(b) ? b : 0);
+  const gm = Math.sqrt(x * y);
+  const am = (x + y) / 2;
+  const slack = ((Math.sqrt(x) - Math.sqrt(y)) ** 2) / 2;
+  return { gm, am, slack, holds: gm <= am + 1e-12 && Math.abs(am - gm - slack) < 1e-9 };
+}
+
+/** Fisher–Rao geodesic on the simplex. d(p,p)=0. Analog distance between successive 13-vectors. */
+export function fisherRaoDistance(p: number[], q: number[]) {
+  const n = Math.min(p.length, q.length);
+  if (n === 0) return 0;
+  let ps = 0;
+  let qs = 0;
+  for (let i = 0; i < n; i++) {
+    ps += Math.max(0, p[i]!);
+    qs += Math.max(0, q[i]!);
+  }
+  if (ps <= 0 || qs <= 0) return 0;
+  let bh = 0;
+  for (let i = 0; i < n; i++) {
+    bh += Math.sqrt((Math.max(0, p[i]!) / ps) * (Math.max(0, q[i]!) / qs));
+  }
+  return 2 * Math.acos(Math.min(1, Math.max(-1, bh)));
 }
 
 /** F19 / Λ — weighted geometric mean Λ_w(x)=∏ xᵢ^{wᵢ}. Zero axis fail-closes. Advisory; uniqueness OPEN. */
@@ -489,6 +519,8 @@ export function emptyKernel(): KernelSnap {
     minAgg: 0,
     gap: 0,
     disagree: false,
+    slack: 0,
+    fisherRao: 0,
     blocked: false,
     reason: "idle",
     liveCount: 0,

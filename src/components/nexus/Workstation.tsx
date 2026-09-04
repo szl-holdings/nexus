@@ -343,6 +343,8 @@ function AnalogMeters({ live }: { live: boolean }) {
   const sRef = useRef<HTMLSpanElement>(null);
   const eRef = useRef<HTMLSpanElement>(null);
   const mRef = useRef<HTMLSpanElement>(null);
+  const slkRef = useRef<HTMLSpanElement>(null);
+  const frRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     let raf = 0;
@@ -362,13 +364,15 @@ function AnalogMeters({ live }: { live: boolean }) {
       set(sRef.current, k.lambdaSym);
       set(eRef.current, k.lambdaEgy);
       set(mRef.current, k.maxAgg);
+      set(slkRef.current, k.slack * 4);
+      set(frRef.current, k.fisherRao);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, []);
 
   return (
-    <div className={`flex items-end gap-1.5 ${live ? "opacity-100" : "opacity-40"}`} title="Analog computer X Y Z FG · F19 Λw · PURIQ Λs Λe maxAgg · uniqueness OPEN">
+    <div className={`flex items-end gap-1.5 ${live ? "opacity-100" : "opacity-40"}`} title="Analog computer X Y Z FG · F19 Λw · PURIQ Λs Λe maxAgg · A4 slack · Fisher–Rao · uniqueness OPEN">
       <MeterBar barRef={xRef} label="X" />
       <MeterBar barRef={yRef} label="Y" />
       <MeterBar barRef={zRef} label="Z" />
@@ -377,6 +381,8 @@ function AnalogMeters({ live }: { live: boolean }) {
       <MeterBar barRef={sRef} label="Λs" />
       <MeterBar barRef={eRef} label="Λe" amber />
       <MeterBar barRef={mRef} label="MAX" amber />
+      <MeterBar barRef={slkRef} label="SLK" />
+      <MeterBar barRef={frRef} label="FR" amber />
     </div>
   );
 }

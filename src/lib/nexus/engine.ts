@@ -35,6 +35,8 @@ import {
   evaluateAnatomy,
   evaluateLambda,
   evaluatePuriq,
+  amgmSlack,
+  fisherRaoDistance,
   instantCycles,
   loopTax,
   runInvariants,
@@ -233,6 +235,7 @@ class NexusEngine {
   private probes: Probe[] = idleProbes();
   private lastKernelAt = 0;
   private lastAnalog = { x: 0, y: 0, z: 0 };
+  private lastAxes: number[] = [];
   private probing = false;
   private nodes: Partial<Record<PortId, AudioNode>> = {};
   private paramTargets: Partial<Record<PortId, AudioParam>> = {};
@@ -1593,6 +1596,9 @@ class NexusEngine {
     });
     const lambda = evaluateLambda(axes);
     const puriq = evaluatePuriq(axes);
+    const slack = amgmSlack(axes[0] ?? 0, axes[1] ?? 0).slack;
+    const fr = this.lastAxes.length ? fisherRaoDistance(this.lastAxes, axes) : 0;
+    this.lastAxes = axes.slice();
     const inv = runInvariants(this.receipts);
     const chainInv = inv.invariants.find((i) => i.id === "receipt-chain-continuity");
     const chainOk = chainInv ? chainInv.status !== "VIOLATED" : true;
@@ -1617,6 +1623,8 @@ class NexusEngine {
       minAgg: puriq.minAgg,
       gap: puriq.gap,
       disagree: puriq.disagree,
+      slack,
+      fisherRao: fr,
       blocked: anatomy.blocked || lambda.blocked,
       reason: anatomy.reason,
       liveCount: anatomy.liveCount,

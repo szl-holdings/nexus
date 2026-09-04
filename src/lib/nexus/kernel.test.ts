@@ -16,6 +16,8 @@ import {
   evaluateAnatomy,
   evaluateLambda,
   evaluatePuriq,
+  amgmSlack,
+  fisherRaoDistance,
   instantCycles,
   loopTax,
   recomputeRowHash,
@@ -335,5 +337,22 @@ describe("PURIQ aggregators", () => {
     const w = symmetricWeights(13);
     assert.equal(w.length, 13);
     assert.ok(w.every((x) => Math.abs(x - 1 / 13) < 1e-12));
+  });
+});
+
+describe("A4 AM-GM slack and Fisher–Rao", () => {
+  it("slack equals AM minus GM", () => {
+    const r = amgmSlack(0.81, 0.25);
+    assert.equal(r.holds, true);
+    assert.ok(Math.abs(r.am - r.gm - r.slack) < 1e-9);
+    assert.equal(CONJECTURE_1, "OPEN");
+  });
+  it("Fisher–Rao of a vector with itself is 0", () => {
+    const p = [0.2, 0.3, 0.5];
+    assert.ok(fisherRaoDistance(p, p) < 1e-9);
+  });
+  it("unequal simplex points have positive distance", () => {
+    const d = fisherRaoDistance([0.9, 0.05, 0.05], [0.05, 0.05, 0.9]);
+    assert.ok(d > 0.5);
   });
 });

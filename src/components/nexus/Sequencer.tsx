@@ -57,6 +57,7 @@ export function Sequencer() {
           <span className={`nx-led ml-auto ${seq.playing ? "nx-led-on" : ""}`} />
         </div>
         <LoopReadout />
+        <F18Face />
         <div className="grid grid-cols-8 gap-0.5 sm:gap-1">
           {steps.map((s, i) => (
             <button
@@ -109,4 +110,29 @@ function LoopReadout() {
     return () => cancelAnimationFrame(raf);
   }, []);
   return <p ref={remainRef} className="nx-label tabular-nums" />;
+}
+
+function F18Face() {
+  const ref = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const s = engine.getSnapshot().seq;
+      const n = Math.max(1, Math.floor(s.euclidSteps));
+      const h = Math.max(0, Math.floor(s.euclidHits));
+      const k = 8;
+      if (!ref.current) return;
+      if (n < k) {
+        ref.current.textContent = `F18 singleton UNAVAILABLE · n ${n} < k ${k}`;
+        return;
+      }
+      const bound = n - k + 1;
+      const side = h < bound ? "UNDER" : h === bound ? "ON" : "OVER";
+      ref.current.textContent = `F18 HIT ${h} · BND ${bound} · n−k+1 · k=8 · ${side}`;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return <p ref={ref} className="nx-label tabular-nums" />;
 }
