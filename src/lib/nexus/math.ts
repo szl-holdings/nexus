@@ -21,6 +21,27 @@ export function euclid(hits: number, steps: number, rot: number): boolean[] {
   return pattern.slice(n - r).concat(pattern.slice(0, n - r));
 }
 
+/** F18 Reed-Solomon singleton d = n−k+1 on the Euclid lattice. k=locked-8. Advisory. */
+export function singletonBound(n: number, k = 8) {
+  return n - k + 1;
+}
+
+export function f18Face(hits: number, steps: number, k = 8) {
+  const n = Math.max(1, Math.floor(steps));
+  const h = Math.max(0, Math.floor(hits));
+  if (n < k) {
+    return { hits: h, bound: 0, vHit: 0, vBnd: 0, side: "unavailable" as const };
+  }
+  const bound = singletonBound(n, k);
+  return {
+    hits: h,
+    bound,
+    vHit: h / n,
+    vBnd: bound / n,
+    side: (h < bound ? "under" : h === bound ? "on" : "over") as "under" | "on" | "over",
+  };
+}
+
 export interface LorenzState {
   x: number;
   y: number;

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { analogCell, analogCircuit, analogCoefficients, analogCorrelate, analogJack, analogSchmitt, analogStep, euclid, funcGenStep, lorenzStep, midiToHz, opticalInterfere, opticalReconstruct, scaleAnalog, scaleLorenz, seedAnalogState, seedLorenz } from "./math.ts";
+import { analogCell, analogCircuit, analogCoefficients, analogCorrelate, analogJack, analogSchmitt, analogStep, euclid, f18Face, funcGenStep, lorenzStep, midiToHz, opticalInterfere, opticalReconstruct, scaleAnalog, scaleLorenz, seedAnalogState, seedLorenz } from "./math.ts";
 import {
   ANALOG_PROGRAMS,
   COLS,
@@ -29,6 +29,14 @@ describe("euclid", () => {
 
   it("zero hits is silent", () => {
     assert.deepEqual(euclid(0, 8, 0), Array.from({ length: 8 }, () => false));
+  });
+  it("F18 singleton is 9 on the 16-step lattice with k=8", () => {
+    const under = f18Face(5, 16, 8);
+    assert.equal(under.bound, 9);
+    assert.equal(under.side, "under");
+    assert.equal(f18Face(9, 16, 8).side, "on");
+    assert.equal(f18Face(10, 16, 8).side, "over");
+    assert.equal(f18Face(5, 4, 8).side, "unavailable");
   });
 });
 

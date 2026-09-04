@@ -13,7 +13,7 @@ export interface Probe {
 export const ENDPOINTS: { id: string; label: string; url: string }[] = [
   { id: "hatun", label: "Hatun MCP", url: "https://szlholdings-hatun-mcp.hf.space/healthz" },
   { id: "anatomy", label: "Anatomy", url: "https://szlholdings-anatomy.hf.space/version" },
-  { id: "nexus-space", label: "NEXUS Space", url: "https://huggingface.co/api/spaces/SZLHOLDINGS/nexus" },
+  { id: "nexus-space", label: "NEXUS hologram", url: "https://szlholdings-nexus.hf.space/api/build-info" },
 ];
 
 export function idleProbes(): Probe[] {
@@ -63,15 +63,21 @@ async function probeOne(e: { id: string; label: string; url: string }, timeoutMs
       return { id: e.id, label: e.label, status: "UNAVAILABLE", detail: `HTTP ${res.status}`, at };
     }
     let detail = `HTTP ${res.status}`;
+    let live = true;
     try {
       const j = (await res.json()) as Record<string, unknown>;
-      if (typeof j.status === "string") detail = j.status;
+      if (e.id === "nexus-space") {
+        const role = typeof j.role === "string" ? j.role : "";
+        const energy = typeof j.energy === "string" ? j.energy : "";
+        live = role === "hologram-not-instrument" && energy === "UNAVAILABLE";
+        detail = live ? "hologram-not-instrument" : "instrument not bound · hologram only";
+      } else if (typeof j.status === "string") detail = j.status;
       else if (typeof j.evidenceState === "string") detail = j.evidenceState;
       else if (typeof j.sdk === "string") detail = String(j.sdk);
     } catch {
       detail = `HTTP ${res.status}`;
     }
-    return { id: e.id, label: e.label, status: "LIVE", detail, at };
+    return { id: e.id, label: e.label, status: live ? "LIVE" : "UNAVAILABLE", detail, at };
   } catch (err) {
     clearTimeout(t);
     const reason = err instanceof Error ? err.name : "error";
