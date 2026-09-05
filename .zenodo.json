@@ -1,0 +1,13 @@
+{
+  "title": "NEXUS MK-II — holographic analog computer (six-program dynamics source)",
+  "upload_type": "software",
+  "description": "NEXUS dynamics source: Lorenz, harmonic, van der Pol, Duffing, Lotka, NEMO programs; analog circuits, correlator, hybrid IC, five-organ anatomy, WILLAY second brain, optical 3-factor STDP, Ouroboros, Hatun telemetry, phosphor CRT. Runtime lives inside IMMUNE — not a second product Space. Pin: szl-holdings/nexus@617fb49. Energy UNAVAILABLE. Λ = Conjecture 1 OPEN.",
+  "creators": [{"name": "Lutar, Stephen P., Jr."}],
+  "license": {"id": "Apache-2.0"},
+  "keywords": ["analog-computing", "holographic", "lorenz", "nexus", "governed-ai", "szl-holdings"],
+  "related_identifiers": [
+    {"identifier": "10.5281/zenodo.19944926", "relation": "isSupplementTo", "scheme": "doi"},
+    {"identifier": "https://github.com/szl-holdings/immune", "relation": "isSupplementTo", "scheme": "url"}
+  ],
+  "notes": "NEW work (not a version of any existing SZL record) per the szl-papers deposit policy. Minted via GitHub release after enabling this repository in the owner's Zenodo account."
+}
