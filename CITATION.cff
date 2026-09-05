@@ -1,0 +1,15 @@
+# CITATION.cff — szl-holdings/nexus
+# NEXUS MK-II holographic analog computer: six programs, analog circuits,
+# analog correlator, hybrid IC, five-organ anatomy, WILLAY second brain,
+# optical 3-factor STDP, Ouroboros, Hatun telemetry, phosphor CRT.
+# Runtime hosted by IMMUNE (szl-holdings/immune).
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "NEXUS MK-II — holographic analog computer (six-program dynamics runtime)"
+authors:
+  - family-names: Lutar
+    given-names: Stephen Paul
+license: Apache-2.0
+url: "https://a-11-oy.com/nexus"
+repository-code: "https://github.com/szl-holdings/nexus"
