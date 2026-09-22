@@ -10,12 +10,16 @@ on:
     branches: [main]
     paths:
       - .github/workflows/hf-deploy.yml
+      - README.md
+      - AGENTS.md
       - space/Dockerfile
       - source_bound_server.py
   pull_request:
     branches: [main]
     paths:
       - .github/workflows/hf-deploy.yml
+      - README.md
+      - AGENTS.md
       - space/Dockerfile
       - source_bound_server.py
   workflow_dispatch: {}
@@ -58,6 +62,8 @@ jobs:
           workflow = Path('.github/workflows/hf-deploy.yml').read_text(encoding='utf-8')
           dockerfile = Path('space/Dockerfile').read_text(encoding='utf-8')
           wrapper = Path('source_bound_server.py').read_text(encoding='utf-8')
+          readme = Path('README.md').read_text(encoding='utf-8')
+          agents = Path('AGENTS.md').read_text(encoding='utf-8')
           forbidden = (
               'secrets.' + 'HF_',
               'reusable-hf-' + 'deploy.yml',
@@ -79,10 +85,33 @@ jobs:
           missing = [fragment for fragment in required if fragment not in combined]
           if missing:
               raise SystemExit(f'missing Nexus publication/source controls: {missing!r}')
+
+          readme_required = (
+              'Public runtime: [IMMUNE Channel A `/nexus.html`]',
+              'Provider projection target: `SZLHOLDINGS/nexus`',
+              'It is not the public product Space',
+          )
+          missing_readme = [fragment for fragment in readme_required if fragment not in readme]
+          if missing_readme:
+              raise SystemExit(f'missing Nexus README authority boundary: {missing_readme!r}')
+          if '- Space: [SZLHOLDINGS/nexus]' in readme:
+              raise SystemExit('README must not present the provider projection as the public Space')
+
+          agents_required = (
+              'Public product/runtime authority: IMMUNE Channel A at `/nexus.html`.',
+              'Do not publish directly to Hugging Face from this repository',
+              'Source CI, provider publication, live runtime readback, browser acceptance, and proof/evaluation publication are distinct gates.',
+          )
+          missing_agents = [fragment for fragment in agents_required if fragment not in agents]
+          if missing_agents:
+              raise SystemExit(f'missing Nexus agent authority boundary: {missing_agents!r}')
+          if '/workspace/startup.sh' in agents or 'XAI_API_KEY' in agents:
+              raise SystemExit('generic App Builder execution contract reintroduced into Nexus AGENTS.md')
+
           uses = re.findall(r'^\s*uses:\s*(\S+)\s*(?:#.*)?$', workflow, re.MULTILINE)
           bad = [value for value in uses if not re.fullmatch(r'[^@\s]+@[0-9a-f]{40}', value)]
           if bad:
               raise SystemExit(f'unpinned actions: {bad!r}')
-          print('Nexus central-publication ownership: PASS')
+          print('Nexus central-publication ownership and authority boundary: PASS')
           PY
           git diff --check
