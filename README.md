@@ -104,10 +104,11 @@ Then play the keys, patch ANLG into VCF, watch HOLO, and throw Chaos.
 
 Patterns, patches, tape, and voice settings persist in IndexedDB on the machine that played them. No accounts. No backend.
 
-## Source
+## Source and runtime authority
 
-- GitHub: [szl-holdings/nexus](https://github.com/szl-holdings/nexus)
-- Space: [SZLHOLDINGS/nexus](https://huggingface.co/spaces/SZLHOLDINGS/nexus)
+- GitHub source: [szl-holdings/nexus](https://github.com/szl-holdings/nexus)
+- Public runtime: [IMMUNE Channel A `/nexus.html`](https://szlholdings-immune.hf.space/nexus.html)
+- Provider projection target: `SZLHOLDINGS/nexus`, centrally published from this GitHub source. It is not the public product Space and may be private or unavailable to unauthenticated Hub readers.
 
 ```bash
 npm install
