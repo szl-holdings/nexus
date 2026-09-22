@@ -44,7 +44,7 @@ This file governs automated work in `szl-holdings/nexus`. It replaces the generi
 
 ## Local development
 
-Use the repository's checked-in commands and manifests. Do not assume a Grok `/workspace` environment, Vercel deployment, a preinstalled dependency set, an `XAI_API_KEY`, or access to external user data. Do not start paid services or make quota-consuming AI calls merely because credentials happen to be present in an execution environment.
+Use the repository's checked-in commands and manifests. Do not assume a platform-specific sandbox, hosted preview contract, Vercel deployment, a preinstalled dependency set, AI-provider credentials, or access to external user data. Do not start paid services or make quota-consuming AI calls merely because credentials happen to be present in an execution environment.
 
 Typical source development remains:
 
