@@ -2,15 +2,18 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
 import {
   APP_ENV_REL_PATH,
+  findLocalBinScript,
   mergeAppEnv,
+  packageBinScript,
   parseAppEnv,
   projectRoot,
   readAppEnv,
+  resolveSpawnCommand,
 } from "./with-app-env.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -117,7 +120,9 @@ test("the CLI still runs when invoked through a symlinked path", async () => {
   // node realpaths import.meta.url but not process.argv[1], so a raw comparison
   // turns the wrapper into a no-op that exits 0 without starting anything.
   const link = join(mkdtempSync(join(tmpdir(), "app-env-link-")), "scripts");
-  symlinkSync(join(projectRoot(), "scripts"), link);
+  // "junction" is ignored off Windows; on Windows a directory junction needs no
+  // admin rights or Developer Mode, unlike a symlink (EPERM).
+  symlinkSync(join(projectRoot(), "scripts"), link, "junction");
   const { stdout } = await execFileAsync(process.execPath, [
     join(link, "with-app-env.mjs"),
     process.execPath,
@@ -125,4 +130,122 @@ test("the CLI still runs when invoked through a symlinked path", async () => {
     PRINT_FLAG,
   ]);
   assert.equal(stdout, "false");
+});
+
+// --- bare local bins (`vite`) on Windows ---
+
+function writePackage(root, dir, manifest, files) {
+  const packageDir = join(root, "node_modules", dir);
+  mkdirSync(packageDir, { recursive: true });
+  writeFileSync(join(packageDir, "package.json"), JSON.stringify(manifest));
+  for (const [rel, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(packageDir, rel)), { recursive: true });
+    writeFileSync(join(packageDir, rel), text);
+  }
+  return packageDir;
+}
+
+function makeBinWorkspace() {
+  const root = mkdtempSync(join(tmpdir(), "app-env-bin-"));
+  const direct = writePackage(
+    root,
+    "fake-cli",
+    { name: "fake-cli", bin: "cli.js" },
+    {
+      "cli.js": "console.log('fake');\n",
+    },
+  );
+  const scoped = writePackage(
+    root,
+    "@acme/tools",
+    { name: "@acme/tools", bin: { "acme-run": "bin/run" } },
+    {
+      "bin/run": "#!/usr/bin/env node\nconsole.log('acme');\n",
+    },
+  );
+  writePackage(
+    root,
+    "native-tool",
+    { name: "native-tool", bin: { "native-tool": "bin/native-tool" } },
+    {
+      "bin/native-tool": "\u007fELF not a node script",
+    },
+  );
+  return { root, directScript: join(direct, "cli.js"), scopedScript: join(scoped, "bin/run") };
+}
+
+test("win32: a bare local bin runs its node script with this node, not through PATH", () => {
+  const { root, directScript } = makeBinWorkspace();
+  assert.deepEqual(
+    resolveSpawnCommand("fake-cli", ["dev", "--port", "8080"], {
+      platform: "win32",
+      root,
+      execPath: "NODE",
+    }),
+    {
+      command: "NODE",
+      args: [directScript, "dev", "--port", "8080"],
+    },
+  );
+});
+
+test("win32: a bin whose package has another name (scoped, shebang script) is found", () => {
+  const { root, scopedScript } = makeBinWorkspace();
+  assert.equal(findLocalBinScript(root, "acme-run"), scopedScript);
+  assert.deepEqual(
+    resolveSpawnCommand("acme-run", [], { platform: "win32", root, execPath: "NODE" }),
+    {
+      command: "NODE",
+      args: [scopedScript],
+    },
+  );
+});
+
+test("win32: native bins, unknown names, paths and explicit extensions spawn as given", () => {
+  const { root } = makeBinWorkspace();
+  assert.equal(packageBinScript(join(root, "node_modules", "native-tool"), "native-tool"), null);
+  for (const command of [
+    "native-tool",
+    "not-installed",
+    "C:\\tools\\fake-cli",
+    "./fake-cli",
+    "fake-cli.exe",
+  ]) {
+    assert.deepEqual(
+      resolveSpawnCommand(command, ["x"], { platform: "win32", root, execPath: "NODE" }),
+      {
+        command,
+        args: ["x"],
+      },
+    );
+  }
+});
+
+test("other platforms spawn every command exactly as given", () => {
+  const { root } = makeBinWorkspace();
+  for (const platform of ["linux", "darwin"]) {
+    assert.deepEqual(
+      resolveSpawnCommand("fake-cli", ["dev"], { platform, root, execPath: "NODE" }),
+      {
+        command: "fake-cli",
+        args: ["dev"],
+      },
+    );
+  }
+});
+
+test("the wrapper starts an installed bin by its bare name (tsc)", async () => {
+  // Regression: on Windows `spawn("vite")` failed with ENOENT because npm's bin
+  // is a .cmd shim. `tsc` is a light stand-in: its package is `typescript`, so
+  // this also covers a bin whose name differs from its package. Off Windows the
+  // bin is found on PATH, as when npm runs a script.
+  const env =
+    process.platform === "win32"
+      ? process.env
+      : {
+          ...process.env,
+          PATH: `${join(projectRoot(), "node_modules", ".bin")}${delimiter}${process.env.PATH ?? ""}`,
+        };
+  const { stdout } = await execFileAsync(process.execPath, [WRAPPER, "tsc", "--version"], { env });
+  assert.match(stdout, /^Version \d+\.\d+\.\d+/);
 });

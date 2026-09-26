@@ -1,0 +1,111 @@
+# Copyright 2026 SZL Holdings — SPDX-License-Identifier: Apache-2.0
+name: CI
+
+# Source quality gate for every pull request and every push to main. There is
+# deliberately no path filter: a gate that skips a change says nothing about it.
+# This is source CI only. It does not publish, deploy or read back a runtime;
+# per AGENTS.md those are distinct gates (see hf-deploy.yml and IMMUNE).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    name: Node ${{ matrix.node }} (typecheck, lint, test, build)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22: the Docker image line (Dockerfile, @types/node ^22). 24: current LTS.
+        node: ["22", "24"]
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install exact dependency graph
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # scripts/run-tests.mjs discovers every *.test.{mjs,ts} under scripts/
+      # and src/, fails on any failing test, and fails if src/lib/nexus/ runs
+      # fewer passing tests than its floor. Quarantined scaffold tests are
+      # listed by name and reason at the end of the output.
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  python:
+    name: Python (compile, selftest, pytest)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      - name: Compile every tracked Python file
+        shell: bash
+        run: |
+          set -euo pipefail
+          git ls-files -z -- '*.py' | xargs -0 -r python -m py_compile
+          echo "compiled: $(git ls-files -- '*.py' | tr '\n' ' ')"
+
+      - name: Hologram server selftest
+        run: python server.py --selftest
+
+      - name: Source-bound wrapper selftest
+        run: python source_bound_server.py --selftest
+
+      - name: pytest
+        shell: bash
+        run: |
+          set -euo pipefail
+          tests="$(git ls-files | grep -E '(^|/)(test_[^/]*|[^/]*_test)\.py$' || true)"
+          if [ -z "$tests" ]; then
+            echo "::notice title=pytest::no pytest files (test_*.py, *_test.py) are tracked; nothing to run"
+            exit 0
+          fi
+          printf 'pytest files:\n%s\n' "$tests"
+          python -m pip install --disable-pip-version-check 'pytest==9.1.1'
+          python -m pytest -q

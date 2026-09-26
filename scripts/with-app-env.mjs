@@ -20,9 +20,9 @@
  * `process.env`, which is why the merge has to happen before Vite starts.
  */
 import { spawn } from "node:child_process";
-import { readFileSync, realpathSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { constants as osConstants } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const APP_ENV_REL_PATH = ".grok/app-env.json";
@@ -82,6 +82,101 @@ export function exitStatusFromChild(code, signal) {
   return code ?? 1;
 }
 
+const NODE_SCRIPT_EXTENSIONS = new Set([".js", ".mjs", ".cjs"]);
+
+/**
+ * The JavaScript entry of the `name` bin declared by the package installed at
+ * `packageDir`, or `null` when it declares none or the file is not a node
+ * script (a native binary cannot be run through `node`).
+ */
+export function packageBinScript(packageDir, name) {
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8"));
+  } catch {
+    return null;
+  }
+  const bin =
+    typeof manifest?.bin === "string"
+      ? manifest.name?.split("/").pop() === name
+        ? manifest.bin
+        : null
+      : manifest?.bin?.[name];
+  if (typeof bin !== "string" || !bin) return null;
+  const script = join(packageDir, bin);
+  try {
+    if (!statSync(script).isFile()) return null;
+    if (NODE_SCRIPT_EXTENSIONS.has(extname(script))) return script;
+    const firstLine = readFileSync(script, "utf8").split("\n", 1)[0];
+    return /^#!.*\bnode\b/.test(firstLine) ? script : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Names in `dir`, or `[]` when it cannot be read. */
+function listDir(dir) {
+  try {
+    return readdirSync(dir);
+  } catch {
+    return [];
+  }
+}
+
+/** Every top-level package directory in `modules`, scoped ones included. */
+function installedPackageDirs(modules) {
+  const dirs = [];
+  for (const name of listDir(modules)) {
+    if (name.startsWith(".")) continue;
+    if (name.startsWith("@")) {
+      for (const sub of listDir(join(modules, name))) dirs.push(join(modules, name, sub));
+    } else {
+      dirs.push(join(modules, name));
+    }
+  }
+  return dirs;
+}
+
+/**
+ * The node script behind a locally installed bin: the package named like the
+ * bin first (`vite` -> `node_modules/vite`), then every other package.
+ */
+export function findLocalBinScript(root, name) {
+  const modules = join(root, "node_modules");
+  const direct = join(modules, name);
+  const script = packageBinScript(direct, name);
+  if (script) return script;
+  for (const dir of installedPackageDirs(modules)) {
+    if (dir === direct) continue;
+    const found = packageBinScript(dir, name);
+    if (found) return found;
+  }
+  return null;
+}
+
+/**
+ * What to hand to `spawn` for `command args`.
+ *
+ * On Windows, npm installs local bins as `node_modules/.bin/<name>.cmd`
+ * shims. `spawn` without a shell does not apply PATHEXT, so `spawn("vite")`
+ * fails with ENOENT, and node refuses to spawn a `.cmd` file without a shell
+ * (CVE-2024-27980). Instead of a shell (which would re-parse every argument)
+ * a bare command that names a local package bin runs its node script directly
+ * with this node binary. Anything else, and every command on other platforms,
+ * is spawned exactly as given.
+ */
+export function resolveSpawnCommand(
+  command,
+  args,
+  { platform = process.platform, root = projectRoot(), execPath = process.execPath } = {},
+) {
+  if (platform !== "win32" || /[\\/]/.test(command) || extname(command) !== "") {
+    return { command, args };
+  }
+  const script = findLocalBinScript(root, command);
+  return script ? { command: execPath, args: [script, ...args] } : { command, args };
+}
+
 /** The workspace root (this file lives in `<root>/scripts/`). */
 export function projectRoot() {
   return dirname(dirname(fileURLToPath(import.meta.url)));
@@ -111,7 +206,8 @@ function main(argv) {
     process.exit(2);
   }
   const env = mergeAppEnv(readAppEnv(projectRoot()), process.env);
-  const child = spawn(command, args, { stdio: "inherit", env });
+  const resolved = resolveSpawnCommand(command, args);
+  const child = spawn(resolved.command, resolved.args, { stdio: "inherit", env });
   // The dev server is long-running and is stopped by signalling this wrapper.
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
     process.on(signal, () => child.kill(signal));
