@@ -120,7 +120,8 @@ export function analogCoefficients(chaos: number, program: AnalogProgram = "lore
   if (program === "lotka") {
     const alpha = 0.85 + c * 0.55;
     const beta = 0.42 + c * 0.7;
-    return { sigma: 10, rho: 18 + c * 22, beta: 8 / 3, omega: 1, mu: 0, delta: 0.4 + c * 0.35, gamma: 0.62, alpha, label: `α ${alpha.toFixed(2)} · β ${beta.toFixed(2)}` };
+    // F-05 (model lotka/2): integrate with the labelled β. nexus ≤ d087694 returned β = 8/3 here.
+    return { sigma: 10, rho: 18 + c * 22, beta, omega: 1, mu: 0, delta: 0.4 + c * 0.35, gamma: 0.62, alpha, label: `α ${alpha.toFixed(2)} · β ${beta.toFixed(2)}` };
   }
   if (program === "nemo") {
     const a = 0.02 + c * 0.08;
@@ -159,54 +160,253 @@ export function lorenzStep(s: LorenzState, dt: number, chaos: number): LorenzSta
   return { x, y, z };
 }
 
-export function analogStep(program: AnalogProgram, s: AnalogState, dt: number, chaos: number, drive = 0.5): AnalogState {
-  if (program === "nemo") return analogNemoStep(s, dt, chaos, drive);
-  const pots = analogCoefficients(chaos, program);
-  const n = 4;
-  const h = Math.max(0.0004, Math.min(0.08, dt)) / n;
-  let { x, y, z, t } = s;
-  for (let i = 0; i < n; i++) {
-    let dx = 0;
-    let dy = 0;
-    let dz = 0;
-    if (program === "harmonic") {
-      const w2 = pots.omega * pots.omega;
-      dx = y;
-      dy = -w2 * x;
-      dz = 0;
-    } else if (program === "vanderpol") {
-      dx = y;
-      dy = pots.mu * (1 - x * x) * y - x;
-      dz = 0;
-    } else if (program === "duffing") {
-      const force = pots.gamma * (0.45 + drive * 0.7) * Math.cos(pots.omega * t);
-      dx = y;
-      dy = x - x * x * x - pots.delta * y + force;
-      dz = 0;
-    } else if (program === "lotka") {
-      const prey = Math.max(0.02, x);
-      const pred = Math.max(0.02, y);
-      dx = pots.alpha * prey - pots.beta * prey * pred;
-      dy = pots.delta * prey * pred - pots.gamma * pred;
-      dz = 0;
-    } else {
-      dx = pots.sigma * (y - x);
-      dy = x * (pots.rho - z) - y;
-      dz = x * y - pots.beta * z;
-    }
-    x += dx * h;
-    y += dy * h;
-    z += dz * h;
-    t += h;
+/**
+ * Integration methods (see python/nexus_dynamics/integrators.py, the Python
+ * binding of the same engine). Every method advances one tick of dt (clamped to
+ * 0.0004..0.08) in 4 substeps of h = dt / 4:
+ *   euler4      forward Euler, the instrument's historical scheme (audio parity)
+ *   rk4         classical Runge-Kutta 4 on the exact vector field
+ *   symplectic  velocity Verlet (harmonic); Strang split with velocity Verlet on
+ *               the conservative double well + exact damped/forced flow (Duffing)
+ * NEMO is a hybrid threshold/reset system and only runs its own scheme.
+ */
+export type AnalogMethod = "euler4" | "rk4" | "symplectic";
+export const ANALOG_METHODS: readonly AnalogMethod[] = ["euler4", "rk4", "symplectic"];
+/** Hashed into every parity output: changing an algorithm must bump its version. */
+export const ANALOG_METHOD_VERSIONS: Readonly<Record<AnalogMethod, string>> = {
+  euler4: "euler4/1",
+  rk4: "rk4/1",
+  symplectic: "strang-verlet/1",
+};
+/** Program model versions. lotka/2 = F-05 (β now matches its label). */
+export const ANALOG_MODEL_VERSIONS: Readonly<Record<AnalogProgram, string>> = {
+  lorenz: "lorenz/1",
+  harmonic: "harmonic/1",
+  vanderpol: "vanderpol/1",
+  duffing: "duffing/1",
+  lotka: "lotka/2",
+  nemo: "nemo/1",
+};
+export const ANALOG_METHOD_SUPPORT: Readonly<Record<AnalogProgram, readonly AnalogMethod[]>> = {
+  lorenz: ["euler4", "rk4"],
+  harmonic: ["euler4", "rk4", "symplectic"],
+  vanderpol: ["euler4", "rk4"],
+  duffing: ["euler4", "rk4", "symplectic"],
+  lotka: ["euler4", "rk4"],
+  nemo: ["euler4"],
+};
+
+/** Fail-closed engine error. Codes match python/nexus_dynamics/errors.py and IMMUNE. */
+export class AnalogEngineError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = "AnalogEngineError";
+    this.code = code;
   }
+}
+
+type AnalogPots = ReturnType<typeof analogCoefficients>;
+type Vec3 = [number, number, number];
+
+const ANALOG_SUBSTEPS = 4;
+const LOTKA_FLOOR = 0.02;
+
+/** Substep size of one tick, exactly as the instrument has always clamped it. */
+export function analogSubstep(dt: number): number {
+  return Math.max(0.0004, Math.min(0.08, dt)) / ANALOG_SUBSTEPS;
+}
+
+/** Exact vector field of a non-NEMO program (no instrument guards). */
+export function analogField(
+  program: AnalogProgram,
+  pots: AnalogPots,
+  drive: number,
+  x: number,
+  y: number,
+  z: number,
+  t: number,
+): Vec3 {
+  if (program === "harmonic") {
+    const w2 = pots.omega * pots.omega;
+    return [y, -w2 * x, 0];
+  }
+  if (program === "vanderpol") return [y, pots.mu * (1 - x * x) * y - x, 0];
+  if (program === "duffing") {
+    const force = pots.gamma * (0.45 + drive * 0.7) * Math.cos(pots.omega * t);
+    return [y, x - x * x * x - pots.delta * y + force, 0];
+  }
+  if (program === "lotka") return [pots.alpha * x - pots.beta * x * y, pots.delta * x * y - pots.gamma * y, 0];
+  return [pots.sigma * (y - x), x * (pots.rho - z) - y, x * y - pots.beta * z];
+}
+
+/** The instrument's field: analogField plus Lotka's 0.02 floor. */
+function euler4Field(program: AnalogProgram, pots: AnalogPots, drive: number, x: number, y: number, z: number, t: number): Vec3 {
   if (program === "lotka") {
-    x = Math.max(0.02, x);
-    y = Math.max(0.02, y);
+    const prey = Math.max(LOTKA_FLOOR, x);
+    const pred = Math.max(LOTKA_FLOOR, y);
+    return [pots.alpha * prey - pots.beta * prey * pred, pots.delta * prey * pred - pots.gamma * pred, 0];
+  }
+  return analogField(program, pots, drive, x, y, z, t);
+}
+
+function rk4Substep(program: AnalogProgram, pots: AnalogPots, drive: number, x: number, y: number, z: number, t: number, h: number): Vec3 {
+  const [k1x, k1y, k1z] = analogField(program, pots, drive, x, y, z, t);
+  const [k2x, k2y, k2z] = analogField(program, pots, drive, x + 0.5 * h * k1x, y + 0.5 * h * k1y, z + 0.5 * h * k1z, t + 0.5 * h);
+  const [k3x, k3y, k3z] = analogField(program, pots, drive, x + 0.5 * h * k2x, y + 0.5 * h * k2y, z + 0.5 * h * k2z, t + 0.5 * h);
+  const [k4x, k4y, k4z] = analogField(program, pots, drive, x + h * k3x, y + h * k3y, z + h * k3z, t + h);
+  return [
+    x + (h * (k1x + 2 * k2x + 2 * k3x + k4x)) / 6,
+    y + (h * (k1y + 2 * k2y + 2 * k3y + k4y)) / 6,
+    z + (h * (k1z + 2 * k2z + 2 * k3z + k4z)) / 6,
+  ];
+}
+
+/** Exact solution after time s of y' = -δ y + F cos(ω t) (Duffing's dissipative/forced part). */
+export function duffingDissipativeFlow(y: number, t: number, s: number, delta: number, force: number, omega: number): number {
+  const decay = Math.exp(-delta * s);
+  const denom = delta * delta + omega * omega;
+  if (denom === 0) return y + force * s;
+  const p1 = delta * Math.cos(omega * (t + s)) + omega * Math.sin(omega * (t + s));
+  const p0 = delta * Math.cos(omega * t) + omega * Math.sin(omega * t);
+  return decay * y + (force / denom) * (p1 - decay * p0);
+}
+
+function symplecticSubstep(program: AnalogProgram, pots: AnalogPots, drive: number, x: number, y: number, t: number, h: number): [number, number] {
+  if (program === "harmonic") {
+    const w2 = pots.omega * pots.omega;
+    const vHalf = y + 0.5 * h * (-w2 * x);
+    const xNew = x + h * vHalf;
+    return [xNew, vHalf + 0.5 * h * (-w2 * xNew)];
+  }
+  // Duffing: B(h/2) A(h) B(h/2); A = velocity Verlet on x'' = x - x^3.
+  const force = pots.gamma * (0.45 + drive * 0.7);
+  const half = 0.5 * h;
+  let v = duffingDissipativeFlow(y, t, half, pots.delta, force, pots.omega);
+  const vHalf = v + 0.5 * h * (x - x * x * x);
+  const xNew = x + h * vHalf;
+  v = vHalf + 0.5 * h * (xNew - xNew * xNew * xNew);
+  v = duffingDissipativeFlow(v, t + half, half, pots.delta, force, pots.omega);
+  return [xNew, v];
+}
+
+/** Throws UNKNOWN_PROGRAM / UNKNOWN_METHOD / UNSUPPORTED_METHOD like the Python binding. */
+export function assertAnalogMethod(program: AnalogProgram, method: AnalogMethod) {
+  const supported = ANALOG_METHOD_SUPPORT[program];
+  if (!supported) throw new AnalogEngineError("UNKNOWN_PROGRAM", `unknown program: ${String(program)}`);
+  if (!ANALOG_METHODS.includes(method)) throw new AnalogEngineError("UNKNOWN_METHOD", `unknown method: ${String(method)}`);
+  if (!supported.includes(method)) {
+    throw new AnalogEngineError("UNSUPPORTED_METHOD", `${program} supports ${supported.join(", ")}, not ${method}`);
+  }
+}
+
+function requireFinite(name: string, value: number) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new AnalogEngineError("NON_FINITE_NUMBER", `${name} must be finite`);
+  }
+}
+
+function advanceCore(
+  program: AnalogProgram,
+  s: AnalogState,
+  h: number,
+  substeps: number,
+  chaos: number,
+  drive: number,
+  method: AnalogMethod,
+): AnalogState {
+  const pots = analogCoefficients(chaos, program);
+  let { x, y, z, t } = s;
+  if (method === "euler4") {
+    for (let i = 0; i < substeps; i++) {
+      const [dx, dy, dz] = euler4Field(program, pots, drive, x, y, z, t);
+      x += dx * h;
+      y += dy * h;
+      z += dz * h;
+      t += h;
+    }
+    if (program === "lotka") {
+      x = Math.max(LOTKA_FLOOR, x);
+      y = Math.max(LOTKA_FLOOR, y);
+    }
+  } else if (method === "rk4") {
+    for (let i = 0; i < substeps; i++) {
+      [x, y, z] = rk4Substep(program, pots, drive, x, y, z, t, h);
+      t += h;
+    }
+  } else {
+    for (let i = 0; i < substeps; i++) {
+      [x, y] = symplecticSubstep(program, pots, drive, x, y, t, h);
+      t += h;
+    }
   }
   if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z) || !Number.isFinite(t)) {
-    return seedAnalogState(program);
+    throw new AnalogEngineError("NON_FINITE_OUTPUT", `${program} produced a non-finite value`);
   }
   return { x, y, z, t };
+}
+
+/** Advance `substeps` substeps of size h with no dt clamp (convergence studies). Not for NEMO. */
+export function analogAdvance(
+  program: AnalogProgram,
+  s: AnalogState,
+  h: number,
+  substeps: number,
+  chaos: number,
+  drive: number,
+  method: AnalogMethod,
+): AnalogState {
+  assertAnalogMethod(program, method);
+  if (program === "nemo") throw new AnalogEngineError("UNSUPPORTED_METHOD", "NEMO advances only through analogIntegrate()");
+  return advanceCore(program, s, h, substeps, chaos, drive, method);
+}
+
+function strictNemoBank(raw?: number[]): number[] {
+  if (raw === undefined) return seedNemoBank();
+  if (!Array.isArray(raw) || (raw.length !== 15 && raw.length !== 20)) {
+    throw new AnalogEngineError("INVALID_NEMO_BANK", "NEMO bank must contain exactly 15 or 20 values");
+  }
+  if (!raw.every((value) => typeof value === "number" && Number.isFinite(value))) {
+    throw new AnalogEngineError("NON_FINITE_NUMBER", "NEMO bank values must be finite");
+  }
+  return raw.length === 15 ? [...raw, 1, 1, 1, 1, 1] : raw.slice();
+}
+
+/**
+ * One strict tick: validates inputs and never reseeds. Throws AnalogEngineError
+ * (NON_FINITE_OUTPUT on NaN/Infinity, UNSUPPORTED_METHOD, ...). Hash-identical
+ * to python/nexus_dynamics integrators.step().
+ */
+export function analogIntegrate(
+  program: AnalogProgram,
+  s: AnalogState,
+  dt: number,
+  chaos: number,
+  drive = 0.5,
+  method: AnalogMethod = "euler4",
+): AnalogState {
+  assertAnalogMethod(program, method);
+  requireFinite("dt", dt);
+  requireFinite("chaos", chaos);
+  requireFinite("drive", drive);
+  requireFinite("state.x", s.x);
+  requireFinite("state.y", s.y);
+  requireFinite("state.z", s.z);
+  requireFinite("state.t", s.t);
+  if (program === "nemo") return analogNemoTick(s, strictNemoBank(s.bank), dt, chaos, drive);
+  return advanceCore(program, s, analogSubstep(dt), ANALOG_SUBSTEPS, chaos, drive, method);
+}
+
+/** Instrument tick (euler4). Audio must not die: any non-finite result reseeds the program. */
+export function analogStep(program: AnalogProgram, s: AnalogState, dt: number, chaos: number, drive = 0.5): AnalogState {
+  try {
+    if (program === "nemo") return analogNemoTick(s, padNemoBank(s.bank), dt, chaos, drive);
+    return advanceCore(program, s, analogSubstep(dt), ANALOG_SUBSTEPS, chaos, drive, "euler4");
+  } catch (error) {
+    if (error instanceof AnalogEngineError) return seedAnalogState(program);
+    throw error;
+  }
 }
 
 export function scaleLorenz(s: LorenzState) {
@@ -385,7 +585,8 @@ export function opticalReconstruct(intensity: number, dphi: number) {
  * WILLAY conscience field = mean first-order diffraction of the five optical pairs.
  * Dark hologram soft-inhibits the ring (analog fail-closed). Not a chip. Energy UNAVAILABLE.
  */
-function analogNemoStep(s: AnalogState, dt: number, chaos: number, drive: number): AnalogState {
+function analogNemoTick(s: AnalogState, bank: number[], dt: number, chaos: number, drive: number): AnalogState {
+  // `bank` is a fresh 20-cell copy (padNemoBank for the instrument, strictNemoBank for analogIntegrate).
   const c = clamp01(chaos);
   const pots = analogCoefficients(c, "nemo");
   const aAdapt = pots.mu;
@@ -401,7 +602,6 @@ function analogNemoStep(s: AnalogState, dt: number, chaos: number, drive: number
   const bJump = 4 + c * 10;
   const vPeak = 20;
   const M = clamp01(drive);
-  const bank = padNemoBank(s.bank);
   let rate = Number.isFinite(s.z) ? Math.max(0, Math.min(1, s.z)) : 0;
   let t = Number.isFinite(s.t) ? s.t : 0;
   const totalMs = Math.max(0.25, Math.min(80, dt * 1000));
@@ -474,9 +674,10 @@ function analogNemoStep(s: AnalogState, dt: number, chaos: number, drive: number
     if (rate > 1) rate = 1;
     t += h * 0.001;
     if (!Number.isFinite(bank[0]) || !Number.isFinite(rate) || !Number.isFinite(t)) {
-      return seedAnalogState("nemo");
+      throw new AnalogEngineError("NON_FINITE_OUTPUT", "NEMO produced a non-finite value");
     }
   }
 
+  if (!bank.every(Number.isFinite)) throw new AnalogEngineError("NON_FINITE_OUTPUT", "NEMO produced a non-finite value");
   return { x: bank[0]!, y: bank[2]!, z: rate, t, bank };
 }

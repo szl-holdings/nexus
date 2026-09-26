@@ -1,0 +1,4 @@
+# Test-only dependencies for python/tests. The nexus_dynamics package itself is stdlib only.
+# Versions are the ones the Phase 3 suite was run with (pip freeze in a fresh venv).
+pytest==9.1.1
+hypothesis==6.168.1

@@ -99,7 +99,9 @@ test("the CLI reports rather than silently passing when run via a symlink", asyn
   // A check whose exit code is the whole signal must never no-op to 0 because
   // process.argv[1] came in through a symlinked path.
   const link = join(mkdtempSync(join(tmpdir(), "auth-invariant-link-")), "scripts");
-  symlinkSync(join(projectRoot(), "scripts"), link);
+  // "junction" is ignored off Windows; on Windows a directory junction needs no
+  // admin rights or Developer Mode, unlike a symlink (EPERM).
+  symlinkSync(join(projectRoot(), "scripts"), link, "junction");
   const error = await promisify(execFile)(process.execPath, [
     join(link, "check-auth-invariant.mjs"),
     "--dev-url",

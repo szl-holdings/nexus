@@ -24,3 +24,8 @@ hf_token
 public/__grok/install/assets/homescreen/*.png
 
 __pycache__/
+
+# Python engine tests (python/)
+.venv/
+.pytest_cache/
+.hypothesis/
