@@ -138,7 +138,7 @@ def analog_coefficients(chaos: float, program: str = "lorenz") -> dict[str, Any]
         alpha = 0.85 + c * 0.55
         beta = 0.42 + c * 0.7
         return {
-            "sigma": 10, "rho": 18 + c * 22, "beta": 8 / 3, "omega": 1,
+            "sigma": 10, "rho": 18 + c * 22, "beta": beta, "omega": 1,
             "mu": 0, "delta": 0.4 + c * 0.35, "gamma": 0.62, "alpha": alpha,
             "label": f"α {alpha:.2f} · β {beta:.2f}",
         }

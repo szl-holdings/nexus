@@ -1,0 +1,1625 @@
+{
+  "schema": "szl.nexus-parity-vectors/v2",
+  "engine": {
+    "name": "nexus_dynamics",
+    "version": "2.0.0",
+    "python": "python/nexus_dynamics",
+    "typescript": [
+      "src/lib/nexus/math.ts",
+      "src/lib/nexus/dynamics.ts"
+    ],
+    "generated_by": "python -m nexus_dynamics.parity write (run from python/)"
+  },
+  "hash": {
+    "algorithm": "sha256",
+    "text": "compact JSON (separators ',' ':'), keys sorted, UTF-8, non-ASCII unescaped",
+    "numbers": "strings with exactly 9 decimals of the exact binary value, rounded half-to-even (Python format(x, '.9f')); negative zero -> '0.000000000'",
+    "non_finite": "NON_FINITE_OUTPUT is raised; NaN/Infinity are never serialized",
+    "input_payload": {
+      "schema": "szl.nexus-dynamics-input/v2",
+      "method": "<method>",
+      "input": "<contract input>"
+    },
+    "output_payload": "python/nexus_dynamics/run.py deterministic_output == src/lib/nexus/dynamics.ts dynamicsOutput",
+    "compatible_with": "IMMUNE nexus_hash (python/immune/nexus.py), identical for every finite value"
+  },
+  "contract": {
+    "path": "contracts/immune-nexus.v1.json",
+    "sha256": "1959e535f48165870dd9d3eb25c3e77f80531214c1cb5d16accda181a652ee6a",
+    "source": "szl-holdings/immune@33a8009e240976583e8465ba20ef40c4eee68946:contracts/immune-nexus.v1.json"
+  },
+  "integration": {
+    "substeps_per_tick": 4,
+    "dt_clamp": [
+      0.0004,
+      0.08
+    ],
+    "methods": {
+      "euler4": "euler4/1",
+      "rk4": "rk4/1",
+      "symplectic": "strang-verlet/1"
+    },
+    "method_support": {
+      "lorenz": [
+        "euler4",
+        "rk4"
+      ],
+      "harmonic": [
+        "euler4",
+        "rk4",
+        "symplectic"
+      ],
+      "vanderpol": [
+        "euler4",
+        "rk4"
+      ],
+      "duffing": [
+        "euler4",
+        "rk4",
+        "symplectic"
+      ],
+      "lotka": [
+        "euler4",
+        "rk4"
+      ],
+      "nemo": [
+        "euler4"
+      ]
+    },
+    "models": {
+      "lorenz": "lorenz/1",
+      "harmonic": "harmonic/1",
+      "vanderpol": "vanderpol/1",
+      "duffing": "duffing/1",
+      "lotka": "lotka/2",
+      "nemo": "nemo/1"
+    }
+  },
+  "intentional_changes": [
+    {
+      "id": "F-05",
+      "kind": "parity version bump",
+      "model": "lotka/2",
+      "previous_model": "lotka/1",
+      "previous": "Lotka-Volterra integrated with beta = 8/3 while the label showed beta = 0.42 + 0.7 * chaos",
+      "current": "beta = 0.42 + 0.7 * chaos (the labelled value)",
+      "fixed_in": [
+        "server.py:141",
+        "space/server.py:141",
+        "src/lib/nexus/math.ts:123-124"
+      ],
+      "previous_revision": "d087694088251067992c2fc9966556cae74d9eda",
+      "affects": "every lotka trajectory and hash; the other five programs are unchanged",
+      "immune": "IMMUNE's import already used the labelled beta, so IMMUNE v1 hashes (kept below) are reproduced unchanged; the pre-fix nexus engine did not reproduce the v1 lotka hash",
+      "pre_fix_immune_v1_lotka_output_hash": "2bf1f6e2a6f3db9c96c7f04ab0b53db871dfa389c17584d74b4aeada5d074135"
+    }
+  ],
+  "vectors": [
+    {
+      "id": "lorenz.euler4.nominal",
+      "method": "euler4",
+      "input": {
+        "program": "lorenz",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 256,
+        "dt": 0.01,
+        "chaos": 0.45,
+        "drive": 0.7,
+        "seed": 0.2
+      },
+      "expected": {
+        "inputHash": "13ee5f146294af87da747c46e2fac24775c8fea562e9df2d6ee793236932c71e",
+        "outputHash": "973263f8c43b7cbde52d97491abfc7267cea098211ae4ae81b538dd7ef4f76c6"
+      }
+    },
+    {
+      "id": "lorenz.euler4.low",
+      "method": "euler4",
+      "input": {
+        "program": "lorenz",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 400,
+        "dt": 0.0004,
+        "chaos": 0.0,
+        "drive": 0.0,
+        "seed": 0.0
+      },
+      "expected": {
+        "inputHash": "cc9bce27901ffc6baac31f8e4f0be9547b827e5dc1fca79e7c11c8115d660650",
+        "outputHash": "6f1a327eecdb1bee02263c4e40e62f2f04ff4a5ea94c45668d9df0208676d1a8"
+      }
+    },
+    {
+      "id": "lorenz.euler4.high",
+      "method": "euler4",
+      "input": {
+        "program": "lorenz",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 120,
+        "dt": 0.08,
+        "chaos": 1.0,
+        "drive": 1.0,
+        "seed": 1.0
+      },
+      "expected": {
+        "inputHash": "0dde8cd520a7c007404c661bc813f125419ee9e0024f3a6914444a964b7538ad",
+        "outputHash": "1f01eeff9a916872059433e779ab57db5f3ebc47ce8982e1fcfdecef7a106b36"
+      }
+    },
+    {
+      "id": "lorenz.euler4.rep",
+      "method": "euler4",
+      "input": {
+        "program": "lorenz",
+        "mode": "REP",
+        "repeatEvery": 64,
+        "steps": 300,
+        "dt": 0.02,
+        "chaos": 0.7,
+        "drive": 0.35,
+        "seed": 0.61
+      },
+      "expected": {
+        "inputHash": "2b1d22d134de470a253ae2b5469983dcaa34c15c2b973deff4108ebf0e74a04a",
+        "outputHash": "49e442c85047a08bb21d7649443b50ab2ce33e8937b18ee39b559f2da1317317"
+      }
+    },
+    {
+      "id": "lorenz.rk4.nominal",
+      "method": "rk4",
+      "input": {
+        "program": "lorenz",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 256,
+        "dt": 0.01,
+        "chaos": 0.45,
+        "drive": 0.7,
+        "seed": 0.2
+      },
+      "expected": {
+        "inputHash": "af52b671ccda90c9334b2d02521fd9a671346182ab18cb2e2cd203e0c416326f",
+        "outputHash": "219c0556f4b93d176b5e519c4d1ab5816e1c6fdcdb691164e25d23a02f188ec4"
+      }
+    },
+    {
+      "id": "lorenz.rk4.low",
+      "method": "rk4",
+      "input": {
+        "program": "lorenz",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 400,
+        "dt": 0.0004,
+        "chaos": 0.0,
+        "drive": 0.0,
+        "seed": 0.0
+      },
+      "expected": {
+        "inputHash": "81a3d240d980cf4a832d11ad013e97f66d454b1c90d3be3540baf8df4572ad1f",
+        "outputHash": "315a1d4deeeda05448cc5efc3731f08927fd82e9dd30878028b2140c82303fac"
+      }
+    },
+    {
+      "id": "lorenz.rk4.high",
+      "method": "rk4",
+      "input": {
+        "program": "lorenz",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 120,
+        "dt": 0.08,
+        "chaos": 1.0,
+        "drive": 1.0,
+        "seed": 1.0
+      },
+      "expected": {
+        "inputHash": "4adbd57045cb5363cd8dd9b4232cc8ab2831f066e1bc43eff91cb9179d473f89",
+        "outputHash": "4a3fa9edb95766fdfe7615243246898577d515f841cbb91b63cd12a1bb53f6a1"
+      }
+    },
+    {
+      "id": "lorenz.rk4.rep",
+      "method": "rk4",
+      "input": {
+        "program": "lorenz",
+        "mode": "REP",
+        "repeatEvery": 64,
+        "steps": 300,
+        "dt": 0.02,
+        "chaos": 0.7,
+        "drive": 0.35,
+        "seed": 0.61
+      },
+      "expected": {
+        "inputHash": "ee5635d69afd34ae7570bc0b66eef6b11eb79fa52d371c6ae2dda3dd55898966",
+        "outputHash": "384bf8dee7b5655a7df8ac16c44cb80dd1928b9e55ecee575fd568d712b1cc8c"
+      }
+    },
+    {
+      "id": "harmonic.euler4.nominal",
+      "method": "euler4",
+      "input": {
+        "program": "harmonic",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 256,
+        "dt": 0.01,
+        "chaos": 0.45,
+        "drive": 0.7,
+        "seed": 0.2
+      },
+      "expected": {
+        "inputHash": "0ff480bd56126169a2a0ec46719ebeb19a2c473748c24c0cda285ed0ae51365f",
+        "outputHash": "fb833338ebddc67fe5842b0e1f59d7c9b12ac92504398932250e7ffcf597106b"
+      }
+    },
+    {
+      "id": "harmonic.euler4.low",
+      "method": "euler4",
+      "input": {
+        "program": "harmonic",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 400,
+        "dt": 0.0004,
+        "chaos": 0.0,
+        "drive": 0.0,
+        "seed": 0.0
+      },
+      "expected": {
+        "inputHash": "5f62292d2d9b66eb67672f5b492ad61702139ccbb31ddfeec384ef467e6f9141",
+        "outputHash": "f00b862ed7021ae17dcdc6a8f42ffc2d5cdb641c3612feaaffd85a269c23deca"
+      }
+    },
+    {
+      "id": "harmonic.euler4.high",
+      "method": "euler4",
+      "input": {
+        "program": "harmonic",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 120,
+        "dt": 0.08,
+        "chaos": 1.0,
+        "drive": 1.0,
+        "seed": 1.0
+      },
+      "expected": {
+        "inputHash": "01d5cc54f58924fa465de55b950bd637221f1f5720f6e5e80142b570172f6fc1",
+        "outputHash": "dc6957366be79383347cbf8757062ed46a04b82b07da6db8d676cdb7fab5196b"
+      }
+    },
+    {
+      "id": "harmonic.euler4.rep",
+      "method": "euler4",
+      "input": {
+        "program": "harmonic",
+        "mode": "REP",
+        "repeatEvery": 64,
+        "steps": 300,
+        "dt": 0.02,
+        "chaos": 0.7,
+        "drive": 0.35,
+        "seed": 0.61
+      },
+      "expected": {
+        "inputHash": "a3ada21a2e22ee150ece4cf63082093686a2d22e4748c433bf81e87f0eb8ea9e",
+        "outputHash": "7ca8318369fe4bc6a63660db83acc8f8fba2d6a9e8545ed36a3cc0685e94d810"
+      }
+    },
+    {
+      "id": "harmonic.rk4.nominal",
+      "method": "rk4",
+      "input": {
+        "program": "harmonic",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 256,
+        "dt": 0.01,
+        "chaos": 0.45,
+        "drive": 0.7,
+        "seed": 0.2
+      },
+      "expected": {
+        "inputHash": "0761aa5c7c049996b81102856cf3406cacdebdb6abb1f19f0a75ee99f1c31d6f",
+        "outputHash": "8280b9466ba864d61b7a14aaa8852b31b1d32ca49de78c4526e365f2aff31dca"
+      }
+    },
+    {
+      "id": "harmonic.rk4.low",
+      "method": "rk4",
+      "input": {
+        "program": "harmonic",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 400,
+        "dt": 0.0004,
+        "chaos": 0.0,
+        "drive": 0.0,
+        "seed": 0.0
+      },
+      "expected": {
+        "inputHash": "d2a9a24e07d2849770536e7d8f35dc7ae28f97d0ea3247179c5f440579375983",
+        "outputHash": "b54623a21d167af0b109dc31216785c84a162b57c1d80312446cd93ca0065335"
+      }
+    },
+    {
+      "id": "harmonic.rk4.high",
+      "method": "rk4",
+      "input": {
+        "program": "harmonic",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 120,
+        "dt": 0.08,
+        "chaos": 1.0,
+        "drive": 1.0,
+        "seed": 1.0
+      },
+      "expected": {
+        "inputHash": "edfc3a6180cdc8055a8d5d8e0165d67d3fd40426b8e823a0f52b9575669b0667",
+        "outputHash": "b473fa6ae57d38b4657f437fa8dc5bf60a8dcf0b947e0f2538d16251d2bd8c6f"
+      }
+    },
+    {
+      "id": "harmonic.rk4.rep",
+      "method": "rk4",
+      "input": {
+        "program": "harmonic",
+        "mode": "REP",
+        "repeatEvery": 64,
+        "steps": 300,
+        "dt": 0.02,
+        "chaos": 0.7,
+        "drive": 0.35,
+        "seed": 0.61
+      },
+      "expected": {
+        "inputHash": "9aac8e27dda728ac22767f170062914ff5e37f478a57991e23bd361b59a2d3e9",
+        "outputHash": "c32ba78202aea3a6796278880c7049278a6600ac7daa3eb6181f5a669964baee"
+      }
+    },
+    {
+      "id": "harmonic.symplectic.nominal",
+      "method": "symplectic",
+      "input": {
+        "program": "harmonic",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 256,
+        "dt": 0.01,
+        "chaos": 0.45,
+        "drive": 0.7,
+        "seed": 0.2
+      },
+      "expected": {
+        "inputHash": "80303212bbcb677fc561feb09862bcce5ca96da55edcf5b9fc5f26709f7837a7",
+        "outputHash": "f93b59281838add476cc8d5f850fb8b8c566088a1cd5ef8823bd765eedad26ba"
+      }
+    },
+    {
+      "id": "harmonic.symplectic.low",
+      "method": "symplectic",
+      "input": {
+        "program": "harmonic",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 400,
+        "dt": 0.0004,
+        "chaos": 0.0,
+        "drive": 0.0,
+        "seed": 0.0
+      },
+      "expected": {
+        "inputHash": "2ffc5a98c5e8958fb68a68cd3f7971bbde8d0baf7086fe8a9c18a115c48b94b6",
+        "outputHash": "711e845a5ee65320502b07810386d900426ec99466c5869192449578fcd294af"
+      }
+    },
+    {
+      "id": "harmonic.symplectic.high",
+      "method": "symplectic",
+      "input": {
+        "program": "harmonic",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 120,
+        "dt": 0.08,
+        "chaos": 1.0,
+        "drive": 1.0,
+        "seed": 1.0
+      },
+      "expected": {
+        "inputHash": "e97b66e769f7f8edc4c613871925bc0219387a27bdbee0e9f2628e9021c6b6a4",
+        "outputHash": "bd49247ae16a540945cb3857f7c99bd1d5b9dce8ea2e4863343e12850b6d7c27"
+      }
+    },
+    {
+      "id": "harmonic.symplectic.rep",
+      "method": "symplectic",
+      "input": {
+        "program": "harmonic",
+        "mode": "REP",
+        "repeatEvery": 64,
+        "steps": 300,
+        "dt": 0.02,
+        "chaos": 0.7,
+        "drive": 0.35,
+        "seed": 0.61
+      },
+      "expected": {
+        "inputHash": "79de1b588f8005fe66dd0f62fd0ef2dfd3241a81632e50ac56a1efd5cdbbceeb",
+        "outputHash": "9316ffd82eb9c8fcc1c12ba39e44a2651eca04d1d5631c553492b9a599e785f4"
+      }
+    },
+    {
+      "id": "vanderpol.euler4.nominal",
+      "method": "euler4",
+      "input": {
+        "program": "vanderpol",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 256,
+        "dt": 0.01,
+        "chaos": 0.45,
+        "drive": 0.7,
+        "seed": 0.2
+      },
+      "expected": {
+        "inputHash": "1749f80567112bd3eb0c8e248c4acd404c3f4dd32987a27d2d53ab5c1029ef83",
+        "outputHash": "fc567babd6b08118d5c798527db7bd606b3502c90d0bb3f54d7bff44b1bc10df"
+      }
+    },
+    {
+      "id": "vanderpol.euler4.low",
+      "method": "euler4",
+      "input": {
+        "program": "vanderpol",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 400,
+        "dt": 0.0004,
+        "chaos": 0.0,
+        "drive": 0.0,
+        "seed": 0.0
+      },
+      "expected": {
+        "inputHash": "b3bf4a0dcfb6ec94d5a917ec06eacda8d7e07d212c09968638e47c84b66c2099",
+        "outputHash": "5f7039ea4f48756e60e777d22a70e0b01b54a70968e4a810304ea1dcc3343edb"
+      }
+    },
+    {
+      "id": "vanderpol.euler4.high",
+      "method": "euler4",
+      "input": {
+        "program": "vanderpol",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 120,
+        "dt": 0.08,
+        "chaos": 1.0,
+        "drive": 1.0,
+        "seed": 1.0
+      },
+      "expected": {
+        "inputHash": "0a45b30061e82cc1227cfcdb4e7a9e85970baa7d24876a1c8678c2f03136241e",
+        "outputHash": "ea3ddfc4196d11702372c64290987166b4485db01ffdd3c115ccd23a698e93fc"
+      }
+    },
+    {
+      "id": "vanderpol.euler4.rep",
+      "method": "euler4",
+      "input": {
+        "program": "vanderpol",
+        "mode": "REP",
+        "repeatEvery": 64,
+        "steps": 300,
+        "dt": 0.02,
+        "chaos": 0.7,
+        "drive": 0.35,
+        "seed": 0.61
+      },
+      "expected": {
+        "inputHash": "44b4f88dbcb3aa6d5adb84a6f8ade05db450f56ef2456c6949975bcfb13516a6",
+        "outputHash": "b7f69f5e767ad0f519460516ca6872b40df142bcc9fffcf575e0c0f394fdeb1c"
+      }
+    },
+    {
+      "id": "vanderpol.rk4.nominal",
+      "method": "rk4",
+      "input": {
+        "program": "vanderpol",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 256,
+        "dt": 0.01,
+        "chaos": 0.45,
+        "drive": 0.7,
+        "seed": 0.2
+      },
+      "expected": {
+        "inputHash": "051dd798826139416b5a2f36aba52ba8946c920cb876a16b49b6d19f1e96c13f",
+        "outputHash": "e9e590e3818fa26a85163969bfc1c35d4273035d3e97a97d321dbc1583b22d46"
+      }
+    },
+    {
+      "id": "vanderpol.rk4.low",
+      "method": "rk4",
+      "input": {
+        "program": "vanderpol",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 400,
+        "dt": 0.0004,
+        "chaos": 0.0,
+        "drive": 0.0,
+        "seed": 0.0
+      },
+      "expected": {
+        "inputHash": "b15425588665a755303011f19b4a98b12f3c0512ce0a9e6799f1a77895424010",
+        "outputHash": "b01f0b56c18a94801ca3fc37fd43b8d2e83811d5e1a2b306215db82824340718"
+      }
+    },
+    {
+      "id": "vanderpol.rk4.high",
+      "method": "rk4",
+      "input": {
+        "program": "vanderpol",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 120,
+        "dt": 0.08,
+        "chaos": 1.0,
+        "drive": 1.0,
+        "seed": 1.0
+      },
+      "expected": {
+        "inputHash": "e887b88f175f685dad4e1f17656386af86d658db2b8ea17679370d7802ff4ccf",
+        "outputHash": "01540a8356751401089b1739fa61acf05bad38fb72e134aae06c21505d4dd23b"
+      }
+    },
+    {
+      "id": "vanderpol.rk4.rep",
+      "method": "rk4",
+      "input": {
+        "program": "vanderpol",
+        "mode": "REP",
+        "repeatEvery": 64,
+        "steps": 300,
+        "dt": 0.02,
+        "chaos": 0.7,
+        "drive": 0.35,
+        "seed": 0.61
+      },
+      "expected": {
+        "inputHash": "e62b667e0445c988cb0ccd6e6243aa966d7ed77d33bd0b9e74217ff292fc915d",
+        "outputHash": "a69a61e20e1ad36ffd541183352781d2553c23b9a62b1870f5cf99816382b7ab"
+      }
+    },
+    {
+      "id": "duffing.euler4.nominal",
+      "method": "euler4",
+      "input": {
+        "program": "duffing",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 256,
+        "dt": 0.01,
+        "chaos": 0.45,
+        "drive": 0.7,
+        "seed": 0.2
+      },
+      "expected": {
+        "inputHash": "a408247152147f49a807ccad20665311d434326e6bdf1d84ed2260ae63d985ca",
+        "outputHash": "76322a7e69e9c6dddbcb48567bb4a7c4eac116ccd4d1704664f07147a21334c5"
+      }
+    },
+    {
+      "id": "duffing.euler4.low",
+      "method": "euler4",
+      "input": {
+        "program": "duffing",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 400,
+        "dt": 0.0004,
+        "chaos": 0.0,
+        "drive": 0.0,
+        "seed": 0.0
+      },
+      "expected": {
+        "inputHash": "edcc5708c7d6b921c3a7827bf0bbf0c319abac307cd0e107bca60d78a9046998",
+        "outputHash": "e1fa57cfe72f1a322c19c16d17171a14da88800eb8c4059660c146c6cc01978f"
+      }
+    },
+    {
+      "id": "duffing.euler4.high",
+      "method": "euler4",
+      "input": {
+        "program": "duffing",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 120,
+        "dt": 0.08,
+        "chaos": 1.0,
+        "drive": 1.0,
+        "seed": 1.0
+      },
+      "expected": {
+        "inputHash": "998427fe7693d3678a375010dd4f50cd06e1f649ae22062f21db1345c20eb702",
+        "outputHash": "897d3062a9a945eaa760e68ccccd0dacf23b4b0de7b03febabfbdd5a295480e9"
+      }
+    },
+    {
+      "id": "duffing.euler4.rep",
+      "method": "euler4",
+      "input": {
+        "program": "duffing",
+        "mode": "REP",
+        "repeatEvery": 64,
+        "steps": 300,
+        "dt": 0.02,
+        "chaos": 0.7,
+        "drive": 0.35,
+        "seed": 0.61
+      },
+      "expected": {
+        "inputHash": "4088f6355022eed4224caa4e1e16cc459d2f21a8dccac36fccdfda850c655acc",
+        "outputHash": "272a6847374b63a76ba2b14825af8121866c797b9c48b958444cdfba2b7bf67e"
+      }
+    },
+    {
+      "id": "duffing.rk4.nominal",
+      "method": "rk4",
+      "input": {
+        "program": "duffing",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 256,
+        "dt": 0.01,
+        "chaos": 0.45,
+        "drive": 0.7,
+        "seed": 0.2
+      },
+      "expected": {
+        "inputHash": "b17cf4d410119e17a62b9c07afe0eeb8b47d790c817a0ab1bd1584005a972c9c",
+        "outputHash": "e9cac71fcfe807f722513888f3185ee9c7943ac1624b5575253a6e3d027e0d92"
+      }
+    },
+    {
+      "id": "duffing.rk4.low",
+      "method": "rk4",
+      "input": {
+        "program": "duffing",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 400,
+        "dt": 0.0004,
+        "chaos": 0.0,
+        "drive": 0.0,
+        "seed": 0.0
+      },
+      "expected": {
+        "inputHash": "48a52946240ea53c25e5a137a9e43052ac21292d17b05098792b220514b317e0",
+        "outputHash": "0231be9694ca846e396498a5f6f133b1b677e4705542b9d3369f83ae37f21d05"
+      }
+    },
+    {
+      "id": "duffing.rk4.high",
+      "method": "rk4",
+      "input": {
+        "program": "duffing",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 120,
+        "dt": 0.08,
+        "chaos": 1.0,
+        "drive": 1.0,
+        "seed": 1.0
+      },
+      "expected": {
+        "inputHash": "70866f54d966a62f973f4dc96513cc4bfbd2cbd3c77554cb1a8f6cdd40c69b21",
+        "outputHash": "e246af456db2f7a143df1e624c513013e21b6a6606958d2443d69f23e2d2975c"
+      }
+    },
+    {
+      "id": "duffing.rk4.rep",
+      "method": "rk4",
+      "input": {
+        "program": "duffing",
+        "mode": "REP",
+        "repeatEvery": 64,
+        "steps": 300,
+        "dt": 0.02,
+        "chaos": 0.7,
+        "drive": 0.35,
+        "seed": 0.61
+      },
+      "expected": {
+        "inputHash": "4d204aa02d3cf7d7ba45fbc8de79b0e7f6a4038eb64fe8aed0a69728064c997c",
+        "outputHash": "39e212e5c57fea50065d36cd621323b529e9ac9a103cd184b5fb162226260ccf"
+      }
+    },
+    {
+      "id": "duffing.symplectic.nominal",
+      "method": "symplectic",
+      "input": {
+        "program": "duffing",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 256,
+        "dt": 0.01,
+        "chaos": 0.45,
+        "drive": 0.7,
+        "seed": 0.2
+      },
+      "expected": {
+        "inputHash": "f8686142be53fbfba8813aacc3d6048f40bbbcc133a298d9401d2ae755a8f005",
+        "outputHash": "fb719a1296760fdec2b8135c4477e4909a1de23b8830069653802e6b35242e62"
+      }
+    },
+    {
+      "id": "duffing.symplectic.low",
+      "method": "symplectic",
+      "input": {
+        "program": "duffing",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 400,
+        "dt": 0.0004,
+        "chaos": 0.0,
+        "drive": 0.0,
+        "seed": 0.0
+      },
+      "expected": {
+        "inputHash": "3be58903cef5a2ef682d9bdf5092d88e57d5a7ad3c9e7d7d368b07e096847157",
+        "outputHash": "1fedd125243d50ea027729cb166c66f7e5ba4f96b8cf3aca4a2bccaa0eac364a"
+      }
+    },
+    {
+      "id": "duffing.symplectic.high",
+      "method": "symplectic",
+      "input": {
+        "program": "duffing",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 120,
+        "dt": 0.08,
+        "chaos": 1.0,
+        "drive": 1.0,
+        "seed": 1.0
+      },
+      "expected": {
+        "inputHash": "ae38856badcbcdc5d944e14b4dcdc42f4f796967e09abf2a13db1aea5c12efca",
+        "outputHash": "440c4a3ca2d66684bb42c19970a89e724031e276f73470a83434c727437b5175"
+      }
+    },
+    {
+      "id": "duffing.symplectic.rep",
+      "method": "symplectic",
+      "input": {
+        "program": "duffing",
+        "mode": "REP",
+        "repeatEvery": 64,
+        "steps": 300,
+        "dt": 0.02,
+        "chaos": 0.7,
+        "drive": 0.35,
+        "seed": 0.61
+      },
+      "expected": {
+        "inputHash": "b442280a47de2fc9b01b14d02fd35cd002b3c76b1caef1572fff0c2891970086",
+        "outputHash": "d66b50af5d185b4547284b0d794219403ab940a8f4b213af9c8706e86b4f1520"
+      }
+    },
+    {
+      "id": "lotka.euler4.nominal",
+      "method": "euler4",
+      "input": {
+        "program": "lotka",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 256,
+        "dt": 0.01,
+        "chaos": 0.45,
+        "drive": 0.7,
+        "seed": 0.2
+      },
+      "expected": {
+        "inputHash": "8f1c94dacd82b28af6c8c6bc018d22b9e2feb03f2be5844f6f72e1fd1e040734",
+        "outputHash": "425bb7419604e121c164af919d9971b450c91627390701e4e9c0a867ae9cb15b"
+      }
+    },
+    {
+      "id": "lotka.euler4.low",
+      "method": "euler4",
+      "input": {
+        "program": "lotka",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 400,
+        "dt": 0.0004,
+        "chaos": 0.0,
+        "drive": 0.0,
+        "seed": 0.0
+      },
+      "expected": {
+        "inputHash": "e4e0b014e7cef9a296d81a35c1be5b69e679cab87382e0fe95add5f6eaa7b9f8",
+        "outputHash": "b600ffd27695484dc1bda5505f134b604f7e7732e4dc072d73d59e7790d11f1d"
+      }
+    },
+    {
+      "id": "lotka.euler4.high",
+      "method": "euler4",
+      "input": {
+        "program": "lotka",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 120,
+        "dt": 0.08,
+        "chaos": 1.0,
+        "drive": 1.0,
+        "seed": 1.0
+      },
+      "expected": {
+        "inputHash": "a0b60e4fb6abbecb21e412cd535281cf596d50145c44e2d33d8b0896e6966fca",
+        "outputHash": "d3621dbf497e0ee9d5615b489ce205588c629b58b8b432b13abbe884db52700f"
+      }
+    },
+    {
+      "id": "lotka.euler4.rep",
+      "method": "euler4",
+      "input": {
+        "program": "lotka",
+        "mode": "REP",
+        "repeatEvery": 64,
+        "steps": 300,
+        "dt": 0.02,
+        "chaos": 0.7,
+        "drive": 0.35,
+        "seed": 0.61
+      },
+      "expected": {
+        "inputHash": "1b7da8ee3883df65b0b0684c6eb0c1f2a01ff01edcb33152dee0c2893be8da76",
+        "outputHash": "60ef4033ecaabf8d3e5589f1f988d9858a74eb8e8815e88c16ee4759882fec3d"
+      }
+    },
+    {
+      "id": "lotka.rk4.nominal",
+      "method": "rk4",
+      "input": {
+        "program": "lotka",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 256,
+        "dt": 0.01,
+        "chaos": 0.45,
+        "drive": 0.7,
+        "seed": 0.2
+      },
+      "expected": {
+        "inputHash": "70e1f3f89a9f076045a571101355171942091180069417ee17567d02b2a21e58",
+        "outputHash": "08717267f74cd4a90cc146539964bae509dff451e8df486260269afd3ade1d51"
+      }
+    },
+    {
+      "id": "lotka.rk4.low",
+      "method": "rk4",
+      "input": {
+        "program": "lotka",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 400,
+        "dt": 0.0004,
+        "chaos": 0.0,
+        "drive": 0.0,
+        "seed": 0.0
+      },
+      "expected": {
+        "inputHash": "8f45a65821fb63426f3d18fe1d3278f8669a675e0491134ba4cf7cddafdae242",
+        "outputHash": "217ae5c32cf7b115c06ba9fd5e6cd10cde75dd89a29aaa950feb1f23ac08ebff"
+      }
+    },
+    {
+      "id": "lotka.rk4.high",
+      "method": "rk4",
+      "input": {
+        "program": "lotka",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 120,
+        "dt": 0.08,
+        "chaos": 1.0,
+        "drive": 1.0,
+        "seed": 1.0
+      },
+      "expected": {
+        "inputHash": "9f9ca708a6617ca4f65ce515406e63062d9ae4f236d442ce85de1ff78cb5dae5",
+        "outputHash": "56a04ffb5253f0b25adefabd28688f27429dd98ff5e55fee9485316d7564a812"
+      }
+    },
+    {
+      "id": "lotka.rk4.rep",
+      "method": "rk4",
+      "input": {
+        "program": "lotka",
+        "mode": "REP",
+        "repeatEvery": 64,
+        "steps": 300,
+        "dt": 0.02,
+        "chaos": 0.7,
+        "drive": 0.35,
+        "seed": 0.61
+      },
+      "expected": {
+        "inputHash": "a8a1555ed4dcbec96344f06d0f07fb9ec37ebafdf20ef2ea0bafa468757ce1ed",
+        "outputHash": "6dc06ea0ebd3d0c75a2d55d9e025c15a3eb049e8d93e12294f985b18f478d03c"
+      }
+    },
+    {
+      "id": "nemo.euler4.nominal",
+      "method": "euler4",
+      "input": {
+        "program": "nemo",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 64,
+        "dt": 0.002,
+        "chaos": 0.45,
+        "drive": 0.7,
+        "seed": 0.2
+      },
+      "expected": {
+        "inputHash": "ed398f3d9a04798430978a0a9814833ecb1c039ecbb5335077d9ad5e37b41f55",
+        "outputHash": "cd78ea34f75df43c048f8e020def00963c596c3abe63e6fe58932d65efa2ba24"
+      }
+    },
+    {
+      "id": "nemo.euler4.low",
+      "method": "euler4",
+      "input": {
+        "program": "nemo",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 32,
+        "dt": 0.0004,
+        "chaos": 0.0,
+        "drive": 0.0,
+        "seed": 0.0
+      },
+      "expected": {
+        "inputHash": "a377a20cf69b482fb024bf607f62d76917738aeec478f1be5bf825f86bbe78dd",
+        "outputHash": "243942cf60a7200040416d8b8e8c882111c99fa0b6c35a5e195b995db564b8f6"
+      }
+    },
+    {
+      "id": "nemo.euler4.high",
+      "method": "euler4",
+      "input": {
+        "program": "nemo",
+        "mode": "OP",
+        "repeatEvery": 64,
+        "steps": 24,
+        "dt": 0.08,
+        "chaos": 1.0,
+        "drive": 1.0,
+        "seed": 1.0
+      },
+      "expected": {
+        "inputHash": "356e602a727f4c6f2069841dca7bab9b284c8d2f0a64b7b7f9ab3cbddc9612cc",
+        "outputHash": "f9471695fce64503881c48b1d166dbf92ec25e668fce815955b38d30986d158b"
+      }
+    },
+    {
+      "id": "nemo.euler4.rep",
+      "method": "euler4",
+      "input": {
+        "program": "nemo",
+        "mode": "REP",
+        "repeatEvery": 32,
+        "steps": 96,
+        "dt": 0.004,
+        "chaos": 0.7,
+        "drive": 0.35,
+        "seed": 0.61
+      },
+      "expected": {
+        "inputHash": "ecbbaa9f81226f3e6fbbcccd2de860338e4fe9776008d0d16b7fe00ee674f49e",
+        "outputHash": "65c1a13b6cd5fb69f4dd70bd45e801f4d525b25d0b3f1b4d25245f02cbfaa905"
+      }
+    },
+    {
+      "id": "lorenz.rk4.long",
+      "method": "rk4",
+      "input": {
+        "mode": "OP",
+        "repeatEvery": 64,
+        "program": "lorenz",
+        "steps": 2400,
+        "dt": 0.02,
+        "chaos": 0.8,
+        "drive": 0.5,
+        "seed": 0.9
+      },
+      "expected": {
+        "inputHash": "a73971d94416e5747dd6b8e8c6aa972451e0dc78c562d0d7b356d06e4a2b9b92",
+        "outputHash": "a415ae67a62093385d6a0afee8880cdb4cf91016db0450ebfc4ee818ca8b045a"
+      }
+    },
+    {
+      "id": "lorenz.euler4.long",
+      "method": "euler4",
+      "input": {
+        "mode": "OP",
+        "repeatEvery": 64,
+        "program": "lorenz",
+        "steps": 2400,
+        "dt": 0.01,
+        "chaos": 0.6,
+        "drive": 0.5,
+        "seed": 0.33
+      },
+      "expected": {
+        "inputHash": "d085f2b5479e3a5b9fbed8de3954674203cc4a64275714ce96ebc65c5fea9c5c",
+        "outputHash": "dd457397e3af46ca721b780e99baca4a5f5cd2e0a4b7325270e152630747e6df"
+      }
+    },
+    {
+      "id": "lorenz.rk4.state",
+      "method": "rk4",
+      "input": {
+        "mode": "OP",
+        "repeatEvery": 64,
+        "program": "lorenz",
+        "steps": 200,
+        "dt": 0.01,
+        "chaos": 0.6,
+        "drive": 0.5,
+        "seed": 0.5,
+        "state": {
+          "x": -8.5,
+          "y": 3.25,
+          "z": 27.0,
+          "t": 12.5
+        }
+      },
+      "expected": {
+        "inputHash": "7da8ff54e64b1022a1b41c7a8b62c2f7f5ea8d736d92d35006453c41adad0d58",
+        "outputHash": "e1c154bdda4c06717dd87762c67202bf58280fb4028e4b99f26782e784d81952"
+      }
+    },
+    {
+      "id": "harmonic.symplectic.state",
+      "method": "symplectic",
+      "input": {
+        "mode": "OP",
+        "repeatEvery": 64,
+        "program": "harmonic",
+        "steps": 500,
+        "dt": 0.05,
+        "chaos": 0.9,
+        "drive": 0.2,
+        "seed": 0.1,
+        "state": {
+          "x": -0.4,
+          "y": 2.2,
+          "z": 0.0,
+          "t": 3.0
+        }
+      },
+      "expected": {
+        "inputHash": "1f087419cd7a2ebd26d52ef666a2c524ce25566fbd253b9098de81b10a2e000b",
+        "outputHash": "9b8b3173a74218abc725889b03f0ff978166198a2b436ca3968903ce36f16642"
+      }
+    },
+    {
+      "id": "duffing.symplectic.state",
+      "method": "symplectic",
+      "input": {
+        "mode": "OP",
+        "repeatEvery": 64,
+        "program": "duffing",
+        "steps": 400,
+        "dt": 0.03,
+        "chaos": 0.69,
+        "drive": 0.8,
+        "seed": 0.3,
+        "state": {
+          "x": -1.1,
+          "y": 0.35,
+          "z": 0.5,
+          "t": 7.25
+        }
+      },
+      "expected": {
+        "inputHash": "8d354fb01d076b4e210c097014f5b0fd78a1f8ffdc0cd39c009fbcc52a35a2e0",
+        "outputHash": "c63bc38581868ed743bb0908df21f30c5077099cf6a1e9abf83e357dbbf3e6a3"
+      }
+    },
+    {
+      "id": "lotka.rk4.state",
+      "method": "rk4",
+      "input": {
+        "mode": "OP",
+        "repeatEvery": 64,
+        "program": "lotka",
+        "steps": 1000,
+        "dt": 0.05,
+        "chaos": 0.25,
+        "drive": 0.0,
+        "seed": 0.0,
+        "state": {
+          "x": 0.6,
+          "y": 2.4,
+          "z": 0.5,
+          "t": 0.0
+        }
+      },
+      "expected": {
+        "inputHash": "446380ebda2b774263fa9f0e42ad8c66533d3efcc0a0c527285cfceaf6a35891",
+        "outputHash": "4cc5faf5af79dd24322f47724ed14423d71b029e18e391d1d84210b2169a04fa"
+      }
+    },
+    {
+      "id": "vanderpol.rk4.long",
+      "method": "rk4",
+      "input": {
+        "mode": "OP",
+        "repeatEvery": 64,
+        "program": "vanderpol",
+        "steps": 2400,
+        "dt": 0.05,
+        "chaos": 0.8,
+        "drive": 0.5,
+        "seed": 0.7
+      },
+      "expected": {
+        "inputHash": "27e24ada3deeaf50c81ad99087990437ae0a29fac63ec279633112d138fef39b",
+        "outputHash": "1fabfc8ec5449c9b9d04fa0ef1b17c29f3b9d103599d4f2f3e130a5bbdec6311"
+      }
+    },
+    {
+      "id": "nemo.euler4.bank15",
+      "method": "euler4",
+      "input": {
+        "mode": "OP",
+        "repeatEvery": 64,
+        "program": "nemo",
+        "steps": 40,
+        "dt": 0.004,
+        "chaos": 0.3,
+        "drive": 0.9,
+        "seed": 0.4,
+        "state": {
+          "x": -64.0,
+          "y": -69.0,
+          "z": 0.2,
+          "t": 0.5,
+          "bank": [
+            -64.0,
+            -61.5,
+            -69.0,
+            -57.25,
+            -66.0,
+            -12.8,
+            -12.3,
+            -13.8,
+            -11.45,
+            -13.2,
+            2.5,
+            0.0,
+            7.75,
+            0.0,
+            1.25
+          ]
+        }
+      },
+      "expected": {
+        "inputHash": "cfa1a326cbf6725f051985b91b1b13ed06530a21e7d9f7644f8e372d7178af11",
+        "outputHash": "d29f9b441443be7a43799e4024e4c1734eb9e666996b06d1ef56e496557daa1e"
+      }
+    },
+    {
+      "id": "nemo.euler4.bank20",
+      "method": "euler4",
+      "input": {
+        "mode": "OP",
+        "repeatEvery": 64,
+        "program": "nemo",
+        "steps": 400,
+        "dt": 0.016,
+        "chaos": 0.55,
+        "drive": 1.0,
+        "seed": 0.8,
+        "state": {
+          "x": -60.0,
+          "y": -71.0,
+          "z": 0.0,
+          "t": 0.0,
+          "bank": [
+            -60.0,
+            -63.0,
+            -71.0,
+            -55.0,
+            -66.5,
+            -12.0,
+            -12.6,
+            -14.2,
+            -11.0,
+            -13.3,
+            0.0,
+            4.0,
+            0.0,
+            9.5,
+            0.0,
+            1.1,
+            0.9,
+            1.3,
+            0.75,
+            1.0
+          ]
+        }
+      },
+      "expected": {
+        "inputHash": "5de62da0a1bffd4172153ce51ea4bacce78cde96c09f598395ca4712219718d3",
+        "outputHash": "9570cf7def98cb79ea94c6d3414250b77ba17135182aa501cc58072bb0b92e13"
+      }
+    },
+    {
+      "id": "lorenz.euler4.ic",
+      "method": "euler4",
+      "input": {
+        "mode": "IC",
+        "repeatEvery": 64,
+        "program": "lorenz",
+        "steps": 100,
+        "dt": 0.01,
+        "chaos": 0.5,
+        "drive": 0.5,
+        "seed": 0.37
+      },
+      "expected": {
+        "inputHash": "25d0b9a1422209533039c1293f85615d9b646599cf6381137f880654add39d9a",
+        "outputHash": "d75bddb2977f0ad93d133424c623ce3c06e78080ad9a826b77226a2c04629ada"
+      }
+    },
+    {
+      "id": "duffing.rk4.halt",
+      "method": "rk4",
+      "input": {
+        "mode": "HALT",
+        "repeatEvery": 64,
+        "program": "duffing",
+        "steps": 100,
+        "dt": 0.01,
+        "chaos": 0.5,
+        "drive": 0.5,
+        "seed": 0.5,
+        "state": {
+          "x": 0.25,
+          "y": -0.5,
+          "z": 0.5,
+          "t": 1.0
+        }
+      },
+      "expected": {
+        "inputHash": "ba73b7e6fcb1c9debf3b50a6ca64793a9ca070df06fa15a56a3f6bf36b45247f",
+        "outputHash": "d5f146f8fc153a59e921b9ab8067397e2fd53f2cdc922755e4e68401425f90e1"
+      }
+    },
+    {
+      "id": "lorenz.euler4.diverge",
+      "method": "euler4",
+      "input": {
+        "mode": "OP",
+        "repeatEvery": 64,
+        "program": "lorenz",
+        "steps": 60,
+        "dt": 0.08,
+        "chaos": 1.0,
+        "drive": 0.5,
+        "seed": 0.2
+      },
+      "expected": {
+        "inputHash": "db75c0253e3ad1a02efae38f4f9b997130e2a1ec77b1ca9304996c639f27dbb0",
+        "error": "NON_FINITE_OUTPUT"
+      }
+    },
+    {
+      "id": "nemo.rk4.unsupported",
+      "method": "rk4",
+      "input": {
+        "mode": "OP",
+        "repeatEvery": 64,
+        "program": "nemo",
+        "steps": 10,
+        "dt": 0.01,
+        "chaos": 0.5,
+        "drive": 0.5,
+        "seed": 0.5
+      },
+      "expected": {
+        "inputHash": "69538a715b9dfc22b6e38ad758bc5f893bca1996e126606f373e12936cac1572",
+        "error": "UNSUPPORTED_METHOD"
+      }
+    },
+    {
+      "id": "lorenz.symplectic.unsupported",
+      "method": "symplectic",
+      "input": {
+        "mode": "OP",
+        "repeatEvery": 64,
+        "program": "lorenz",
+        "steps": 10,
+        "dt": 0.01,
+        "chaos": 0.5,
+        "drive": 0.5,
+        "seed": 0.5
+      },
+      "expected": {
+        "inputHash": "9c4a626bd862f74351be0ac5e13a6c32370d8e2a074ceff780ff84df8a22d80e",
+        "error": "UNSUPPORTED_METHOD"
+      }
+    },
+    {
+      "id": "nemo.euler4.halt",
+      "method": "euler4",
+      "input": {
+        "mode": "HALT",
+        "repeatEvery": 64,
+        "program": "nemo",
+        "steps": 10,
+        "dt": 0.01,
+        "chaos": 0.5,
+        "drive": 0.5,
+        "seed": 0.5,
+        "state": {
+          "x": -60.0,
+          "y": -71.0,
+          "z": 0.0,
+          "t": 0.0,
+          "bank": [
+            -60.0,
+            -63.0,
+            -71.0,
+            -55.0,
+            -66.5,
+            -12.0,
+            -12.6,
+            -14.2,
+            -11.0,
+            -13.3,
+            0.0,
+            4.0,
+            0.0,
+            9.5,
+            0.0,
+            1.1,
+            0.9,
+            1.3,
+            0.75,
+            1.0
+          ]
+        }
+      },
+      "expected": {
+        "inputHash": "f86acacc8c3ae53cbb2e604aed5e99de5b16c98cf65564fd2fb6832ee26621ec",
+        "outputHash": "65f09b8502a5dbd0ec7ffc5228acefaa2027dbed1f496bb632929d3d632a824c"
+      }
+    }
+  ],
+  "canonical_number_vectors": [
+    [
+      0.0,
+      "0.000000000"
+    ],
+    [
+      -0.0,
+      "0.000000000"
+    ],
+    [
+      1.0,
+      "1.000000000"
+    ],
+    [
+      -1.0,
+      "-1.000000000"
+    ],
+    [
+      0.1,
+      "0.100000000"
+    ],
+    [
+      0.5,
+      "0.500000000"
+    ],
+    [
+      0.3333333333333333,
+      "0.333333333"
+    ],
+    [
+      -0.6666666666666666,
+      "-0.666666667"
+    ],
+    [
+      2.6666666666666665,
+      "2.666666667"
+    ],
+    [
+      22.0,
+      "22.000000000"
+    ],
+    [
+      -65.0,
+      "-65.000000000"
+    ],
+    [
+      0.0009765625,
+      "0.000976562"
+    ],
+    [
+      -0.0009765625,
+      "-0.000976562"
+    ],
+    [
+      0.0029296875,
+      "0.002929688"
+    ],
+    [
+      0.0048828125,
+      "0.004882812"
+    ],
+    [
+      1.0009765625,
+      "1.000976562"
+    ],
+    [
+      123.4560009765625,
+      "123.456000977"
+    ],
+    [
+      -1e-10,
+      "-0.000000000"
+    ],
+    [
+      1e-10,
+      "0.000000000"
+    ],
+    [
+      5e-10,
+      "0.000000001"
+    ],
+    [
+      1.0000000005,
+      "1.000000001"
+    ],
+    [
+      2.0000000005,
+      "2.000000001"
+    ],
+    [
+      0.1234567895,
+      "0.123456789"
+    ],
+    [
+      9007199254740992.0,
+      "9007199254740992.000000000"
+    ],
+    [
+      1e+21,
+      "1000000000000000000000.000000000"
+    ],
+    [
+      -1.5e+22,
+      "-15000000000000000000000.000000000"
+    ],
+    [
+      1.7976931348623157e+308,
+      "179769313486231570814527423731704356798070567525844996598917476803157260780028538760589558632766878171540458953514382464234321326889464182768467546703537516986049910576551282076245490090389328944075868508455133942304583236903222948165808559332123348274797826204144723168738177180919299881250404026184124858368.000000000"
+    ],
+    [
+      5e-324,
+      "0.000000000"
+    ],
+    [
+      2.220446049250313e-16,
+      "0.000000000"
+    ],
+    [
+      60.12345678949999,
+      "60.123456789"
+    ],
+    [
+      -37.000000000499995,
+      "-37.000000000"
+    ]
+  ],
+  "round12_vectors": [
+    [
+      0.1234567890125,
+      0.123456789012
+    ],
+    [
+      -0.1234567890125,
+      -0.123456789012
+    ],
+    [
+      1.0000000000005,
+      1.000000000001
+    ],
+    [
+      2.5e-13,
+      0.0
+    ],
+    [
+      -4.9e-13,
+      -0.0
+    ],
+    [
+      123.45678901234568,
+      123.456789012346
+    ],
+    [
+      0.000244140625,
+      0.000244140625
+    ],
+    [
+      1e+21,
+      1e+21
+    ]
+  ],
+  "provenance": {
+    "immune_v1": {
+      "schema": "szl.immune-nexus-parity-vectors/v1",
+      "source": "szl-holdings/immune@33a8009e240976583e8465ba20ef40c4eee68946:contracts/immune-nexus-parity-v1.json",
+      "sha256": "13fe120d817a79c4c17a53da02cd1c642ee33df2394ee50d95316529c583c86f",
+      "source_repository": "szl-holdings/nexus",
+      "source_revision": "617fb49f061c9eb369c4d879a7c29af64c08e72e",
+      "numeric_hash_precision_decimal_places": 9,
+      "input": {
+        "mode": "OP",
+        "steps_standard": 64,
+        "steps_nemo": 40,
+        "dt_standard": 0.01,
+        "dt_nemo": 0.002,
+        "chaos": 0.45,
+        "drive": 0.92,
+        "seed": 0.2,
+        "repeatEvery": 32,
+        "axes": [
+          0.97,
+          0.96,
+          0.93,
+          0.91,
+          0.9
+        ]
+      },
+      "output_hashes": {
+        "lorenz": "8c22f52d231d76c1b712f8e23449b4b6383ec8d2e376fbd1fb0f24db4ea564f4",
+        "harmonic": "109357851e006764b0292f2ad35987fe1e649dd4ad698b197f860bb5140b8736",
+        "vanderpol": "898bf5347e5a4a9c1237a496b399df3acf0a42f7390607c7d7238651d735c708",
+        "duffing": "aaa392333d8680d70ad33be51cd471c554b62e6b8d9eab197659895cb29df396",
+        "lotka": "5189c3ecca14fe1ca3f3c794ad7dce05b134bac1f773b4a6b98c6a08b148c612",
+        "nemo": "2b1dd69a8d95b352b91642f7b5202b3b788bf17f398ae9bcab7a90594b10a348"
+      },
+      "reproduced": {
+        "lorenz": true,
+        "harmonic": true,
+        "vanderpol": true,
+        "duffing": true,
+        "lotka": true,
+        "nemo": true
+      }
+    }
+  },
+  "boundary": {
+    "execution": "MEASURED_SOFTWARE_SIMULATION",
+    "physical_hardware": false,
+    "external_calls": 0,
+    "energy": "UNAVAILABLE",
+    "uniqueness": "Conjecture 1 OPEN"
+  }
+}

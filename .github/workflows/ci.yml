@@ -107,5 +107,10 @@ jobs:
             exit 0
           fi
           printf 'pytest files:\n%s\n' "$tests"
-          python -m pip install --disable-pip-version-check 'pytest==9.1.1'
+          if [ -f python/requirements-dev.txt ]; then
+            # Pinned test-only deps for python/tests (pytest + hypothesis); nexus_dynamics itself is stdlib only.
+            python -m pip install --disable-pip-version-check -r python/requirements-dev.txt
+          else
+            python -m pip install --disable-pip-version-check 'pytest==9.1.1'
+          fi
           python -m pytest -q
