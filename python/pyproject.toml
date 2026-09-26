@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nexus-dynamics"
+version = "2.0.0"
+description = "NEXUS canonical simulation engine (Python binding). Stdlib only. Executable software simulation, not a physical chip; Energy UNAVAILABLE; Lambda uniqueness is Conjecture 1 (OPEN)."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.setuptools]
+packages = ["nexus_dynamics", "nexus_dynamics.programs"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"
