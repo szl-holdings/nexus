@@ -13,8 +13,11 @@
  * To add an upstream (e.g. GitHub) once the broker supports it: add one entry
  * here (`{ providerId: "grok-github", idp: "github", label: "GitHub" }`). The
  * `providerId` is this app's local id and the OAuth callback path segment
- * (`/api/auth/oauth2/callback/<providerId>`); `idp` is the hint the broker reads
+ * (`/api/auth/callback/<providerId>` in Better Auth 1.7); `idp` is the hint the broker reads
  * to pick the upstream (Better Auth's id for X is still `twitter`).
+ * Broker callback registration and the issuer-aware account migration must be
+ * qualified before enabling or publishing this auth path; source CI alone
+ * does not establish either external prerequisite.
  */
 export type GrokProvider = {
   /** This app's local provider id; also the callback path segment. */

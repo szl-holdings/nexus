@@ -1,0 +1,2 @@
+# Byte-attested contracts must keep their committed LF bytes on Windows too.
+contracts/*.json text eol=lf

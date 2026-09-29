@@ -3,11 +3,13 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import ts from "typescript";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 // CRLF-normalized so the line-anchored checks hold on a Windows checkout.
 const CI = readFileSync(join(ROOT, ".github/workflows/ci.yml"), "utf8").replace(/\r\n/g, "\n");
 const PACKAGE = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+const LOCK = JSON.parse(readFileSync(join(ROOT, "package-lock.json"), "utf8"));
 
 // The SHAs szl-holdings/.github already runs, so the org has one pin per action.
 const APPROVED_PINS = {
@@ -78,6 +80,39 @@ test("the node job runs the full npm gate", () => {
   for (const script of ["typecheck", "lint", "test", "build"]) {
     assert.ok(PACKAGE.scripts[script], `package.json has no "${script}" script`);
   }
+});
+
+test("TypeScript stays on the supported 6.0 patch line with an exact matching lock", () => {
+  // typescript-eslint 8.70.1 and 8.71.0 admit >=4.8.4 <6.1.0, not TS 7.
+  // A future minor/major migration must qualify its lint peer contract too.
+  assert.match(PACKAGE.devDependencies.typescript, /^~6\.0\.\d+$/);
+  assert.equal(LOCK.packages[""].devDependencies.typescript, PACKAGE.devDependencies.typescript);
+  assert.match(LOCK.packages["node_modules/typescript"].version, /^6\.0\.\d+$/);
+  assert.equal(
+    LOCK.packages["node_modules/typescript-eslint"].peerDependencies.typescript,
+    ">=4.8.4 <6.1.0",
+  );
+});
+
+test("CI never overrides incompatible dependency peers to pass installation", () => {
+  assert.doesNotMatch(CI, /--legacy-peer-deps|--force\b|strict-peer-deps:\s*false/);
+});
+
+test("the source alias resolves without deprecated baseUrl or a suppression", () => {
+  const { config, error } = ts.readConfigFile(join(ROOT, "tsconfig.json"), ts.sys.readFile);
+  assert.equal(error, undefined);
+  assert.equal(config.compilerOptions.baseUrl, undefined);
+  assert.equal(config.compilerOptions.ignoreDeprecations, undefined);
+  const parsed = ts.parseJsonConfigFileContent(config, ts.sys, ROOT);
+  assert.equal(parsed.errors.length, 0);
+  const resolved = ts.resolveModuleName(
+    "@/lib/nexus/types",
+    join(ROOT, "src/routes/index.tsx"),
+    parsed.options,
+    ts.sys,
+  ).resolvedModule;
+  assert.ok(resolved, "the compiler must retain the @/ source alias");
+  assert.equal(resolved.resolvedFileName.replaceAll("\\", "/"), join(ROOT, "src/lib/nexus/types.ts").replaceAll("\\", "/"));
 });
 
 test("the node job runs on both Node LTS lines the repository uses", () => {
