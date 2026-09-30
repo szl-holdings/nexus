@@ -25,13 +25,24 @@ PKCE/callback initialization without contacting a provider or authenticating a
 real user. These tests are not live sign-in evidence.
 
 Authentication activation/publication remains NOT ADMITTED. Better Auth 1.7
-changes generic-provider callbacks to `/api/auth/callback/<providerId>` and
-requires issuer-aware account preparation. Existing broker callback registration
-and the opt-in `migrations/auth/0001_auth.sql` schema do not establish those
-prerequisites. A separately qualified, data-preserving migration and registered
-broker callbacks, followed by real sign-in/sign-out/session-isolation probes,
-are required before enabling this authentication path. This source repair does
-not modify broker registrations, secrets, existing account rows, or auth flags.
+changes generic-provider callbacks to `/api/auth/callback/<providerId>`.
+The installed 1.7.6 account schema recognizes `(providerId, accountId)` and does
+not require an `issuer` column: that requirement existed only in 1.7.0–1.7.2
+and was removed in 1.7.3. Do not add or backfill that column based on obsolete
+upgrade guidance. A database that actually ran 1.7.0–1.7.2 needs a separately
+reviewed constraint inspection; no such production database was inspected here.
+
+Before activation, inspect duplicate `(providerId, accountId)` keys without
+merging different users or deleting rows, qualify the broker's immutable account
+subject, and verify registered callbacks. With explicit OAuth endpoints, the
+installed provider uses profile `id`, not a runtime fallback to OIDC `sub`.
+The broker's production profile contract and identity-token verification are
+not established by the synthetic fixture. Installed-library tests cover the
+account schema, provider-key isolation, duplicate-key rejection without row
+mutation, and the static endpoint subject boundary. They are not broker callback
+or live sign-in evidence. Real sign-in/sign-out/session-isolation probes remain
+required. This source repair does not modify broker registrations, secrets,
+existing account rows, migrations, or auth flags.
 
 Reference: [Better Auth 1.7 upgrade guide](https://better-auth.com/docs/guides/1-7-upgrade-guide),
 [lint-tool dependency support](https://typescript-eslint.io/users/dependency-versions/),
