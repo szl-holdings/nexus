@@ -14,7 +14,6 @@ import {
 } from "./gate-identity.server";
 
 export const GATE_PROVIDER_ID = "grok-gate";
-const GATE_ACCOUNT_ISSUER = "https://grok.com";
 const LOG = "[gate-identity]";
 
 type GateAccount = Parameters<typeof handleOAuthUserInfo>[1]["account"];
@@ -229,9 +228,8 @@ export function gateIdentitySessions() {
                 },
                 account: {
                   providerId: GATE_PROVIDER_ID,
-                  issuer: GATE_ACCOUNT_ISSUER,
                   accountId: identity.sub,
-                } as GateAccount,
+                } satisfies GateAccount,
               });
               if (result.error || !result.data) {
                 console.error(`${LOG} handleOAuthUserInfo failed`, {

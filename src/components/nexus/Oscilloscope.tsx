@@ -17,7 +17,9 @@ export function Oscilloscope() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const snap = useEngine();
   const modeRef = useRef<ScopeMode>(snap.scopeMode);
-  modeRef.current = snap.scopeMode;
+  useEffect(() => {
+    modeRef.current = snap.scopeMode;
+  }, [snap.scopeMode]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
