@@ -7,6 +7,16 @@ package-manager-generated lockfile. No peer override, scanner reduction, or
 test-floor reduction is used. The deprecated `baseUrl` is removed while the
 explicit source alias remains covered by the actual compiler resolver.
 
+The first repaired head passed hosted Python, Node 24, and CodeQL checks, but
+Node 22's bundled npm 10.9.8 rejected the npm 11-generated lock: the optional
+`unstorage` peer inside Nitro required a separate `lru-cache` 11 resolution,
+while the root `lru-cache` 5 resolution serves Babel. The identical npm 10.9.8
+failure was reproduced locally. Regenerating the real lock with npm 10.9.8
+records the separate optional peer; both npm 10.9.8 and npm 11.17.0 now accept
+the frozen graph in dry-run checks. Those checks do not replace clean hosted
+installs or the full Node 22/24 source matrix. No runtime lane, peer check, or
+frozen-install gate is disabled.
+
 The clean install exposed additional source-gate errors. The repair preserves
 caught error causes, updates the oscilloscope mode ref after React commits,
 narrows unknown router errors, and uses the installed Better Auth 1.7 social
