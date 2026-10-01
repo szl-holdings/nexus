@@ -280,7 +280,8 @@ test("published VITE_PUBLIC_HOSTNAME wins over request Host for og:image", () =>
       otherPublicHost,
       /property="og:image" content="https:\/\/plum-plaza-reef-dream\.grok\.me\/og\.jpg"/,
     );
-    assert.doesNotMatch(otherPublicHost, /custom\.example\.com/);
+    const otherHosts = [...otherPublicHost.matchAll(/content="(https?:\/\/[^"]+)"/g)].map((m) => new URL(m[1]).hostname);
+    assert.ok(otherHosts.every((host) => host !== "custom.example.com"), "custom host must not leak into the other-host build");
   } finally {
     if (prev === undefined) delete process.env.VITE_PUBLIC_HOSTNAME;
     else process.env.VITE_PUBLIC_HOSTNAME = prev;

@@ -20,7 +20,7 @@
  * `process.env`, which is why the merge has to happen before Vite starts.
  */
 import { spawn } from "node:child_process";
-import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { constants as osConstants } from "node:os";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -104,13 +104,18 @@ export function packageBinScript(packageDir, name) {
       : manifest?.bin?.[name];
   if (typeof bin !== "string" || !bin) return null;
   const script = join(packageDir, bin);
+  // Read through one descriptor so the type check and the read see the same file.
+  let fd;
   try {
-    if (!statSync(script).isFile()) return null;
+    fd = openSync(script, "r");
+    if (!fstatSync(fd).isFile()) return null;
     if (NODE_SCRIPT_EXTENSIONS.has(extname(script))) return script;
-    const firstLine = readFileSync(script, "utf8").split("\n", 1)[0];
+    const firstLine = readFileSync(fd, "utf8").split("\n", 1)[0];
     return /^#!.*\bnode\b/.test(firstLine) ? script : null;
   } catch {
     return null;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
   }
 }
 

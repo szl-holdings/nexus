@@ -59,7 +59,8 @@ def test_reproduces_immune_v1_parity_hashes(program) -> None:
 
 def test_immune_v1_provenance_block_is_verbatim(parity_doc) -> None:
     block = dict(parity_doc["provenance"]["immune_v1"])
-    assert block.pop("reproduced") == {program: True for program in nd.PROGRAMS}
+    reproduced = block.pop("reproduced")  # mutate outside the assert so -O cannot skip it
+    assert reproduced == {program: True for program in nd.PROGRAMS}
     assert block == parity.IMMUNE_V1
 
 

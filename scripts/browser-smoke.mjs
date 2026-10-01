@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, fstatSync, mkdirSync, openSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { chromium } from "playwright";
 import { checkedOutputPath, checkedUrl } from "./browser-guard.mjs";
@@ -75,16 +75,21 @@ function compareAgainstBaseline(verdict) {
       reasons: [`baseline unreadable: ${baselineResolveError ?? "unresolvable path"}`],
     };
   }
+  // One descriptor for the size check and the read: no check-then-use window on the path.
+  let fd;
   try {
-    if (statSync(baselinePath).size > MAX_BASELINE_BYTES) {
+    fd = openSync(baselinePath, "r");
+    if (fstatSync(fd).size > MAX_BASELINE_BYTES) {
       return { divergesFromBaseline: true, reasons: ["baseline unreadable: too large"] };
     }
-    return baselineComparison(verdict, readFileSync(baselinePath, "utf8"));
+    return baselineComparison(verdict, readFileSync(fd, "utf8"));
   } catch (err) {
     return {
       divergesFromBaseline: true,
       reasons: [`baseline unreadable: ${err?.code ?? "read error"}`],
     };
+  } finally {
+    if (fd !== undefined) closeSync(fd);
   }
 }
 
