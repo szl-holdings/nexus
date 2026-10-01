@@ -402,15 +402,20 @@ test("browser-smoke wires the guard and verdict helpers", () => {
 
 test("browser-smoke file I/O only touches guarded paths", () => {
   const src = readFileSync(join(TEMPLATE_ROOT, "scripts/browser-smoke.mjs"), "utf8");
-  assert.doesNotMatch(src, /(?:writeFileSync|readFileSync|statSync|realpathSync)\(\s*["'`]/);
+  assert.doesNotMatch(src, /(?:writeFileSync|readFileSync|openSync|statSync|realpathSync)\(\s*["'`]/);
   const writes = [...src.matchAll(/writeFileSync\(\s*([A-Za-z_$][\w$.]*)/g)].map((m) => m[1]);
   assert.equal(writes.length, 2);
   assert.ok(
     writes.every((v) => v === "outJson"),
     `unexpected writeFileSync target: ${writes}`,
   );
+  // The baseline is opened once by path and then sized and read through that descriptor,
+  // so there is no check-then-use window (CodeQL js/file-system-race).
+  const opens = [...src.matchAll(/\bopenSync\(\s*([A-Za-z_$][\w$.]*)/g)].map((m) => m[1]);
+  assert.deepEqual(opens, ["baselinePath"]);
   const reads = [...src.matchAll(/readFileSync\(\s*([A-Za-z_$][\w$.]*)/g)].map((m) => m[1]);
-  assert.deepEqual(reads, ["baselinePath"]);
-  const stats = [...src.matchAll(/statSync\(\s*([A-Za-z_$][\w$.]*)/g)].map((m) => m[1]);
-  assert.deepEqual(stats, ["baselinePath"]);
+  assert.deepEqual(reads, ["fd"]);
+  const stats = [...src.matchAll(/\bfstatSync\(\s*([A-Za-z_$][\w$.]*)/g)].map((m) => m[1]);
+  assert.deepEqual(stats, ["fd"]);
+  assert.doesNotMatch(src, /(?<!f)statSync\(/, "a path-based stat would reintroduce the race");
 });
