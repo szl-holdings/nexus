@@ -25,9 +25,13 @@ HF_REPOSITORY = "SZLHOLDINGS/nexus"
 def source_revision() -> str:
     try:
         value = SOURCE_FILE.read_text(encoding="utf-8").strip().lower()
-    except OSError:
+    except (OSError, UnicodeError):
         return "UNAVAILABLE"
-    if len(value) == 40 and all(ch in "0123456789abcdef" for ch in value):
+    if (
+        len(value) == 40
+        and value != "0" * 40
+        and all(ch in "0123456789abcdef" for ch in value)
+    ):
         return value
     return "UNAVAILABLE"
 
