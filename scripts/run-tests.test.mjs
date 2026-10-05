@@ -9,6 +9,7 @@ import { discoverTestFiles, projectRoot, runProblems, TEST_FLOORS } from "./run-
 
 const execFileAsync = promisify(execFile);
 const RUNNER = join(projectRoot(), "scripts/run-tests.mjs");
+const NEXUS_FLOOR = TEST_FLOORS.find((entry) => entry.prefix === "src/lib/nexus/").min;
 
 function makeTree(files) {
   const root = mkdtempSync(join(tmpdir(), "run-tests-"));
@@ -73,6 +74,7 @@ test("discovery finds every NEXUS domain test file in this repository", () => {
   for (const file of [
     "src/lib/nexus/engine.test.ts",
     "src/lib/nexus/kernel.test.ts",
+    "src/lib/nexus/receipt-window.test.ts",
     "src/lib/nexus/telemetry.test.ts",
     "scripts/run-tests.test.mjs",
   ]) {
@@ -80,10 +82,10 @@ test("discovery finds every NEXUS domain test file in this repository", () => {
   }
 });
 
-test("the NEXUS floor is at least the 72 tests wired in by P0", () => {
+test("the NEXUS floor retains P0 and the 20 receipt-window regressions", () => {
   const floor = TEST_FLOORS.find((entry) => entry.prefix === "src/lib/nexus/");
   assert.ok(floor);
-  assert.ok(floor.min >= 72);
+  assert.ok(floor.min >= 92);
 });
 
 test("problems: no files, silent files and a shrunken suite all fail the run", () => {
@@ -104,17 +106,17 @@ test("problems: no files, silent files and a shrunken suite all fail the run", (
   assert.deepEqual(runProblems(files, perFile, floors), []);
 });
 
-test("npm test passes when 72 NEXUS tests pass", async () => {
-  const root = makeTree({ "src/lib/nexus/fixture.test.ts": nexusTests(72) });
+test("npm test passes when the NEXUS floor is met", async () => {
+  const root = makeTree({ "src/lib/nexus/fixture.test.ts": nexusTests(NEXUS_FLOOR) });
   const { code, output } = await runRunner(root);
   assert.equal(code, 0, output);
-  assert.match(output, /NEXUS domain tests \(src\/lib\/nexus\/\): 72 passing \(floor 72\)/);
+  assert.ok(output.includes(`NEXUS domain tests (src/lib/nexus/): ${NEXUS_FLOOR} passing (floor ${NEXUS_FLOOR})`), output);
 });
 
 test("npm test fails when one NEXUS test fails", async () => {
   const root = makeTree({
     "src/lib/nexus/fixture.test.ts": nexusTests(
-      72,
+      NEXUS_FLOOR,
       'test("deliberate failure", () => { throw new Error("deliberate"); });',
     ),
   });
@@ -124,16 +126,16 @@ test("npm test fails when one NEXUS test fails", async () => {
 });
 
 test("npm test fails when the NEXUS suite shrinks below its floor", async () => {
-  const root = makeTree({ "src/lib/nexus/fixture.test.ts": nexusTests(71) });
+  const root = makeTree({ "src/lib/nexus/fixture.test.ts": nexusTests(NEXUS_FLOOR - 1) });
   const { code, output } = await runRunner(root);
   assert.equal(code, 1, output);
-  assert.match(output, /FAIL: NEXUS domain tests \(src\/lib\/nexus\/\): 71 passing, floor is 72/);
+  assert.ok(output.includes(`FAIL: NEXUS domain tests (src/lib/nexus/): ${NEXUS_FLOOR - 1} passing, floor is ${NEXUS_FLOOR}`), output);
 });
 
 test("skipped tests do not count toward the floor and are listed with their reason", async () => {
   const root = makeTree({
     "src/lib/nexus/fixture.test.ts": nexusTests(
-      71,
+      NEXUS_FLOOR - 1,
       'test("parked", { skip: "QUARANTINED for the fixture" }, () => {});',
     ),
     "scripts/other.test.mjs": 'import { test } from "node:test";\ntest("ok", () => {});\n',
@@ -142,5 +144,5 @@ test("skipped tests do not count toward the floor and are listed with their reas
   assert.equal(code, 1, output);
   assert.match(output, /1 skipped tests/);
   assert.match(output, /src\/lib\/nexus\/fixture\.test\.ts > parked: QUARANTINED for the fixture/);
-  assert.match(output, /71 passing, floor is 72/);
+  assert.ok(output.includes(`${NEXUS_FLOOR - 1} passing, floor is ${NEXUS_FLOOR}`), output);
 });
