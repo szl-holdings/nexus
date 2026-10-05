@@ -153,18 +153,79 @@ def test_never_returns_non_finite(program, x, y, z, chaos, drive, dt, data) -> N
 # ---------------------------------------------------------------- order of accuracy
 
 
-def _trajectory(program, method, h, horizon, chaos, drive, every=0.05):
-    state = nd.seed(program, 0.3)
+def _trajectory(program, method, h, horizon, chaos, drive, every=0.1, initial=None):
+    """Sample a common grid; never round a nondivisible interval into a shorter run."""
+    assert all(math.isfinite(v) and v > 0 for v in (h, horizon, every))
     per = round(every / h)
+    count = round(horizon / every)
+    assert per > 0 and math.isclose(per * h, every, rel_tol=1e-12, abs_tol=0), "every must be divisible by h"
+    assert count > 0 and math.isclose(count * every, horizon, rel_tol=1e-12, abs_tol=0), "horizon must be divisible by every"
+    state = nd.seed(program, 0.3) if initial is None else initial
+    start = state.t
     points = []
-    for _ in range(round(horizon / every)):
+    for i in range(1, count + 1):
         state = advance(program, state, h, per, chaos, drive, method)
+        assert math.isclose(state.t, start + i * every, rel_tol=0, abs_tol=1e-10), "incorrect sample time"
         points.append(state)
+    assert len(points) == count
+    assert math.isclose(points[-1].t, start + horizon, rel_tol=0, abs_tol=1e-10), "incorrect final time"
     return points
 
 
 def _sup_error(a, b) -> float:
+    assert len(a) == len(b) > 0, "trajectory lengths must match and be nonzero"
+    assert all(math.isclose(p.t, q.t, rel_tol=0, abs_tol=1e-10) for p, q in zip(a, b)), "sample times must match"
     return max(max(abs(p.x - q.x), abs(p.y - q.y), abs(p.z - q.z)) for p, q in zip(a, b))
+
+
+def _assert_error_ratios(errors, order, tolerance) -> None:
+    assert len(errors) >= 3 and all(math.isfinite(e) and e > 0 for e in errors), errors
+    ratios = [coarse / fine for coarse, fine in zip(errors, errors[1:])]
+    assert all(abs(ratio - 2**order) <= tolerance for ratio in ratios), (errors, ratios)
+
+
+def test_trajectory_covers_the_requested_common_grid() -> None:
+    for h in (0.02, 0.01, 0.005):
+        points = _trajectory("harmonic", "rk4", h, 4.0, 0.5, 0.7)
+        assert len(points) == 40
+        assert [p.t for p in points] == pytest.approx(
+            [i * 0.1 for i in range(1, 41)], rel=0, abs=1e-10,
+        )
+
+
+@pytest.mark.parametrize(("h", "horizon", "every"), [(0.02, 4.0, 0.05), (0.02, 0.35, 0.1)])
+def test_trajectory_rejects_nondivisible_grids(h, horizon, every) -> None:
+    # The first case previously rounded 2.5 substeps to 2 and ended at t=3.2.
+    with pytest.raises(AssertionError, match="divisib"):
+        _trajectory("harmonic", "rk4", h, horizon, 0.5, 0.7, every=every)
+
+
+def test_trajectory_detects_under_advance(monkeypatch) -> None:
+    real_advance = advance
+
+    def under_advance(program, state, h, substeps, chaos, drive, method):
+        return real_advance(program, state, h, substeps - 1, chaos, drive, method)
+
+    monkeypatch.setitem(_trajectory.__globals__, "advance", under_advance)
+    with pytest.raises(AssertionError, match="sample time"):
+        _trajectory("harmonic", "rk4", 0.02, 4.0, 0.5, 0.7, every=0.1)
+
+
+def test_sup_error_rejects_unequal_lengths() -> None:
+    state = NexusState(1.0, 0.5, 0.0, 0.1)
+    with pytest.raises(AssertionError, match="length"):
+        _sup_error([state, state], [state])
+
+
+def test_sup_error_rejects_misaligned_times() -> None:
+    with pytest.raises(AssertionError, match="sample time"):
+        _sup_error([NexusState(1.0, 0.5, 0.0, 0.1)], [NexusState(1.0, 0.5, 0.0, 0.08)])
+
+
+def test_error_ratios_reject_a_bad_first_refinement() -> None:
+    # The final ratio is exactly 2, but the first refinement has the wrong order.
+    with pytest.raises(AssertionError):
+        _assert_error_ratios([12.0, 8.0, 4.0], order=1, tolerance=0.3)
 
 
 ORDER_CASES = [
@@ -179,8 +240,7 @@ def test_rk4_error_ratio_is_16_when_h_halves(program, chaos) -> None:
     horizon, hs = (1.0, (0.01, 0.005, 0.0025)) if program == "lorenz" else (4.0, (0.02, 0.01, 0.005))
     reference = _trajectory(program, "rk4", hs[-1] / 64, horizon, chaos, 0.7)
     errors = [_sup_error(_trajectory(program, "rk4", h, horizon, chaos, 0.7), reference) for h in hs]
-    ratios = [errors[i] / errors[i + 1] for i in range(len(errors) - 1)]
-    assert abs(ratios[-1] - 16) <= 1.5, (errors, ratios)
+    _assert_error_ratios(errors, order=4, tolerance=1.5)
 
 
 @pytest.mark.parametrize(("program", "method", "order"), [
@@ -191,8 +251,37 @@ def test_other_methods_have_their_expected_order(program, method, order) -> None
     horizon, hs = 4.0, (0.02, 0.01, 0.005)
     reference = _trajectory(program, "rk4", hs[-1] / 64, horizon, 0.5, 0.7)
     errors = [_sup_error(_trajectory(program, method, h, horizon, 0.5, 0.7), reference) for h in hs]
-    ratio = errors[-2] / errors[-1]
-    assert abs(ratio - 2**order) <= 0.3 * order, (errors, ratio)
+    _assert_error_ratios(errors, order=order, tolerance=0.3 * order)
+
+
+def _harmonic_exact(initial, omega, t) -> NexusState:
+    """Independent solution of x' = y, y' = -omega**2*x, with z constant."""
+    phase = omega * (t - initial.t)
+    c, s = math.cos(phase), math.sin(phase)
+    return NexusState(
+        initial.x * c + initial.y / omega * s,
+        initial.y * c - omega * initial.x * s,
+        initial.z, t,
+    )
+
+
+@pytest.mark.parametrize(("chaos", "omega"), [(0.0, 1.0), (0.5, 2.5), (1.0, 4.0)])
+@pytest.mark.parametrize(("x0", "y0"), [(1.0, 0.35), (-0.6, -0.8), (0.0, 0.7)])
+@pytest.mark.parametrize(("method", "order", "hs", "tolerance"), [
+    ("euler4", 1, (0.005, 0.0025, 0.00125), 0.2),
+    ("symplectic", 2, (0.005, 0.0025, 0.00125), 0.1),
+    ("rk4", 4, (0.02, 0.01, 0.005), 0.5),
+])
+def test_harmonic_order_against_analytic_solution(chaos, omega, x0, y0, method, order, hs, tolerance) -> None:
+    # Explicit frequencies also check the chaos-to-frequency mapping. Nonzero
+    # velocities exercise both sine terms; no numerical solver supplies the oracle.
+    initial = NexusState(x0, y0, 0.3, 0.25)
+    reference = [_harmonic_exact(initial, omega, initial.t + i * 0.1) for i in range(1, 41)]
+    errors = [_sup_error(_trajectory("harmonic", method, h, 4.0, chaos, 0.7, initial=initial), reference) for h in hs]
+    scale = max(1.0, *(max(abs(p.x), abs(p.y)) for p in reference))
+    # Keep even the finest RK4 error comfortably above floating-point roundoff.
+    assert min(errors) > 1000 * math.ulp(scale), errors
+    _assert_error_ratios(errors, order=order, tolerance=tolerance)
 
 
 # ---------------------------------------------------------------- method internals
