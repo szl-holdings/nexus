@@ -46,7 +46,7 @@ const SKIP_DIRS = new Set(["node_modules", ".git", "dist", ".output", ".nitro", 
  * 72 at the time they were wired into `npm test`. Raise the floor when tests
  * are added. Lowering it means tests were deleted, and that belongs in review.
  */
-export const TEST_FLOORS = [{ prefix: "src/lib/nexus/", min: 72, label: "NEXUS domain tests" }];
+export const TEST_FLOORS = [{ prefix: "src/lib/nexus/", min: 92, label: "NEXUS domain tests" }];
 
 /** The repository root (this file lives in `<root>/scripts/`). */
 export function projectRoot() {

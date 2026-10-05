@@ -73,6 +73,25 @@ export interface LedgerRow {
   analog: { x: number; y: number; z: number; fg: number; step: number };
 }
 
+/** The independently retained predecessor of the first row in a bounded window. */
+export interface ReceiptAnchor {
+  id: number;
+  rowHash: string;
+}
+
+export interface ReceiptWindow {
+  rows: LedgerRow[];
+  anchor: ReceiptAnchor;
+}
+
+const RECEIPT_LIMIT = 64;
+const GENESIS_RECEIPT_ANCHOR: Readonly<ReceiptAnchor> = { id: 0, rowHash: "genesis" };
+
+/** A new instrument session; loop restarts retain the existing window. */
+export function emptyReceiptWindow(): ReceiptWindow {
+  return { rows: [], anchor: { ...GENESIS_RECEIPT_ANCHOR } };
+}
+
 export interface Organ {
   id: OrganId;
   name: string;
@@ -369,12 +388,17 @@ export function appendReceipt(
   analog: LedgerRow["analog"],
   ok = true,
 ): LedgerRow[] {
-  const prevHash = rows.length ? rows[rows.length - 1]!.rowHash : "genesis";
+  const tail = rows[rows.length - 1];
+  const prevHash = tail?.rowHash ?? "genesis";
+  const id = (tail?.id ?? 0) + 1;
+  if (!Number.isSafeInteger(id) || id < 1) {
+    throw new RangeError("Receipt ID must be a positive safe integer");
+  }
   const draft: Omit<LedgerRow, "rowHash"> & { rowHash?: string } = {
     analog,
     demo: false,
     energy_j: null,
-    id: rows.length + 1,
+    id,
     keyId: null,
     loopSteps: 1,
     model: "nexus-analog",
@@ -386,10 +410,30 @@ export function appendReceipt(
   };
   const row: LedgerRow = { ...draft, rowHash: recomputeRowHash(prevHash, draft) };
   const next = rows.concat(row);
-  return next.length > 64 ? next.slice(next.length - 64) : next;
+  return next.length > RECEIPT_LIMIT ? next.slice(next.length - RECEIPT_LIMIT) : next;
 }
 
-export function runInvariants(rows: LedgerRow[] | null): {
+/** Advance the checkpoint only across a valid window, without rewriting receipts. */
+export function appendReceiptWindow(
+  window: ReceiptWindow,
+  analog: LedgerRow["analog"],
+  ok = true,
+): ReceiptWindow {
+  // Chain-invalid history must not disappear merely because retention would evict it.
+  if (invChain(window.rows, window.anchor).status === "VIOLATED") return window;
+  const rows = appendReceipt(window.rows, analog, ok);
+  const dropped = window.rows.length + 1 - rows.length;
+  const predecessor = dropped > 0 ? window.rows[dropped - 1]! : null;
+  const anchor = predecessor
+    ? { id: predecessor.id, rowHash: predecessor.rowHash }
+    : window.anchor;
+  return { rows, anchor };
+}
+
+export function runInvariants(
+  rows: LedgerRow[] | null,
+  anchor: Readonly<ReceiptAnchor> = GENESIS_RECEIPT_ANCHOR,
+): {
   invariants: Invariant[];
   holds: number;
   violated: number;
@@ -399,7 +443,7 @@ export function runInvariants(rows: LedgerRow[] | null): {
     return { invariants: [], holds: 0, violated: 0, indeterminate: 0 };
   }
   const invariants: Invariant[] = [
-    invChain(rows),
+    invChain(rows, anchor),
     invFailureShape(rows),
     invHasModel(rows),
     invSignedAtomic(rows),
@@ -548,23 +592,30 @@ function inv(id: string, title: string, status: InvStatus, checked: number, viol
   return { id, title, status, checked, violations, detail };
 }
 
-function invChain(rows: LedgerRow[]): Invariant {
-  let failed = 0;
+function invChain(rows: LedgerRow[], anchor: Readonly<ReceiptAnchor>): Invariant {
+  const validAnchor = Number.isSafeInteger(anchor.id) && anchor.id >= 0 &&
+    (anchor.id === 0 ? anchor.rowHash === "genesis" : /^[a-f0-9]{64}$/.test(anchor.rowHash));
+  let failed = validAnchor && (rows.length > 0 || anchor.id === 0) ? 0 : 1;
   let checked = 0;
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i]!;
-    const prev = i === 0 ? "genesis" : rows[i - 1]!.rowHash;
+    const prev = i === 0 ? anchor : rows[i - 1]!;
     checked += 1;
-    if (r.prevHash !== prev || r.rowHash !== recomputeRowHash(r.prevHash, r)) failed += 1;
+    if (
+      !Number.isSafeInteger(r.id) || r.id < 1 || r.id !== prev.id + 1 ||
+      r.prevHash !== prev.rowHash || r.rowHash !== recomputeRowHash(r.prevHash, r)
+    ) failed += 1;
   }
-  const status: InvStatus = rows.length === 0 ? "NO_DATA" : failed ? "VIOLATED" : "HOLDS";
+  const status: InvStatus = failed ? "VIOLATED" : rows.length === 0 ? "NO_DATA" : "HOLDS";
   return inv(
     "receipt-chain-continuity",
     "Receipt chain recomputes over its own tail (Ouroboros closure)",
     status,
     checked,
     failed,
-    failed ? `${failed} link(s) failed to recompute` : `all ${checked} hashed links recompute exactly`,
+    failed
+      ? `${failed} checkpoint, index, or link check(s) failed`
+      : `all ${checked} retained hashed links and consecutive indices match the checkpoint`,
   );
 }
 

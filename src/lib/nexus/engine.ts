@@ -30,8 +30,9 @@ import { loadPersisted, scheduleSave, type PersistedState } from "./store";
 import { euclid, funcGenStep, midiToHz, analogCell, analogCircuit, analogCoefficients, analogCorrelate, analogJack, analogSchmitt, analogStep, scaleAnalog, seedAnalogState, opticalInterfere, opticalReconstruct, type AnalogState } from "./math";
 import {
   analogDelta,
-  appendReceipt,
+  appendReceiptWindow,
   emptyKernel,
+  emptyReceiptWindow,
   evaluateAnatomy,
   evaluateLambda,
   evaluatePuriq,
@@ -44,7 +45,6 @@ import {
   yarqaLeak,
   yuyayAxes,
   type KernelSnap,
-  type LedgerRow,
   type LoopExit,
 } from "./kernel";
 import { idleProbes, parseProbes, probeEstate, type Probe } from "./telemetry";
@@ -228,7 +228,7 @@ class NexusEngine {
   private trailWrite = 0;
   private trailLen = 0;
   private lastUiEmit = 0;
-  private receipts: LedgerRow[] = [];
+  private receipts = emptyReceiptWindow();
   private loopSteps = 0;
   private loopExit: LoopExit = "running";
   private kernelSnap: KernelSnap = emptyKernel();
@@ -1125,7 +1125,7 @@ class NexusEngine {
     };
     this.seedAnalog();
     this.resetLoop();
-    this.receipts = [];
+    this.receipts = emptyReceiptWindow();
     this.refreshKernel(true);
     this.applyVoice();
     this.applyTape();
@@ -1560,7 +1560,7 @@ class NexusEngine {
   private ouroborosBar() {
     const analog = { x: this.nx, y: this.ny, z: this.nz, fg: this.fg, step: this.stepIndex };
     const ok = !this.kernelSnap.blocked;
-    this.receipts = appendReceipt(this.receipts, analog, ok);
+    this.receipts = appendReceiptWindow(this.receipts, analog, ok);
     const delta = analogDelta(this.lastAnalog, analog);
     this.lastAnalog = { x: analog.x, y: analog.y, z: analog.z };
     const ticked = tickLoop(this.loopSteps, delta);
@@ -1599,13 +1599,14 @@ class NexusEngine {
     const slack = amgmSlack(axes[0] ?? 0, axes[1] ?? 0).slack;
     const fr = this.lastAxes.length ? fisherRaoDistance(this.lastAxes, axes) : 0;
     this.lastAxes = axes.slice();
-    const inv = runInvariants(this.receipts);
+    const rows = this.receipts.rows;
+    const inv = runInvariants(rows, this.receipts.anchor);
     const chainInv = inv.invariants.find((i) => i.id === "receipt-chain-continuity");
     const chainOk = chainInv ? chainInv.status !== "VIOLATED" : true;
-    const chainHead = this.receipts.length ? this.receipts[this.receipts.length - 1]!.rowHash : "genesis";
+    const chainHead = rows.length ? rows[rows.length - 1]!.rowHash : "genesis";
     const anatomy = evaluateAnatomy({
       lambda,
-      rows: this.receipts,
+      rows,
       chainOk,
       chainHead,
       leak: yarqaLeak(this.snapshot.patches),
