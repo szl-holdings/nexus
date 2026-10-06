@@ -66,3 +66,20 @@ python -m venv .venv && .venv/Scripts/python -m pip install -r python/requiremen
 cd python && ../.venv/Scripts/python -m pytest -q     # pytest + hypothesis
 cd .. && node --test src/lib/nexus/*.test.ts          # includes parity.test.ts (TS == Python)
 ```
+
+The convergence tests sample a shared 0.1-second grid, require divisible step
+sizes and horizons, and check lengths and timestamps before comparing states.
+Every adjacent refinement must have the expected error ratio. Harmonic tests
+also compare Euler, velocity Verlet, and RK4 with the analytical solution
+`x = x0*cos(omega*tau) + y0/omega*sin(omega*tau)`,
+`y = y0*cos(omega*tau) - omega*x0*sin(omega*tau)`, where `tau = t - t0`.
+They cover three frequencies and nonzero initial velocities above roundoff.
+
+The separate optical tests compare forward intensity with the squared magnitude
+of the summed complex fields, plus beam symmetry, common-phase invariance, and
+amplitude-squared scaling. One intensity cannot identify the object amplitude:
+with reference amplitude 0.5 and phase difference pi, amplitudes 0.2 and 0.8
+both give intensity 0.09. `optical_reconstruct` remains a clamped signed voltage
+readout, not an inverse. These are software simulation checks;
+`physicalHardware=false`, Energy UNAVAILABLE, and Conjecture 1 OPEN remain
+unchanged. They establish no quantum or ENZ hardware claim.
