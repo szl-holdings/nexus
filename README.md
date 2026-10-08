@@ -99,7 +99,7 @@ Then play the keys, patch ANLG into VCF, watch HOLO, and throw Chaos.
 
 - **Z–M** piano (shift = octave)
 - **Space** run / stop sequencer
-- **Tab** cycle scope Y-T / X-Y / FFT / HOLO
+- **P** cycle scope Y-T / X-Y / FFT / HOLO; Tab remains standard keyboard navigation
 - **F** Frontier · Shift-F disengage · F again reseeds the loop
 - Voice: **IC / OP / HALT / REP**
 - Scenes F1–F22 on the header (shift-click stores)

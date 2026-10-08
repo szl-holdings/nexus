@@ -82,7 +82,7 @@ export function Workstation() {
         else engine.frontier();
         return;
       }
-      if (e.code === "Tab" && engine.getSnapshot().powered) {
+      if (e.code === "KeyP" && engine.getSnapshot().powered) {
         e.preventDefault();
         engine.cycleScopeMode();
         return;
@@ -286,7 +286,7 @@ function Header({ help, onHelp }: { help: boolean; onHelp: () => void }) {
         </button>
       </div>
       <div className="flex flex-col gap-3 lg:ml-auto lg:flex-row lg:flex-wrap lg:items-center">
-        <div className="grid grid-cols-8 gap-1 lg:flex">
+        <div className="flex max-w-full gap-1 overflow-x-auto pb-1">
           {LOCKED_EIGHT.map((fid, i) => {
             const note = LOCKED_NOTE[fid];
             return (
@@ -298,7 +298,7 @@ function Header({ help, onHelp }: { help: boolean; onHelp: () => void }) {
                     ? `${fid} · ${note.name} — ${note.analog} · stored`
                     : `${fid} · ${note.name} — ${note.analog} · shift-click to store`
                 }
-                className={`nx-btn min-h-11 min-w-0 px-0 text-micro lg:min-w-11 ${snap.sceneSlot === i ? "nx-btn-on" : ""} ${snap.scenes[i] ? "text-phosphor" : ""}`}
+                className={`nx-btn min-h-11 min-w-11 shrink-0 px-0 text-micro ${snap.sceneSlot === i ? "nx-btn-on" : ""} ${snap.scenes[i] ? "text-phosphor" : ""}`}
                 onClick={(e) => {
                   if (e.shiftKey) engine.saveScene(i);
                   else engine.loadScene(i);
@@ -709,7 +709,7 @@ function Help({ onClose }: { onClose: () => void }) {
           <span className="text-phosphor">FUNC</span> into VCF or PAN
         </li>
         <li>
-          <kbd>Tab</kbd> cycle scope Y-T / X-Y / FFT / HOLO — hologram is two-beam optical analog
+          <kbd>P</kbd> cycle scope Y-T / X-Y / FFT / HOLO — hologram is two-beam optical analog
           plus five organs
         </li>
         <li>

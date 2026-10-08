@@ -9,6 +9,8 @@ const ownership = readFileSync(".github/workflows/hf-deploy.yml", "utf8");
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 const rootRoute = readFileSync("src/routes/__root.tsx", "utf8");
 const viteConfig = readFileSync("vite.config.ts", "utf8");
+const workstation = readFileSync("src/components/nexus/Workstation.tsx", "utf8");
+const readme = readFileSync("README.md", "utf8");
 
 test("Space builds and serves the complete Nitro Web Audio workstation", () => {
   assert.match(packageJson.scripts.build, /verify-built-asset-closure\.mjs/);
@@ -30,6 +32,13 @@ test("root CSS is discovered from the client route manifest", () => {
   assert.match(rootRoute, /import "\.\.\/styles\.css";/);
   assert.doesNotMatch(rootRoute, /styles\.css\?url/);
   assert.doesNotMatch(viteConfig, /ssrEmitAssets/);
+});
+
+test("keyboard navigation and mobile scene targets remain accessible", () => {
+  assert.doesNotMatch(workstation, /e\.code === "Tab"/);
+  assert.match(workstation, /e\.code === "KeyP"/);
+  assert.match(workstation, /min-h-11 min-w-11 shrink-0/);
+  assert.match(readme, /Tab remains standard keyboard navigation/);
 });
 
 test("Space retains an immutable publisher-injected source revision", () => {
