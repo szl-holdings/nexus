@@ -47,7 +47,7 @@ export function Voice() {
             <button
               key={w}
               type="button"
-              className={`nx-btn min-h-11 px-2 py-1.5 ${v.waveform === w ? "nx-btn-on" : ""}`}
+              className={`nx-btn min-h-11 min-w-11 px-2 py-1.5 ${v.waveform === w ? "nx-btn-on" : ""}`}
               onClick={() => engine.setVoice({ waveform: w })}
             >
               {w.slice(0, 3)}
@@ -76,7 +76,7 @@ export function Voice() {
             <button
               key={p.id}
               type="button"
-              className={`nx-btn min-h-11 px-2 py-1.5 ${a.program === p.id ? "nx-btn-on" : ""}`}
+              className={`nx-btn min-h-11 min-w-11 px-2 py-1.5 ${a.program === p.id ? "nx-btn-on" : ""}`}
               onClick={() => engine.setAnalog({ program: p.id })}
             >
               {p.label}
@@ -88,7 +88,7 @@ export function Voice() {
             <button
               key={m.id}
               type="button"
-              className={`nx-btn min-h-11 px-2 py-1.5 ${a.mode === m.id ? "nx-btn-on" : ""}`}
+              className={`nx-btn min-h-11 min-w-11 px-2 py-1.5 ${a.mode === m.id ? "nx-btn-on" : ""}`}
               onClick={() => engine.setAnalog({ mode: m.id })}
             >
               {m.label}
@@ -96,7 +96,7 @@ export function Voice() {
           ))}
           <button
             type="button"
-            className={`nx-btn min-h-11 px-2 py-1.5 ${a.cycle ? "nx-btn-on" : ""}`}
+            className={`nx-btn min-h-11 min-w-11 px-2 py-1.5 ${a.cycle ? "nx-btn-on" : ""}`}
             onClick={() => engine.setAnalog({ cycle: !a.cycle })}
           >
             Cycle
@@ -139,7 +139,7 @@ export function Voice() {
                   {black ? (
                     <button
                       type="button"
-                      className={`nx-key nx-key-black pointer-events-auto absolute left-full z-10 h-full w-[70%] -translate-x-1/2 ${
+                      className={`nx-key nx-key-black pointer-events-auto absolute left-full z-10 h-full min-w-11 w-[70%] -translate-x-1/2 ${
                         snap.heldKeys.includes(black.midi) ? "nx-key-on" : ""
                       }`}
                       onPointerDown={(e) => {

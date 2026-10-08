@@ -21,6 +21,7 @@ NEXUS is an SZL Holdings creative-research showcase and playable Web Audio instr
 - Deterministic reference: Python and TypeScript analog engines with parity and physics tests.
 - IMMUNE `/nexus.html`: read-only replay/verification compatibility plane.
 - No account is required; audio begins only after a user gesture; public effectors remain absent.
+- Canonical builds ship no Grok preview chrome, dynamic install route, remote font request, or personal-preview bridge. The Grok origin remains credited in presentation and history.
 
 ## Promotion contract
 

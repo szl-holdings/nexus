@@ -11,7 +11,7 @@ ENV npm_config_cache=/tmp/npm-cache \
 COPY package.json package-lock.json ./
 RUN npm ci
 
-COPY .grok ./.grok
+COPY .grok/app-env.json ./.grok/app-env.json
 COPY src ./src
 COPY scripts ./scripts
 COPY public ./public

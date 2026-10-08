@@ -10,6 +10,8 @@ const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 const rootRoute = readFileSync("src/routes/__root.tsx", "utf8");
 const viteConfig = readFileSync("vite.config.ts", "utf8");
 const workstation = readFileSync("src/components/nexus/Workstation.tsx", "utf8");
+const patchbay = readFileSync("src/components/nexus/Patchbay.tsx", "utf8");
+const voice = readFileSync("src/components/nexus/Voice.tsx", "utf8");
 const readme = readFileSync("README.md", "utf8");
 
 test("Space builds and serves the complete Nitro Web Audio workstation", () => {
@@ -39,6 +41,21 @@ test("keyboard navigation and mobile scene targets remain accessible", () => {
   assert.match(workstation, /e\.code === "KeyP"/);
   assert.match(workstation, /min-h-11 min-w-11 shrink-0/);
   assert.match(readme, /Tab remains standard keyboard navigation/);
+});
+
+test("canonical runtime ships without Grok chrome or remote font dependencies", () => {
+  assert.doesNotMatch(rootRoute, /PreviewHostBridge|__grok|fonts\.googleapis|fonts\.gstatic/);
+  assert.doesNotMatch(viteConfig, /grokPwaPlugin/);
+  assert.match(dockerfile, /COPY \.grok\/app-env\.json \.\/\.grok\/app-env\.json/);
+  assert.doesNotMatch(dockerfile, /COPY \.grok \.\/\.grok/);
+  assert.equal(existsSync("server/middleware/grok-pwa.ts"), false);
+  assert.equal(existsSync("public/__grok"), false);
+});
+
+test("instrument buttons preserve the 44 pixel target floor", () => {
+  assert.match(patchbay, /min-h-11 min-w-11/);
+  assert.match(voice, /nx-btn min-h-11 min-w-11/);
+  assert.match(voice, /nx-key-black[^`]*min-w-11/);
 });
 
 test("Space retains an immutable publisher-injected source revision", () => {
