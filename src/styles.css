@@ -18,9 +18,9 @@
   --color-muted: #6e7868;
   --color-hairline: #2a3238;
   --color-record: #c44a38;
-  --font-display: "Syne", ui-sans-serif, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
-  --font-sans: "IBM Plex Mono", ui-monospace, monospace;
+  --font-display: "Segoe UI Variable Display", "Aptos Display", "Segoe UI", ui-sans-serif, sans-serif;
+  --font-mono: "Cascadia Mono", "SFMono-Regular", Menlo, Consolas, ui-monospace, monospace;
+  --font-sans: "Cascadia Mono", "SFMono-Regular", Menlo, Consolas, ui-monospace, monospace;
   --text-micro: 0.625rem;
   --text-engraved: 0.6875rem;
   --radius-xs: 2px;

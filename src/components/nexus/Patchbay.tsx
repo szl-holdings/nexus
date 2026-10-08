@@ -135,7 +135,7 @@ function JackRow({
           ref={(el) => {
             jackRefs.current[id] = el;
           }}
-          className="flex min-h-11 flex-col items-center gap-1"
+          className="flex min-h-11 min-w-11 flex-col items-center gap-1"
           onClick={() => onJack(id, kind)}
         >
           <span className={`nx-jack ${hot === id ? "nx-jack-hot" : ""}`} />

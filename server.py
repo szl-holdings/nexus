@@ -18,7 +18,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-HTML = Path(__file__).with_name("index.html")
+LOCAL_HTML = Path(__file__).with_name("index.html")
+HTML = LOCAL_HTML if LOCAL_HTML.is_file() else Path(__file__).with_name("space") / "index.html"
 SIGMA, RHO, BETA = 10.0, 28.0, 8.0 / 3.0
 DT = 0.01
 YUYAY_FLOORS = (0.95, 0.95) + (0.90,) * 11

@@ -5,7 +5,7 @@ colorFrom: green
 colorTo: yellow
 sdk: docker
 app_port: 7860
-pinned: false
+pinned: true
 license: apache-2.0
 short_description: "Holographic analog computer: 6 programs, optical"
 tags:
@@ -25,10 +25,14 @@ tags:
   <a href="https://szlholdings-immune.hf.space/nexus.html"><img src="https://img.shields.io/badge/runtime-IMMUNE%20NEXUS%20plane-7CFF6B?style=flat-square" alt="IMMUNE NEXUS plane"></a>
   <a href="https://github.com/szl-holdings/nexus"><img src="https://img.shields.io/badge/source-szl--holdings%2Fnexus-3A414C?style=flat-square" alt="GitHub source"></a>
 </p>
-<p align="center"><sub>Part of the <a href="https://huggingface.co/SZLHOLDINGS">SZL Holdings</a> estate. Public runtime is IMMUNE Channel A <a href="https://szlholdings-immune.hf.space/nexus.html">/nexus.html</a> — SZLHOLDINGS/nexus is not a public product Space. Energy UNAVAILABLE. Λ = Conjecture 1 OPEN.</sub></p>
+<p align="center"><sub>Part of the <a href="https://huggingface.co/SZLHOLDINGS">SZL Holdings</a> estate. Canonical interactive target: <a href="https://huggingface.co/spaces/SZLHOLDINGS/nexus">SZLHOLDINGS/nexus</a>. Origin preview: <a href="https://huggingface.co/spaces/betterwithage/nexus">betterwithage/nexus</a>. IMMUNE keeps the separate read-only verification plane. Provider publication and runtime readback remain separate gates. Energy UNAVAILABLE. Λ = Conjecture 1 OPEN.</sub></p>
 <!-- SZL-ESTATE-CARD:v2:END -->
 
 # NEXUS MK-II
+
+<p align="center"><img src="public/nexus-showcase.png" alt="NEXUS MK-II holographic analog workstation with grid, oscilloscope, tape deck, patchbay, sequencer, voice and piano controls" width="100%"></p>
+
+**A playable research instrument, not another dashboard.** NEXUS combines a browser-local Web Audio synthesizer, sequencer, patchbay, tape deck and phosphor CRT with deterministic analog-dynamics references in TypeScript and Python. The Grok-origin visual language is preserved; SZL source binding, tests and fail-closed evidence boundaries make the public projection reproducible.
 
 Holographic analog computer. Six programs. Optical core. Analog neuromorphic. Ouroboros. Five organs. Phosphor CRT.
 
@@ -95,22 +99,26 @@ Then play the keys, patch ANLG into VCF, watch HOLO, and throw Chaos.
 
 - **Z–M** piano (shift = octave)
 - **Space** run / stop sequencer
-- **Tab** cycle scope Y-T / X-Y / FFT / HOLO
+- **P** cycle scope Y-T / X-Y / FFT / HOLO; Tab remains standard keyboard navigation
 - **F** Frontier · Shift-F disengage · F again reseeds the loop
 - Voice: **IC / OP / HALT / REP**
 - Scenes F1–F22 on the header (shift-click stores)
 - **Esc** panic (all notes off)
 - **?** shortcuts
 
-Patterns, patches, tape, and voice settings persist in IndexedDB on the machine that played them. No accounts. No backend.
+Patterns, patches, tape, and voice settings persist in IndexedDB on the machine that played them. No account is required. Audio execution and user state remain browser-local; the canonical Space uses a source-bound Nitro runtime for delivery and build identity, while the Python engine remains the deterministic reference and parity implementation.
 
 ## Source and runtime authority
 
-- GitHub source: [szl-holdings/nexus](https://github.com/szl-holdings/nexus)
-- Public runtime: [IMMUNE Channel A `/nexus.html`](https://szlholdings-immune.hf.space/nexus.html)
-- Provider projection target: `SZLHOLDINGS/nexus`, centrally published from this GitHub source. It is not the public product Space and may be private or unavailable to unauthenticated Hub readers.
+- **Source of truth:** [szl-holdings/nexus](https://github.com/szl-holdings/nexus).
+- **Canonical organization Space target:** [`SZLHOLDINGS/nexus`](https://huggingface.co/spaces/SZLHOLDINGS/nexus), published only by the central exact-source workflow. A source merge alone does not establish that the Space exists, is current, or is running.
+- **Origin preview:** [`betterwithage/nexus`](https://huggingface.co/spaces/betterwithage/nexus). Preserve it as the Grok-origin preview until the organization Space has immutable source readback and browser qualification; it is not the canonical publisher or proof authority.
+- **IMMUNE verification plane:** [`SZLHOLDINGS/immune/nexus.html`](https://szlholdings-immune.hf.space/nexus.html) remains a read-only replay/verification surface, not a replacement for the playable workstation.
+- NEXUS is a distinctive creative-research showcase inside SZL Holdings, **not a fourth commercial flagship** and not a production certificate for A11oy.
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
+
+The source-bound container uses `space/Dockerfile`; `/healthz` and `/api/build-info` disclose readiness and the exact publisher-injected Git revision without authorizing external effects.

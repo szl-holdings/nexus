@@ -5,8 +5,9 @@ This file governs automated work in `szl-holdings/nexus`. It replaces the generi
 ## Authority and scope
 
 - GitHub `szl-holdings/nexus` is the source owner for NEXUS code, documentation, Docker projection inputs, and source-binding logic.
-- Public product/runtime authority: IMMUNE Channel A at `/nexus.html`.
-- `SZLHOLDINGS/nexus` is a provider projection target owned by the central SZL publication workflow. It is not the public product Space and may be private or unavailable to unauthenticated Hub readers.
+- Canonical interactive runtime target: `SZLHOLDINGS/nexus`, projected only from admitted GitHub source by the central SZL publication workflow. Availability and exact provider revision require separate readback.
+- Personal origin preview: `betterwithage/nexus`; preserve it until the canonical organization Space is source-bound and browser-qualified. It is historical/preview continuity, not publication authority.
+- IMMUNE Channel A `/nexus.html` remains the read-only replay/verification plane, not the playable workstation or a fourth commercial flagship.
 - `a11oy.net` is proof/evaluation authority only after separately admitted evidence exists. Do not infer proof-site publication from source changes.
 
 ## Change discipline
@@ -22,9 +23,9 @@ This file governs automated work in `szl-holdings/nexus`. It replaces the generi
 
 - Do not publish directly to Hugging Face from this repository or add local provider credentials/secrets.
 - Provider writes for `SZLHOLDINGS/nexus` are centrally owned by `szl-holdings/.github/.github/workflows/publish-nexus-space.yml`.
-- Preserve `space/Dockerfile`, `SOURCE_GITHUB_SHA`, `source_bound_server.py`, and the central exact-source/readback contract unless a reviewed change explicitly replaces that mechanism.
+- Preserve `space/Dockerfile`, `SOURCE_GITHUB_SHA`, `server/middleware/nexus-runtime.ts`, the deterministic Python reference, and the central exact-source/readback contract unless a reviewed change explicitly replaces that mechanism.
 - Source CI, provider publication, live runtime readback, browser acceptance, and proof/evaluation publication are distinct gates. Do not collapse them into one status.
-- A source change is not evidence that IMMUNE, Hugging Face, `a-11-oy.com`, or `a11oy.net` has updated.
+- A source change is not evidence that the organization Space, personal preview, IMMUNE, `a-11-oy.com`, or `a11oy.net` has updated.
 
 ## Evidence and claims
 
@@ -49,7 +50,7 @@ Use the repository's checked-in commands and manifests. Do not assume a platform
 Typical source development remains:
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 

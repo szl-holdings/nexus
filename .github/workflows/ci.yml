@@ -9,10 +9,14 @@ on:
   push:
     branches: [main]
   pull_request:
+  merge_group: {}
   workflow_dispatch: {}
 
 permissions:
   contents: read
+
+env:
+  SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -37,7 +41,15 @@ jobs:
       - name: Checkout exact source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ env.SOURCE_REVISION }}
           persist-credentials: false
+          fetch-depth: 1
+
+      - name: Prove exact source checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_REVISION"
 
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -47,6 +59,9 @@ jobs:
 
       - name: Install exact dependency graph
         run: npm ci
+
+      - name: Block high-severity dependency findings
+        run: npm audit --audit-level=high
 
       - name: Typecheck
         run: npm run typecheck
@@ -77,7 +92,15 @@ jobs:
       - name: Checkout exact source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ env.SOURCE_REVISION }}
           persist-credentials: false
+          fetch-depth: 1
+
+      - name: Prove exact source checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_REVISION"
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -114,3 +137,110 @@ jobs:
             python -m pip install --disable-pip-version-check 'pytest==9.1.1'
           fi
           python -m pytest -q
+  space:
+    name: Space container (exact source, non-root, smoke)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SOURCE_REVISION }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Prove exact source checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_REVISION"
+          printf '%s' "$SOURCE_REVISION" > SOURCE_GITHUB_SHA
+
+      - name: Build exact Space closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --pull=false --tag "szl-nexus:${SOURCE_REVISION}" --file space/Dockerfile .
+
+      - name: Run and verify source-bound Space
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="szl-nexus-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "NEXUS_CONTAINER=$name" >> "$GITHUB_ENV"
+          docker run --detach --name "$name" --publish 127.0.0.1:7860:7860 "szl-nexus:${SOURCE_REVISION}"
+
+          fetch_with_retry() {
+            local url="$1"
+            local output="$2"
+            for attempt in $(seq 1 60); do
+              if curl --fail --silent --show-error --connect-timeout 2 --max-time 10 "$url" > "$output"; then
+                return 0
+              fi
+              if [ "$attempt" -eq 60 ]; then
+                echo "runtime readback did not stabilize: $url" >&2
+                docker logs "$name"
+                return 1
+              fi
+              sleep 1
+            done
+          }
+
+          fetch_with_retry http://127.0.0.1:7860/healthz /tmp/nexus-health.json
+          fetch_with_retry http://127.0.0.1:7860/ /tmp/nexus-root.html
+          fetch_with_retry http://127.0.0.1:7860/api/build-info /tmp/nexus-build.json
+          python -I -P - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          expected = os.environ["SOURCE_REVISION"]
+          health = json.loads(Path("/tmp/nexus-health.json").read_text(encoding="utf-8"))
+          build = json.loads(Path("/tmp/nexus-build.json").read_text(encoding="utf-8"))
+          root = Path("/tmp/nexus-root.html").read_text(encoding="utf-8")
+          assert health["ready"] is True and health["source_revision"] == expected, health
+          assert build["source_bound"] is True and build["source_revision"] == expected, build
+          assert build["runtime"] == "NITRO_NODE_WEB_AUDIO", build
+          assert "NEXUS MK-II" in root, root[:500]
+          PY
+          wait_for_docker_health() {
+            local state
+            for attempt in $(seq 1 60); do
+              state="$(docker inspect --format '{{.State.Health.Status}}' "$name")"
+              if [ "$state" = healthy ]; then
+                return 0
+              fi
+              if [ "$state" = unhealthy ]; then
+                echo "container became unhealthy before qualification completed" >&2
+                docker logs "$name"
+                return 1
+              fi
+              if [ "$attempt" -eq 60 ]; then
+                echo "container health did not stabilize: $state" >&2
+                docker logs "$name"
+                return 1
+              fi
+              sleep 1
+            done
+          }
+
+          test "$(docker inspect --format '{{.Config.User}}' "$name")" = node
+          wait_for_docker_health
+
+      - name: Preserve container logs on failure
+        if: failure()
+        shell: bash
+        run: docker logs "$NEXUS_CONTAINER" || true
+
+      - name: Remove test container
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "${NEXUS_CONTAINER:-}" ]; then
+            docker rm -f "$NEXUS_CONTAINER" >/dev/null 2>&1 || true
+          fi
