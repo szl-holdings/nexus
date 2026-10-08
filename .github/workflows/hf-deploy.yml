@@ -8,20 +8,9 @@ name: Hugging Face publication ownership
 on:
   push:
     branches: [main]
-    paths:
-      - .github/workflows/hf-deploy.yml
-      - README.md
-      - AGENTS.md
-      - space/Dockerfile
-      - source_bound_server.py
   pull_request:
     branches: [main]
-    paths:
-      - .github/workflows/hf-deploy.yml
-      - README.md
-      - AGENTS.md
-      - space/Dockerfile
-      - source_bound_server.py
+  merge_group: {}
   workflow_dispatch: {}
 
 permissions:
@@ -55,6 +44,7 @@ jobs:
           python -m py_compile server.py source_bound_server.py
           python server.py --selftest
           python source_bound_server.py --selftest
+          node --experimental-strip-types --test src/lib/nexus/source-identity.test.ts scripts/nexus-space-contract.test.mjs
           python - <<'PY'
           from pathlib import Path
           import re
@@ -62,6 +52,8 @@ jobs:
           workflow = Path('.github/workflows/hf-deploy.yml').read_text(encoding='utf-8')
           dockerfile = Path('space/Dockerfile').read_text(encoding='utf-8')
           wrapper = Path('source_bound_server.py').read_text(encoding='utf-8')
+          runtime = Path('server/middleware/nexus-runtime.ts').read_text(encoding='utf-8')
+          identity = Path('src/lib/nexus/source-identity.ts').read_text(encoding='utf-8')
           readme = Path('README.md').read_text(encoding='utf-8')
           agents = Path('AGENTS.md').read_text(encoding='utf-8')
           forbidden = (
@@ -76,20 +68,22 @@ jobs:
                   raise SystemExit(f'local provider writer reintroduced: {fragment}')
           required = (
               'publish-nexus-space.yml',
-              'COPY SOURCE_GITHUB_SHA ./SOURCE_GITHUB_SHA',
-              'CMD ["python", "-u", "source_bound_server.py"]',
-              '"source_revision": revision',
-              '"source_bound": revision != "UNAVAILABLE"',
+              'COPY --chown=node:node SOURCE_GITHUB_SHA /app/SOURCE_GITHUB_SHA',
+              'CMD ["node", ".output/server/index.mjs"]',
+              'NITRO_NODE_WEB_AUDIO',
+              'path === "/api/build-info"',
+              'source_revision: sourceRevision',
           )
-          combined = workflow + '\n' + dockerfile + '\n' + wrapper
+          combined = workflow + '\n' + dockerfile + '\n' + wrapper + '\n' + runtime + '\n' + identity
           missing = [fragment for fragment in required if fragment not in combined]
           if missing:
               raise SystemExit(f'missing Nexus publication/source controls: {missing!r}')
 
           readme_required = (
-              'Public runtime: [IMMUNE Channel A `/nexus.html`]',
-              'Provider projection target: `SZLHOLDINGS/nexus`',
-              'It is not the public product Space',
+              'Canonical organization Space target:',
+              'Origin preview:',
+              'IMMUNE verification plane:',
+              'not a fourth commercial flagship',
           )
           missing_readme = [fragment for fragment in readme_required if fragment not in readme]
           if missing_readme:
@@ -98,7 +92,8 @@ jobs:
               raise SystemExit('README must not present the provider projection as the public Space')
 
           agents_required = (
-              'Public product/runtime authority: IMMUNE Channel A at `/nexus.html`.',
+              'Canonical interactive runtime target: `SZLHOLDINGS/nexus`',
+              'Personal origin preview: `betterwithage/nexus`',
               'Do not publish directly to Hugging Face from this repository',
               'Source CI, provider publication, live runtime readback, browser acceptance, and proof/evaluation publication are distinct gates.',
           )

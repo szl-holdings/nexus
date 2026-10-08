@@ -157,6 +157,12 @@ export default defineConfig(({ command, isPreview }) => ({
     strictPort: true,
   },
   resolve: { tsconfigPaths: true },
+  build: {
+    // The root route references the processed CSS asset from SSR head metadata.
+    // Emit the SSR asset into the deploy closure so a clean Nitro image cannot
+    // reference a hash that exists only in the intermediate build directory.
+    ssrEmitAssets: true,
+  },
   plugins: [
     pgliteBootstrapPlugin(),
     // Before tanstackStart so /auth/popup never falls through to the SPA.

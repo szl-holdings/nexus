@@ -173,12 +173,16 @@ export function Workstation() {
 
   return (
     <div className="nx-chassis relative min-h-dvh overflow-x-hidden">
-      <div className="nx-grain" />
-      <div className="nx-scan" />
-      <div className="nx-flicker" />
+      <div className="nx-grain" aria-hidden="true" />
+      <div className="nx-scan" aria-hidden="true" />
+      <div className="nx-flicker" aria-hidden="true" />
 
       {!snap.powered ? (
-        <PowerGate booting={booting} onEngage={() => void engage(false)} onFrontier={() => void engage(true)} />
+        <PowerGate
+          booting={booting}
+          onEngage={() => void engage(false)}
+          onFrontier={() => void engage(true)}
+        />
       ) : (
         <div className="relative z-10 mx-auto flex min-h-dvh max-w-[1600px] flex-col gap-3 px-3 py-3 sm:px-5 sm:py-4">
           <Header help={help} onHelp={() => setHelp((h) => !h)} />
@@ -229,13 +233,24 @@ function Header({ help, onHelp }: { help: boolean; onHelp: () => void }) {
       <div className="flex items-center justify-between gap-3 lg:contents">
         <div>
           <p className="nx-wordmark text-xl leading-tight sm:text-2xl">Nexus</p>
-          <p className="nx-label">{snap.frontier ? "Holographic analog computer · live" : "Holographic analog computer · MK-II"}</p>
+          <p className="nx-label">
+            {snap.frontier
+              ? "Holographic analog computer · Frontier engaged"
+              : "Holographic analog computer · MK-II"}
+          </p>
         </div>
         <div className="flex items-center gap-2 lg:hidden">
           <span className={`nx-led ${snap.activeNotes > 0 ? "nx-led-on" : ""}`} title="voice" />
           <span className={`nx-led ${snap.tape.motor ? "nx-led-amber" : ""}`} title="tape" />
-          <span className={`nx-led ${snap.frontier ? "nx-led-on" : snap.midi ? "nx-led-on" : ""}`} title={snap.frontier ? "frontier" : "midi"} />
-          <button type="button" className={`nx-btn min-h-11 px-3 ${help ? "nx-btn-on" : ""}`} onClick={onHelp}>
+          <span
+            className={`nx-led ${snap.frontier ? "nx-led-on" : snap.midi ? "nx-led-on" : ""}`}
+            title={snap.frontier ? "frontier" : "midi"}
+          />
+          <button
+            type="button"
+            className={`nx-btn min-h-11 px-3 ${help ? "nx-btn-on" : ""}`}
+            onClick={onHelp}
+          >
             Key
           </button>
         </div>
@@ -275,22 +290,22 @@ function Header({ help, onHelp }: { help: boolean; onHelp: () => void }) {
           {LOCKED_EIGHT.map((fid, i) => {
             const note = LOCKED_NOTE[fid];
             return (
-            <button
-              key={fid}
-              type="button"
-              title={
-                snap.scenes[i]
-                  ? `${fid} · ${note.name} — ${note.analog} · stored`
-                  : `${fid} · ${note.name} — ${note.analog} · shift-click to store`
-              }
-              className={`nx-btn min-h-11 min-w-0 px-0 text-micro lg:min-w-11 ${snap.sceneSlot === i ? "nx-btn-on" : ""} ${snap.scenes[i] ? "text-phosphor" : ""}`}
-              onClick={(e) => {
-                if (e.shiftKey) engine.saveScene(i);
-                else engine.loadScene(i);
-              }}
-            >
-              {fid}
-            </button>
+              <button
+                key={fid}
+                type="button"
+                title={
+                  snap.scenes[i]
+                    ? `${fid} · ${note.name} — ${note.analog} · stored`
+                    : `${fid} · ${note.name} — ${note.analog} · shift-click to store`
+                }
+                className={`nx-btn min-h-11 min-w-0 px-0 text-micro lg:min-w-11 ${snap.sceneSlot === i ? "nx-btn-on" : ""} ${snap.scenes[i] ? "text-phosphor" : ""}`}
+                onClick={(e) => {
+                  if (e.shiftKey) engine.saveScene(i);
+                  else engine.loadScene(i);
+                }}
+              >
+                {fid}
+              </button>
             );
           })}
         </div>
@@ -319,13 +334,23 @@ function Header({ help, onHelp }: { help: boolean; onHelp: () => void }) {
               className="w-24 accent-phosphor"
             />
           </label>
-          <span className={`nx-led hidden lg:inline-block ${snap.activeNotes > 0 ? "nx-led-on" : ""}`} title="voice" />
-          <span className={`nx-led hidden lg:inline-block ${snap.tape.motor ? "nx-led-amber" : ""}`} title="tape" />
+          <span
+            className={`nx-led hidden lg:inline-block ${snap.activeNotes > 0 ? "nx-led-on" : ""}`}
+            title="voice"
+          />
+          <span
+            className={`nx-led hidden lg:inline-block ${snap.tape.motor ? "nx-led-amber" : ""}`}
+            title="tape"
+          />
           <span
             className={`nx-led hidden lg:inline-block ${snap.frontier ? "nx-led-on" : snap.midi ? "nx-led-on" : ""}`}
             title={snap.frontier ? "frontier" : "midi"}
           />
-          <button type="button" className={`nx-btn hidden min-h-11 px-3 lg:inline-flex ${help ? "nx-btn-on" : ""}`} onClick={onHelp}>
+          <button
+            type="button"
+            className={`nx-btn hidden min-h-11 px-3 lg:inline-flex ${help ? "nx-btn-on" : ""}`}
+            onClick={onHelp}
+          >
             Key
           </button>
         </div>
@@ -372,7 +397,10 @@ function AnalogMeters({ live }: { live: boolean }) {
   }, []);
 
   return (
-    <div className={`flex items-end gap-1.5 ${live ? "opacity-100" : "opacity-40"}`} title="Analog computer X Y Z FG · F19 Λw · PURIQ Λs Λe maxAgg · A4 slack · Fisher–Rao · uniqueness OPEN">
+    <div
+      className={`flex items-end gap-1.5 ${live ? "opacity-100" : "opacity-40"}`}
+      title="Analog computer X Y Z FG · F19 Λw · PURIQ Λs Λe maxAgg · A4 slack · Fisher–Rao · uniqueness OPEN"
+    >
       <MeterBar barRef={xRef} label="X" />
       <MeterBar barRef={yRef} label="Y" />
       <MeterBar barRef={zRef} label="Z" />
@@ -432,15 +460,20 @@ function SignalStrip() {
               <span className={`nx-led ${vcaClosed ? "nx-led-rec" : live ? "nx-led-on" : ""}`} />
               <span className="nx-label">{b.label}</span>
             </div>
-            {i < blocks.length - 1 ? <span className="font-mono text-micro text-phosphor-dim">→</span> : null}
+            {i < blocks.length - 1 ? (
+              <span className="font-mono text-micro text-phosphor-dim">→</span>
+            ) : null}
           </div>
         );
       })}
       <AnalogMeters live />
       <OrganRail />
       <span className="basis-full font-mono text-micro tabular-nums text-amber sm:ml-auto sm:basis-auto">
-        {Math.round(snap.seq.bpm)} BPM · {snap.voice.waveform.toUpperCase()} · {snap.scopeMode.toUpperCase()}
-        {snap.frontier ? ` · FRONTIER · ${ANALOG_PROGRAMS.find((p) => p.id === (snap.analog.program ?? "lorenz"))?.label ?? "LRNZ"} · ${(snap.analog.mode ?? "op").toUpperCase()}` : ""}
+        {Math.round(snap.seq.bpm)} BPM · {snap.voice.waveform.toUpperCase()} ·{" "}
+        {snap.scopeMode.toUpperCase()}
+        {snap.frontier
+          ? ` · FRONTIER · ${ANALOG_PROGRAMS.find((p) => p.id === (snap.analog.program ?? "lorenz"))?.label ?? "LRNZ"} · ${(snap.analog.mode ?? "op").toUpperCase()}`
+          : ""}
         {snap.muted ? " · F12 MUTE" : ""}
         {snap.seq.arp ? " · ARP" : ""}
         {snap.voice.fold > 0.05 ? " · FOLD" : ""}
@@ -549,9 +582,16 @@ function OrganRail() {
       </span>
       <div ref={probesRef} className="flex flex-wrap items-center gap-1">
         {idleP.map((p) => (
-          <span key={p.id} data-probe={p.id} className="nx-organ" title={`${p.label} ${p.status} · ${p.detail}`}>
+          <span
+            key={p.id}
+            data-probe={p.id}
+            className="nx-organ"
+            title={`${p.label} ${p.status} · ${p.detail}`}
+          >
             <span className="nx-led" />
-            <span className="nx-label">{p.id === "hatun" ? "Hatun" : p.id === "anatomy" ? "Anat" : "Space"}</span>
+            <span className="nx-label">
+              {p.id === "hatun" ? "Hatun" : p.id === "anatomy" ? "Anat" : "Space"}
+            </span>
           </span>
         ))}
       </div>
@@ -570,21 +610,66 @@ function PowerGate({
 }) {
   return (
     <div className="relative z-10 flex min-h-dvh w-full flex-col items-center justify-center gap-6 px-6 text-center">
-      <p className="nx-wordmark text-4xl sm:text-6xl">Nexus</p>
-      <p className="nx-label max-w-md text-pretty">
-        Holographic analog computer · six programs · analog neuromorphic · optical core · Ouroboros · five organs · Hatun
+      <div>
+        <p className="nx-label mb-2">
+          SZL Holdings · Grok-origin instrument · canonical source edition
+        </p>
+        <h1 className="nx-wordmark text-4xl sm:text-6xl">Nexus</h1>
+      </div>
+      <p className="nx-label max-w-xl text-pretty">
+        Holographic analog computer · six programs · analog neuromorphic · optical core · Ouroboros
+        · five organs · Hatun
         <br />
-        MK-II Frontier: live analog computer — IC / OP / HALT / REP — driving voice, tape, grid, and hologram
+        MK-II Frontier is a playable Web Audio instrument — IC / OP / HALT / REP drive voice, tape,
+        grid, and hologram. The sound is synthesized in your browser; it is not generated by a
+        model.
       </p>
+      <div
+        className="flex max-w-2xl flex-wrap items-center justify-center gap-2"
+        aria-label="NEXUS runtime boundaries"
+      >
+        <span className="nx-organ">
+          <span className="nx-led nx-led-on" />
+          <span className="nx-label">Web Audio</span>
+        </span>
+        <span className="nx-organ">
+          <span className="nx-led nx-led-amber" />
+          <span className="nx-label">Local-first state</span>
+        </span>
+        <span className="nx-organ">
+          <span className="nx-led" />
+          <span className="nx-label">Energy unavailable</span>
+        </span>
+        <a
+          className="nx-btn inline-flex min-h-11 items-center px-3"
+          href="https://github.com/szl-holdings/nexus"
+        >
+          Source
+        </a>
+        <a className="nx-btn inline-flex min-h-11 items-center px-3" href="/api/build-info">
+          Build receipt
+        </a>
+      </div>
       <div className="flex flex-wrap items-center justify-center gap-3">
-        <button type="button" onClick={onEngage} className={`nx-btn min-h-12 px-8 py-3 text-sm ${booting ? "nx-btn-on" : ""}`}>
+        <button
+          type="button"
+          onClick={onEngage}
+          className={`nx-btn min-h-12 px-8 py-3 text-sm ${booting ? "nx-btn-on" : ""}`}
+        >
           {booting ? "Warming heaters…" : "Press to engage"}
         </button>
-        <button type="button" onClick={onFrontier} className="nx-btn nx-btn-on min-h-12 px-8 py-3 text-sm">
+        <button
+          type="button"
+          onClick={onFrontier}
+          className="nx-btn nx-btn-on min-h-12 px-8 py-3 text-sm"
+        >
           Launch Frontier
         </button>
       </div>
-      <span className={`nx-led ${booting ? "nx-led-amber" : ""}`} />
+      <p className="font-mono text-micro text-phosphor-dim">
+        Audio starts only after engagement. Headphones recommended. Esc always stops sound.
+      </p>
+      <span className={`nx-led ${booting ? "nx-led-amber" : ""}`} aria-hidden="true" />
     </div>
   );
 }
@@ -600,21 +685,43 @@ function Help({ onClose }: { onClose: () => void }) {
       </div>
       <ul className="space-y-1.5 font-mono text-sm text-fg">
         <li>
-          <kbd>F</kbd> Frontier — live analog computer. Shift-F disengages. Press again to reseed the loop.
+          <kbd>F</kbd> Frontier — live analog computer. Shift-F disengages. Press again to reseed
+          the loop.
         </li>
-        <li>Programs: LRNZ · HARM · VDP · DFFG · LTKA · NEMO. IC holds. OP integrates. HALT freezes. REP reseeds.</li>
-        <li>NEMO: five analog organs — YACHAY cognition, YUYAY pacemaker, YAWAR traveling wave, OTel optical write, KHIPU bound. WILLAY is the holographic second brain, not a sixth organ. 3-factor optical STDP. Not a chip. Energy UNAVAILABLE.</li>
-        <li>Analog circuits (THAT jobs, live voltages): integrator, summer, multiplier, inverter, comparator, correlator. Analog Schmitt clocks S&H from the correlator. Hybrid: sequencer samples correlator into S&H; REP accent loads analog IC. ANLG is the analog jack. Not a seventh module.</li>
+        <li>
+          Programs: LRNZ · HARM · VDP · DFFG · LTKA · NEMO. IC holds. OP integrates. HALT freezes.
+          REP reseeds.
+        </li>
+        <li>
+          NEMO: five analog organs — YACHAY cognition, YUYAY pacemaker, YAWAR traveling wave, OTel
+          optical write, KHIPU bound. WILLAY is the holographic second brain, not a sixth organ.
+          3-factor optical STDP. Not a chip. Energy UNAVAILABLE.
+        </li>
+        <li>
+          Analog circuits (THAT jobs, live voltages): integrator, summer, multiplier, inverter,
+          comparator, correlator. Analog Schmitt clocks S&H from the correlator. Hybrid: sequencer
+          samples correlator into S&H; REP accent loads analog IC. ANLG is the analog jack. Not a
+          seventh module.
+        </li>
         <li>X Y Z FG Λ meters. Attack / Release are the function generator rise and fall.</li>
         <li>
-          Patch <span className="text-phosphor">ANLG</span> and <span className="text-phosphor">FUNC</span> into VCF or PAN
+          Patch <span className="text-phosphor">ANLG</span> and{" "}
+          <span className="text-phosphor">FUNC</span> into VCF or PAN
         </li>
         <li>
-          <kbd>Tab</kbd> cycle scope Y-T / X-Y / FFT / HOLO — hologram is two-beam optical analog plus five organs
+          <kbd>Tab</kbd> cycle scope Y-T / X-Y / FFT / HOLO — hologram is two-beam optical analog
+          plus five organs
         </li>
-        <li>Ouroboros taxes the VCA in Frontier. Eight bars, then the loop closes. Run starts another.</li>
-        <li>F19 fail-closed: a DOWN organ mutes the VCA. Master cannot compensate. Energy stays UNAVAILABLE.</li>
-        <li>Λ is advisory. Conjecture 1 remains OPEN. Hatun probes stay LIVE or honestly UNAVAILABLE.</li>
+        <li>
+          Ouroboros taxes the VCA in Frontier. Eight bars, then the loop closes. Run starts another.
+        </li>
+        <li>
+          F19 fail-closed: a DOWN organ mutes the VCA. Master cannot compensate. Energy stays
+          UNAVAILABLE.
+        </li>
+        <li>
+          Λ is advisory. Conjecture 1 remains OPEN. Hatun probes stay LIVE or honestly UNAVAILABLE.
+        </li>
         <li>GO is 5/5 organs LIVE. HOLD until the kernel settles. NO-GO is F19 fail-closed.</li>
         <li>Scenes F1 F4 F7 F11 F12 F18 F19 F22 · shift-click stores</li>
         <li>
@@ -632,7 +739,10 @@ function Help({ onClose }: { onClose: () => void }) {
         <li>
           <kbd>?</kbd> this legend
         </li>
-        <li>Grid: tap cells to write. Analog pen tracks analog X×Y. Tape play engages echo. Patch cables reroute the chain.</li>
+        <li>
+          Grid: tap cells to write. Analog pen tracks analog X×Y. Tape play engages echo. Patch
+          cables reroute the chain.
+        </li>
       </ul>
     </div>
   );
