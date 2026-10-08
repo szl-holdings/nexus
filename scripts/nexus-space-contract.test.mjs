@@ -7,6 +7,8 @@ const dockerfile = readFileSync("space/Dockerfile", "utf8");
 const middleware = readFileSync("server/middleware/nexus-runtime.ts", "utf8");
 const ownership = readFileSync(".github/workflows/hf-deploy.yml", "utf8");
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
+const rootRoute = readFileSync("src/routes/__root.tsx", "utf8");
+const viteConfig = readFileSync("vite.config.ts", "utf8");
 
 test("Space builds and serves the complete Nitro Web Audio workstation", () => {
   assert.match(packageJson.scripts.build, /verify-built-asset-closure\.mjs/);
@@ -22,6 +24,12 @@ test("Space builds and serves the complete Nitro Web Audio workstation", () => {
   assert.match(dockerfile, /CMD \["node", "\.output\/server\/index\.mjs"\]/);
   assert.doesNotMatch(dockerfile, /CMD \["python"/);
   assert.doesNotMatch(dockerfile, /source_bound_server\.py/);
+});
+
+test("root CSS is discovered from the client route manifest", () => {
+  assert.match(rootRoute, /import "\.\.\/styles\.css";/);
+  assert.doesNotMatch(rootRoute, /styles\.css\?url/);
+  assert.doesNotMatch(viteConfig, /ssrEmitAssets/);
 });
 
 test("Space retains an immutable publisher-injected source revision", () => {
