@@ -1,10 +1,20 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fstatSync,
+  openSync,
+  readSync,
+  readdirSync,
+} from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const STATIC_ASSET =
   /(?:^|["'`(=:\s])\/?(assets\/[A-Za-z0-9._~!$&'()+,;=@%/-]+\.(?:css|js|map|svg|png|jpe?g|webp|gif|woff2?|ttf|ico))(?:[?#["'`)\s]|$)/g;
 const TEXT_EXTENSIONS = new Set([".js", ".mjs", ".cjs", ".json", ".html", ".css"]);
+const MAX_TEXT_BYTES = 8 * 1024 * 1024;
+const NO_FOLLOW = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0;
 
 function extension(path) {
   const name = path.toLowerCase();
@@ -27,13 +37,30 @@ export function walkFiles(root) {
   return output.sort();
 }
 
+function readBoundedTextFile(path) {
+  const descriptor = openSync(path, constants.O_RDONLY | NO_FOLLOW);
+  try {
+    const metadata = fstatSync(descriptor);
+    if (!metadata.isFile()) throw new Error(`built output path is not a file: ${path}`);
+    const buffer = Buffer.allocUnsafe(MAX_TEXT_BYTES + 1);
+    let length = 0;
+    while (length < buffer.length) {
+      const count = readSync(descriptor, buffer, length, buffer.length - length, null);
+      if (count === 0) break;
+      length += count;
+    }
+    if (length > MAX_TEXT_BYTES) throw new Error(`built server file exceeds audit limit: ${path}`);
+    return buffer.toString("utf8", 0, length);
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
 export function referencedAssets(serverRoot) {
   const refs = new Set();
   for (const path of walkFiles(serverRoot)) {
     if (!TEXT_EXTENSIONS.has(extension(path))) continue;
-    const bytes = statSync(path).size;
-    if (bytes > 8 * 1024 * 1024) throw new Error(`built server file exceeds audit limit: ${path}`);
-    const text = readFileSync(path, "utf8");
+    const text = readBoundedTextFile(path);
     for (const match of text.matchAll(STATIC_ASSET)) refs.add(match[1]);
   }
   return [...refs].sort();

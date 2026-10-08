@@ -52,6 +52,16 @@ test("main pushes and pull requests validate every source change", () => {
   assert.match(WORKFLOW, /^ {2}merge_group: \{\}$/m);
 });
 
+test("the guard checks out and proves the exact event source", () => {
+  assert.ok(
+    WORKFLOW.includes(
+      "env:\n  SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}",
+    ),
+  );
+  assert.match(WORKFLOW, /ref: \$\{\{ env\.SOURCE_REVISION \}\}/);
+  assert.match(WORKFLOW, /test "\$\(git rev-parse HEAD\)" = "\$SOURCE_REVISION"/);
+});
+
 test("every action is pinned to a full commit SHA", () => {
   const uses = [...WORKFLOW.matchAll(/^\s*uses:\s*(\S+)/gm)].map((match) => match[1]);
   assert.ok(uses.length > 0);

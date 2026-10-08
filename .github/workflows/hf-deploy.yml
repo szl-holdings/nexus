@@ -16,6 +16,9 @@ on:
 permissions:
   contents: read
 
+env:
+  SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+
 concurrency:
   group: hf-publication-ownership-${{ github.repository }}-${{ github.ref }}
   cancel-in-progress: true
@@ -34,8 +37,15 @@ jobs:
       - name: Checkout exact source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ env.SOURCE_REVISION }}
           persist-credentials: false
           fetch-depth: 1
+
+      - name: Prove exact source checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_REVISION"
 
       - name: Validate delegation and source-bound runtime
         shell: bash

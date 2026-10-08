@@ -174,18 +174,26 @@ jobs:
           name="szl-nexus-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           echo "NEXUS_CONTAINER=$name" >> "$GITHUB_ENV"
           docker run --detach --name "$name" --publish 127.0.0.1:7860:7860 "szl-nexus:${SOURCE_REVISION}"
-          for attempt in $(seq 1 60); do
-            if curl --fail --silent --show-error http://127.0.0.1:7860/healthz > /tmp/nexus-health.json; then
-              break
-            fi
-            if [ "$attempt" -eq 60 ]; then
-              docker logs "$name"
-              exit 1
-            fi
-            sleep 1
-          done
-          curl --fail --silent --show-error http://127.0.0.1:7860/ > /tmp/nexus-root.html
-          curl --fail --silent --show-error http://127.0.0.1:7860/api/build-info > /tmp/nexus-build.json
+
+          fetch_with_retry() {
+            local url="$1"
+            local output="$2"
+            for attempt in $(seq 1 60); do
+              if curl --fail --silent --show-error --connect-timeout 2 --max-time 10 "$url" > "$output"; then
+                return 0
+              fi
+              if [ "$attempt" -eq 60 ]; then
+                echo "runtime readback did not stabilize: $url" >&2
+                docker logs "$name"
+                return 1
+              fi
+              sleep 1
+            done
+          }
+
+          fetch_with_retry http://127.0.0.1:7860/healthz /tmp/nexus-health.json
+          fetch_with_retry http://127.0.0.1:7860/ /tmp/nexus-root.html
+          fetch_with_retry http://127.0.0.1:7860/api/build-info /tmp/nexus-build.json
           python -I -P - <<'PY'
           import json
           import os

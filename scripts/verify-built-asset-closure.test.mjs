@@ -1,20 +1,19 @@
 import assert from "node:assert/strict";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
 import { referencedAssets, verifyBuiltAssetClosure } from "./verify-built-asset-closure.mjs";
 
-function fixture(name) {
-  const root = join(tmpdir(), `nexus-asset-closure-${process.pid}-${name}`);
-  rmSync(root, { recursive: true, force: true });
+function fixture() {
+  const root = mkdtempSync(join(tmpdir(), "nexus-asset-closure-"));
   mkdirSync(join(root, "server"), { recursive: true });
   mkdirSync(join(root, "public", "assets"), { recursive: true });
   return root;
 }
 
 test("collects unique static asset references from built server files", () => {
-  const root = fixture("collect");
+  const root = fixture();
   try {
     writeFileSync(
       join(root, "server", "index.mjs"),
@@ -31,7 +30,7 @@ test("collects unique static asset references from built server files", () => {
 });
 
 test("accepts a complete generated asset closure", () => {
-  const root = fixture("complete");
+  const root = fixture();
   try {
     writeFileSync(join(root, "server", "index.mjs"), 'const href="/assets/styles-good.css";');
     writeFileSync(join(root, "public", "assets", "styles-good.css"), "body{}\n");
@@ -44,7 +43,7 @@ test("accepts a complete generated asset closure", () => {
 });
 
 test("fails closed when an SSR asset hash is absent from public output", () => {
-  const root = fixture("missing");
+  const root = fixture();
   try {
     writeFileSync(join(root, "server", "index.mjs"), 'const href="/assets/styles-missing.css";');
     assert.throws(() => verifyBuiltAssetClosure(root), /styles-missing\.css/);
@@ -54,7 +53,7 @@ test("fails closed when an SSR asset hash is absent from public output", () => {
 });
 
 test("fails when no static asset binding is present", () => {
-  const root = fixture("empty");
+  const root = fixture();
   try {
     writeFileSync(join(root, "server", "index.mjs"), "export default {};\n");
     assert.throws(() => verifyBuiltAssetClosure(root), /did not reference any static assets/);

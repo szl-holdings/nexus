@@ -23,6 +23,7 @@ test("Space builds and serves the complete Nitro Web Audio workstation", () => {
   );
   assert.match(dockerfile, /^FROM node:26-bookworm-slim@sha256:[0-9a-f]{64} AS builder$/m);
   assert.match(dockerfile, /NITRO_PRESET=node-server/);
+  assert.match(viteConfig, /preset: process\.env\.NITRO_PRESET \|\| "node-server"/);
   assert.match(dockerfile, /RUN npm run build/);
   assert.match(dockerfile, /COPY --from=builder --chown=node:node \/src\/\.output \/app\/\.output/);
   assert.match(dockerfile, /CMD \["node", "\.output\/server\/index\.mjs"\]/);

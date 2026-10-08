@@ -59,7 +59,7 @@ test("every action is pinned to the SHA the org already uses", () => {
 });
 
 test("each job hardens the runner before anything else runs", () => {
-  for (const job of ["node", "python"]) {
+  for (const job of ["node", "python", "space"]) {
     const steps = jobSteps(job);
     const firstUses = steps.match(/^\s*uses:\s*(\S+)/m);
     assert.ok(firstUses, `${job}: no steps`);
@@ -98,6 +98,31 @@ test("CI never overrides incompatible dependency peers to pass installation", ()
   assert.doesNotMatch(CI, /--legacy-peer-deps|--force\b|strict-peer-deps:\s*false/);
 });
 
+test("Nitro's optional cache peer is explicit without overriding Babel's major", () => {
+  assert.equal(PACKAGE.devDependencies["lru-cache"], "11.5.3");
+  assert.equal(LOCK.packages[""].devDependencies["lru-cache"], "11.5.3");
+  assert.equal(LOCK.packages["node_modules/lru-cache"].version, "11.5.3");
+  assert.equal(
+    LOCK.packages["node_modules/@babel/helper-compilation-targets/node_modules/lru-cache"].version,
+    "5.1.1",
+  );
+});
+
+test("the Space smoke retries health, root and source readback", () => {
+  const steps = jobSteps("space");
+  assert.match(steps, /fetch_with_retry\(\)/);
+  assert.match(
+    steps,
+    /fetch_with_retry http:\/\/127\.0\.0\.1:7860\/healthz \/tmp\/nexus-health\.json/,
+  );
+  assert.match(steps, /fetch_with_retry http:\/\/127\.0\.0\.1:7860\/ \/tmp\/nexus-root\.html/);
+  assert.match(
+    steps,
+    /fetch_with_retry http:\/\/127\.0\.0\.1:7860\/api\/build-info \/tmp\/nexus-build\.json/,
+  );
+  assert.match(steps, /--connect-timeout 2 --max-time 10/);
+});
+
 test("the source alias resolves without deprecated baseUrl or a suppression", () => {
   const { config, error } = ts.readConfigFile(join(ROOT, "tsconfig.json"), ts.sys.readFile);
   assert.equal(error, undefined);
@@ -112,7 +137,10 @@ test("the source alias resolves without deprecated baseUrl or a suppression", ()
     ts.sys,
   ).resolvedModule;
   assert.ok(resolved, "the compiler must retain the @/ source alias");
-  assert.equal(resolved.resolvedFileName.replaceAll("\\", "/"), join(ROOT, "src/lib/nexus/types.ts").replaceAll("\\", "/"));
+  assert.equal(
+    resolved.resolvedFileName.replaceAll("\\", "/"),
+    join(ROOT, "src/lib/nexus/types.ts").replaceAll("\\", "/"),
+  );
 });
 
 test("the node job runs on both Node LTS lines the repository uses", () => {

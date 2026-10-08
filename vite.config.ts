@@ -166,7 +166,7 @@ export default defineConfig(({ command, isPreview }) => ({
     ...(command === "build" || isPreview
       ? [
           nitro({
-            preset: process.env.NITRO_PRESET || "vercel",
+            preset: process.env.NITRO_PRESET || "node-server",
             // Auto-register the source-bound runtime middleware. Nitro v3
             // defaults serverDir to false, so this explicit source directory
             // is part of the canonical Space contract.
