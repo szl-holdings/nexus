@@ -208,8 +208,29 @@ jobs:
           assert build["runtime"] == "NITRO_NODE_WEB_AUDIO", build
           assert "NEXUS MK-II" in root, root[:500]
           PY
+          wait_for_docker_health() {
+            local state
+            for attempt in $(seq 1 60); do
+              state="$(docker inspect --format '{{.State.Health.Status}}' "$name")"
+              if [ "$state" = healthy ]; then
+                return 0
+              fi
+              if [ "$state" = unhealthy ]; then
+                echo "container became unhealthy before qualification completed" >&2
+                docker logs "$name"
+                return 1
+              fi
+              if [ "$attempt" -eq 60 ]; then
+                echo "container health did not stabilize: $state" >&2
+                docker logs "$name"
+                return 1
+              fi
+              sleep 1
+            done
+          }
+
           test "$(docker inspect --format '{{.Config.User}}' "$name")" = node
-          test "$(docker inspect --format '{{.State.Health.Status}}' "$name")" = healthy
+          wait_for_docker_health
 
       - name: Preserve container logs on failure
         if: failure()

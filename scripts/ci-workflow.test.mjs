@@ -123,6 +123,19 @@ test("the Space smoke retries health, root and source readback", () => {
   assert.match(steps, /--connect-timeout 2 --max-time 10/);
 });
 
+test("the Space smoke waits for Docker health instead of sampling once", () => {
+  const steps = jobSteps("space");
+  assert.match(steps, /wait_for_docker_health\(\)/);
+  assert.match(steps, /for attempt in \$\(seq 1 60\)/);
+  assert.match(steps, /if \[ "\$state" = healthy \]/);
+  assert.match(steps, /if \[ "\$state" = unhealthy \]/);
+  assert.match(steps, /container health did not stabilize/);
+  assert.doesNotMatch(
+    steps,
+    /test "\$\(docker inspect --format '\{\{\.State\.Health\.Status\}\}' "\$name"\)" = healthy/,
+  );
+});
+
 test("the source alias resolves without deprecated baseUrl or a suppression", () => {
   const { config, error } = ts.readConfigFile(join(ROOT, "tsconfig.json"), ts.sys.readFile);
   assert.equal(error, undefined);
