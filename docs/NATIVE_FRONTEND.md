@@ -29,11 +29,12 @@ node scripts/native-assets.mjs --project /absolute/path/to/szl-brand
 npm run build
 node scripts/native-assets.mjs --built .output/public
 
-# The qualifier starts/stops its own loopback Nitro process.
+# The qualifier starts/stops its own loopback Nitro process and creates
+# a new private run directory beneath this optional output parent.
 NEXUS_QA_OUT=/absolute/path/to/observations node scripts/qualify-native-frontend.mjs
 ```
 
-The browser harness uses the repository’s locked Playwright package by default. `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` can select an already installed local test runtime. Output is written outside the checkout by default. The child server inherits only a narrow environment allowlist and an explicit local source fixture. Dirty source is labelled unbound; clean source records the exact candidate revision. Neither local state creates canonical publication authority.
+The browser harness uses the repository’s locked Playwright package by default. `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` can select an already installed local test runtime. Output is written outside the checkout by default. Each run atomically creates a private directory with `mkdtemp`; `NEXUS_QA_OUT` selects its parent, and the exact run directory is printed when the audit finishes. Source, log, and result files are created exclusively instead of overwriting existing paths. The child server inherits only a narrow environment allowlist and an explicit local source fixture. Dirty source is labelled unbound; clean source records the exact candidate revision. Neither local state creates canonical publication authority.
 
 ## Evidence boundary
 

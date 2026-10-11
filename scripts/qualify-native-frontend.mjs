@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -12,9 +12,12 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE || "playwright");
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const OUT = resolve(
-  process.env.NEXUS_QA_OUT || join(tmpdir(), `nexus-native-observations-${Date.now()}`),
-);
+// A caller may choose the parent, but every run gets a new private directory.
+// Atomic mkdtemp creation prevents predictable temporary-path substitution.
+const OUTPUT_PARENT = process.env.NEXUS_QA_OUT ? resolve(process.env.NEXUS_QA_OUT) : tmpdir();
+mkdirSync(OUTPUT_PARENT, { recursive: true, mode: 0o700 });
+assert.ok(lstatSync(OUTPUT_PARENT).isDirectory(), "observation parent must be a directory");
+const OUT = mkdtempSync(join(OUTPUT_PARENT, "nexus-native-observations-"));
 const QUICK = process.argv.includes("--quick");
 const widths = QUICK ? [320, 1440] : [320, 390, 768, 1024, 1440, 2560];
 const checks = [],
@@ -34,7 +37,6 @@ const check = (name, ok, detail) =>
   checks.push({ name, pass: Boolean(ok), ...(ok ? {} : { detail }) });
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-mkdirSync(OUT, { recursive: true });
 
 function git(args) {
   const r = spawnSync("git", args, { cwd: ROOT, encoding: "utf8", maxBuffer: 1024 * 1024 });
@@ -44,7 +46,7 @@ function git(args) {
 const revision = git(["rev-parse", "HEAD"]);
 const dirty = Boolean(git(["status", "--porcelain", "--untracked-files=all"]));
 const localSource = dirty ? "0".repeat(40) : revision;
-writeFileSync(join(OUT, "SOURCE_GITHUB_SHA.fixture"), localSource);
+writeFileSync(join(OUT, "SOURCE_GITHUB_SHA.fixture"), localSource, { flag: "wx", mode: 0o600 });
 
 async function port() {
   const listener = createServer();
@@ -666,7 +668,7 @@ async function interactions(page, width) {
   check("no page errors", errors.length === 0, errors);
   check("no browser provider transport attempted", denied.length === 0, denied);
   check("no browser network mutation attempted", writes.length === 0, writes);
-  writeFileSync(join(OUT, "server.log"), serverLog);
+  writeFileSync(join(OUT, "server.log"), serverLog, { flag: "wx", mode: 0o600 });
 })()
   .catch((error) => {
     check("harness completed", false, error.stack);
@@ -692,7 +694,10 @@ async function interactions(page, width) {
         "No external database credentials or migrations, auth activation, central publisher, Hugging Face upload or live readiness qualification. The unchanged runtime can initialize an in-memory PGlite fallback.",
       ],
     };
-    writeFileSync(join(OUT, "results.json"), JSON.stringify(report, null, 2) + "\n");
+    writeFileSync(join(OUT, "results.json"), JSON.stringify(report, null, 2) + "\n", {
+      flag: "wx",
+      mode: 0o600,
+    });
     console.log(
       JSON.stringify(
         { checks: report.checks, passed: report.passed, failed: report.failed, output: OUT },
