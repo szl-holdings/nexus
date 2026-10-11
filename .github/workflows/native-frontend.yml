@@ -1,0 +1,62 @@
+# Source-only browser observations. Canonical Space publication stays central.
+name: Native Frontend
+on:
+  pull_request:
+  push:
+    branches: [main]
+  merge_group: {}
+permissions:
+  contents: read
+env:
+  SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+concurrency:
+  group: native-frontend-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1
+        with:
+          egress-policy: audit
+      - name: Checkout exact candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.SOURCE_REVISION }}
+          persist-credentials: false
+      - name: Prove exact source
+        run: test "$(git rev-parse HEAD)" = "$SOURCE_REVISION"
+      - name: Set up existing Node line
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Install locked browser and application dependencies
+        run: npm ci --ignore-scripts
+      - name: Install matching Chromium
+        run: node node_modules/playwright/cli.js install --with-deps chromium
+      - name: Build without deployment credentials or database environment
+        run: |
+          node --input-type=module <<'JS'
+          import { spawnSync } from 'node:child_process';
+          const env = Object.fromEntries(['PATH','HOME','TMPDIR','LANG','LC_ALL'].filter(key => process.env[key]).map(key => [key, process.env[key]]));
+          const result = spawnSync('npm', ['run','build'], { env, stdio: 'inherit' });
+          process.exit(result.status ?? 1);
+          JS
+      - name: Qualify native source and built bytes
+        run: |
+          node --test scripts/native-assets.test.mjs
+          node scripts/native-assets.mjs --built .output/public
+      - name: Render actual local workstation
+        env:
+          NEXUS_QA_OUT: ${{ runner.temp }}/nexus-native-observations
+        run: node scripts/qualify-native-frontend.mjs
+      - name: Preserve unsigned browser observations
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: nexus-native-frontend-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/nexus-native-observations
+          if-no-files-found: warn

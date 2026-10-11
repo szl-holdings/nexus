@@ -9,6 +9,7 @@ import { Patchbay } from "./Patchbay";
 import { Sequencer } from "./Sequencer";
 import { TapeDeck } from "./TapeDeck";
 import { Voice } from "./Voice";
+import { IdentityBar, NexusBoundaries, Welcome, type Surface } from "./NativeShell";
 
 const KEY_NOTES: Record<string, number> = {
   KeyZ: 48,
@@ -52,6 +53,14 @@ export function Workstation() {
   const snap = useEngine();
   const [help, setHelp] = useState(false);
   const [booting, setBooting] = useState(false);
+  const [bootError, setBootError] = useState("");
+  const [surface, setSurface] = useState<Surface>("dark");
+  const [midiRequested, setMidiRequested] = useState(false);
+  const [midiStatus, setMidiStatus] = useState("MIDI is optional and not connected.");
+
+  useEffect(() => {
+    document.documentElement.dataset.surface = surface;
+  }, [surface]);
 
   useEffect(() => {
     void engine.hydrate();
@@ -60,18 +69,28 @@ export function Workstation() {
   useEffect(() => {
     const down = new Set<string>();
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
-      if (e.code === "Space") {
-        e.preventDefault();
-        if (snap.powered) engine.togglePlay();
-        return;
-      }
       if (e.code === "Escape") {
         engine.panic();
         engine.stop();
         setHelp(false);
         return;
       }
+      // Native controls keep their normal Space/Enter/arrow behavior. Escape
+      // remains the global stop, including while a control has focus.
+      if (e.defaultPrevented || e.isComposing || e.ctrlKey || e.metaKey) return;
+      if (
+        e.target instanceof Element &&
+        e.target.closest(
+          "a,button,input,select,textarea,summary,[role='slider'],[contenteditable='true'],dialog",
+        )
+      )
+        return;
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (snap.powered && !e.repeat) engine.togglePlay();
+        return;
+      }
+      if (e.repeat) return;
       if (e.key === "?" || (e.shiftKey && e.code === "Slash")) {
         setHelp((h) => !h);
         return;
@@ -123,20 +142,37 @@ export function Workstation() {
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("keyup", onUp);
+    const releaseKeys = () => {
+      for (const key of down) {
+        const midi = KEY_NOTES[key];
+        if (midi != null) {
+          engine.noteOff(midi);
+          engine.noteOff(midi + 12);
+        }
+      }
+      down.clear();
+    };
+    window.addEventListener("blur", releaseKeys);
     return () => {
+      releaseKeys();
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onUp);
+      window.removeEventListener("blur", releaseKeys);
     };
   }, [snap.powered]);
 
   useEffect(() => {
-    if (!snap.powered || !navigator.requestMIDIAccess) return;
+    if (!snap.powered || !midiRequested) return;
+    if (typeof navigator.requestMIDIAccess !== "function") return;
     let access: MIDIAccess | null = null;
+    let cancelled = false;
     void navigator
       .requestMIDIAccess({ sysex: false })
       .then((midi) => {
+        if (cancelled) return;
         access = midi;
         engine.setMidi(true);
+        setMidiStatus("MIDI access granted. Connect an input to play.");
         const hook = (ev: MIDIMessageEvent) => {
           const d = ev.data;
           if (!d || d.length < 2) return;
@@ -155,71 +191,127 @@ export function Workstation() {
         midi.onstatechange = bind;
       })
       .catch(() => {
+        if (cancelled) return;
         engine.setMidi(false);
+        setMidiStatus("MIDI access unavailable. The on-screen instrument remains usable.");
       });
     return () => {
+      cancelled = true;
       access?.inputs.forEach((input) => {
         input.onmidimessage = null;
       });
+      if (access) access.onstatechange = null;
+      engine.setMidi(false);
     };
-  }, [snap.powered]);
+  }, [snap.powered, midiRequested]);
 
   async function engage(frontier = false) {
+    if (booting) return;
     setBooting(true);
-    await engine.powerOn();
-    if (frontier) engine.frontier();
-    setBooting(false);
+    setBootError("");
+    try {
+      await engine.powerOn();
+      if (frontier) engine.frontier();
+    } catch {
+      setBootError("Audio could not start. Check this browser’s audio support and try again.");
+    } finally {
+      setBooting(false);
+    }
   }
 
   return (
-    <div className="nx-chassis relative min-h-dvh overflow-x-hidden">
-      <div className="nx-grain" aria-hidden="true" />
-      <div className="nx-scan" aria-hidden="true" />
-      <div className="nx-flicker" aria-hidden="true" />
-
-      {!snap.powered ? (
-        <PowerGate
-          booting={booting}
-          onEngage={() => void engage(false)}
-          onFrontier={() => void engage(true)}
-        />
-      ) : (
-        <div className="relative z-10 mx-auto flex min-h-dvh max-w-[1600px] flex-col gap-3 px-3 py-3 sm:px-5 sm:py-4">
-          <Header help={help} onHelp={() => setHelp((h) => !h)} />
-          <SignalStrip />
-          <div className="hidden min-h-[46rem] flex-1 grid-cols-3 grid-rows-2 gap-3 lg:grid">
-            <Grid />
-            <Oscilloscope />
-            <TapeDeck />
-            <Patchbay />
-            <Sequencer />
-            <Voice />
-          </div>
-          <div className="flex min-h-0 flex-1 flex-col gap-3 lg:hidden">
-            <nav className="nx-tabs -mx-3 flex gap-1 overflow-x-auto px-3 pb-1">
-              {MODULES.map((m) => (
+    <div className="nx-chassis relative min-h-dvh">
+      <a className="nx-skip" href="#nexus-main">
+        Skip to instrument
+      </a>
+      <IdentityBar
+        surface={surface}
+        onTheme={() => setSurface((s) => (s === "dark" ? "light" : "dark"))}
+      />
+      <main id="nexus-main" tabIndex={-1}>
+        {!snap.powered ? (
+          <Welcome
+            booting={booting}
+            error={bootError}
+            onEngage={() => void engage(false)}
+            onFrontier={() => void engage(true)}
+          />
+        ) : (
+          <div className="nx-workspace relative mx-auto flex max-w-[1600px] flex-col gap-4 px-3 py-3 sm:px-5 sm:py-4">
+            <Header help={help} onHelp={() => setHelp((h) => !h)} />
+            {bootError ? (
+              <p className="nx-notice" role="alert">
+                {bootError}{" "}
                 <button
-                  key={m.id}
                   type="button"
-                  className={`nx-btn min-h-11 shrink-0 px-3 ${snap.module === m.id ? "nx-btn-on" : ""}`}
-                  onClick={() => engine.setModule(m.id)}
+                  className="nx-btn"
+                  disabled={booting}
+                  onClick={() => void engage()}
                 >
-                  {m.label}
+                  Retry audio
                 </button>
-              ))}
-            </nav>
-            <div className="min-h-[28rem] flex-1">
-              {snap.module === "grid" && <Grid />}
-              {snap.module === "scope" && <Oscilloscope />}
-              {snap.module === "tape" && <TapeDeck />}
-              {snap.module === "patch" && <Patchbay />}
-              {snap.module === "seq" && <Sequencer />}
-              {snap.module === "voice" && <Voice />}
+              </p>
+            ) : null}
+            <SignalStrip />
+            <div className="hidden min-h-[46rem] flex-1 grid-cols-3 grid-rows-2 gap-3 lg:grid">
+              <Grid />
+              <Oscilloscope />
+              <TapeDeck />
+              <Patchbay />
+              <Sequencer />
+              <Voice />
             </div>
+            <div className="flex min-h-0 flex-1 flex-col gap-3 lg:hidden">
+              <nav
+                className="nx-tabs -mx-3 flex flex-wrap gap-1 px-3 pb-1"
+                aria-label="Instrument modules"
+              >
+                {MODULES.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={`nx-btn min-h-11 shrink-0 px-3 ${snap.module === m.id ? "nx-btn-on" : ""}`}
+                    aria-pressed={snap.module === m.id}
+                    onClick={() => engine.setModule(m.id)}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </nav>
+              <div className="min-h-[28rem] flex-1">
+                {snap.module === "grid" && <Grid />}
+                {snap.module === "scope" && <Oscilloscope />}
+                {snap.module === "tape" && <TapeDeck />}
+                {snap.module === "patch" && <Patchbay />}
+                {snap.module === "seq" && <Sequencer />}
+                {snap.module === "voice" && <Voice />}
+              </div>
+            </div>
+            <div className="nx-midi-bar">
+              <button
+                type="button"
+                className="nx-btn"
+                aria-pressed={midiRequested}
+                onClick={() => {
+                  setMidiStatus(
+                    typeof navigator.requestMIDIAccess === "function"
+                      ? "Waiting for MIDI permission…"
+                      : "MIDI is unavailable in this browser.",
+                  );
+                  setMidiRequested((v) => !v);
+                }}
+              >
+                {midiRequested ? "Disconnect MIDI" : "Connect MIDI"}
+              </button>
+              <p role="status">
+                {midiRequested ? midiStatus : "MIDI is optional and not connected."}
+              </p>
+            </div>
+            {help ? <Help onClose={() => setHelp(false)} /> : null}
           </div>
-          {help ? <Help onClose={() => setHelp(false)} /> : null}
-        </div>
-      )}
+        )}
+      </main>
+      <NexusBoundaries />
     </div>
   );
 }
@@ -232,7 +324,7 @@ function Header({ help, onHelp }: { help: boolean; onHelp: () => void }) {
       <span className="nx-screw right-2 top-2" />
       <div className="flex items-center justify-between gap-3 lg:contents">
         <div>
-          <p className="nx-wordmark text-xl leading-tight sm:text-2xl">Nexus</p>
+          <h1 className="nx-wordmark text-xl leading-tight sm:text-2xl">Nexus</h1>
           <p className="nx-label">
             {snap.frontier
               ? "Holographic analog computer · Frontier engaged"
@@ -250,6 +342,8 @@ function Header({ help, onHelp }: { help: boolean; onHelp: () => void }) {
             type="button"
             className={`nx-btn min-h-11 px-3 ${help ? "nx-btn-on" : ""}`}
             onClick={onHelp}
+            aria-haspopup="dialog"
+            aria-expanded={help}
           >
             Key
           </button>
@@ -260,6 +354,7 @@ function Header({ help, onHelp }: { help: boolean; onHelp: () => void }) {
           type="button"
           className={`nx-btn min-h-11 whitespace-nowrap px-4 ${snap.seq.playing ? "nx-btn-on" : ""}`}
           onClick={() => engine.togglePlay()}
+          aria-pressed={snap.seq.playing}
         >
           {snap.seq.playing ? "Stop" : "Run"}
         </button>
@@ -267,6 +362,7 @@ function Header({ help, onHelp }: { help: boolean; onHelp: () => void }) {
           type="button"
           className={`nx-btn nx-btn-rec min-h-11 whitespace-nowrap px-4 ${snap.tape.rec ? "nx-btn-rec-on" : ""}`}
           onClick={() => engine.setTape({ rec: !snap.tape.rec, motor: true })}
+          aria-pressed={snap.tape.rec}
         >
           Rec
         </button>
@@ -274,6 +370,7 @@ function Header({ help, onHelp }: { help: boolean; onHelp: () => void }) {
           type="button"
           className={`nx-btn min-h-11 whitespace-nowrap px-4 ${snap.frontier ? "nx-btn-on" : ""}`}
           onClick={() => engine.toggleFrontier()}
+          aria-pressed={snap.frontier}
         >
           Frontier
         </button>
@@ -281,12 +378,17 @@ function Header({ help, onHelp }: { help: boolean; onHelp: () => void }) {
           type="button"
           className={`nx-btn min-h-11 whitespace-nowrap px-4 ${snap.muted ? "nx-btn-on" : ""}`}
           onClick={() => engine.setMuted(!snap.muted)}
+          aria-pressed={snap.muted}
         >
           {snap.muted ? "Muted" : "Mute"}
         </button>
       </div>
       <div className="flex flex-col gap-3 lg:ml-auto lg:flex-row lg:flex-wrap lg:items-center">
-        <div className="flex max-w-full gap-1 overflow-x-auto pb-1">
+        <div
+          className="flex max-w-full flex-wrap gap-1 pb-1"
+          role="group"
+          aria-label="Instrument scenes"
+        >
           {LOCKED_EIGHT.map((fid, i) => {
             const note = LOCKED_NOTE[fid];
             return (
@@ -299,6 +401,8 @@ function Header({ help, onHelp }: { help: boolean; onHelp: () => void }) {
                     : `${fid} · ${note.name} — ${note.analog} · shift-click to store`
                 }
                 className={`nx-btn min-h-11 min-w-11 shrink-0 px-0 text-micro ${snap.sceneSlot === i ? "nx-btn-on" : ""} ${snap.scenes[i] ? "text-phosphor" : ""}`}
+                aria-label={`${fid}, ${note.name}${snap.scenes[i] ? ", stored scene" : ""}`}
+                aria-pressed={snap.sceneSlot === i}
                 onClick={(e) => {
                   if (e.shiftKey) engine.saveScene(i);
                   else engine.loadScene(i);
@@ -350,6 +454,8 @@ function Header({ help, onHelp }: { help: boolean; onHelp: () => void }) {
             type="button"
             className={`nx-btn hidden min-h-11 px-3 lg:inline-flex ${help ? "nx-btn-on" : ""}`}
             onClick={onHelp}
+            aria-haspopup="dialog"
+            aria-expanded={help}
           >
             Key
           </button>
@@ -599,86 +705,52 @@ function OrganRail() {
   );
 }
 
-function PowerGate({
-  booting,
-  onEngage,
-  onFrontier,
-}: {
-  booting: boolean;
-  onEngage: () => void;
-  onFrontier: () => void;
-}) {
-  return (
-    <div className="relative z-10 flex min-h-dvh w-full flex-col items-center justify-center gap-6 px-6 text-center">
-      <div>
-        <p className="nx-label mb-2">
-          SZL Holdings · Grok-origin instrument · canonical source edition
-        </p>
-        <h1 className="nx-wordmark text-4xl sm:text-6xl">Nexus</h1>
-      </div>
-      <p className="nx-label max-w-xl text-pretty">
-        Holographic analog computer · six programs · analog neuromorphic · optical core · Ouroboros
-        · five organs · Hatun
-        <br />
-        MK-II Frontier is a playable Web Audio instrument — IC / OP / HALT / REP drive voice, tape,
-        grid, and hologram. The sound is synthesized in your browser; it is not generated by a
-        model.
-      </p>
-      <div
-        className="flex max-w-2xl flex-wrap items-center justify-center gap-2"
-        aria-label="NEXUS runtime boundaries"
-      >
-        <span className="nx-organ">
-          <span className="nx-led nx-led-on" />
-          <span className="nx-label">Web Audio</span>
-        </span>
-        <span className="nx-organ">
-          <span className="nx-led nx-led-amber" />
-          <span className="nx-label">Local-first state</span>
-        </span>
-        <span className="nx-organ">
-          <span className="nx-led" />
-          <span className="nx-label">Energy unavailable</span>
-        </span>
-        <a
-          className="nx-btn inline-flex min-h-11 items-center px-3"
-          href="https://github.com/szl-holdings/nexus"
-        >
-          Source
-        </a>
-        <a className="nx-btn inline-flex min-h-11 items-center px-3" href="/api/build-info">
-          Build receipt
-        </a>
-      </div>
-      <div className="flex flex-wrap items-center justify-center gap-3">
-        <button
-          type="button"
-          onClick={onEngage}
-          className={`nx-btn min-h-12 px-8 py-3 text-sm ${booting ? "nx-btn-on" : ""}`}
-        >
-          {booting ? "Warming heaters…" : "Press to engage"}
-        </button>
-        <button
-          type="button"
-          onClick={onFrontier}
-          className="nx-btn nx-btn-on min-h-12 px-8 py-3 text-sm"
-        >
-          Launch Frontier
-        </button>
-      </div>
-      <p className="font-mono text-micro text-phosphor-dim">
-        Audio starts only after engagement. Headphones recommended. Esc always stops sound.
-      </p>
-      <span className={`nx-led ${booting ? "nx-led-amber" : ""}`} aria-hidden="true" />
-    </div>
-  );
-}
-
 function Help({ onClose }: { onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement;
+    const node = dialog.current;
+    node?.showModal();
+    return () => {
+      node?.close();
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
+    };
+  }, []);
   return (
-    <div className="nx-help nx-panel absolute inset-x-4 top-24 z-30 mx-auto max-w-lg p-5 sm:inset-x-auto">
+    <dialog
+      ref={dialog}
+      className="nx-help nx-panel"
+      aria-labelledby="nexus-key-map"
+      onCancel={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== "Tab") return;
+        const controls = Array.from(
+          e.currentTarget.querySelectorAll<HTMLElement>(
+            "a[href],button,input,select,textarea,[tabindex]",
+          ),
+        ).filter(
+          (node) =>
+            node.tabIndex >= 0 && !node.matches(":disabled") && node.getClientRects().length,
+        );
+        const first = controls[0];
+        const last = controls.at(-1);
+        if (!first || !last) return;
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }}
+    >
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="nx-label">Key map</h2>
+        <h2 className="nx-label" id="nexus-key-map">
+          Key map
+        </h2>
         <button type="button" className="nx-btn min-h-11 px-2 py-1" onClick={onClose}>
           Close
         </button>
@@ -709,8 +781,8 @@ function Help({ onClose }: { onClose: () => void }) {
           <span className="text-phosphor">FUNC</span> into VCF or PAN
         </li>
         <li>
-          <kbd>P</kbd> cycle scope Y-T / X-Y / FFT / HOLO — hologram is two-beam optical analog
-          plus five organs
+          <kbd>P</kbd> cycle scope Y-T / X-Y / FFT / HOLO — hologram is two-beam optical analog plus
+          five organs
         </li>
         <li>
           Ouroboros taxes the VCA in Frontier. Eight bars, then the loop closes. Run starts another.
@@ -725,14 +797,12 @@ function Help({ onClose }: { onClose: () => void }) {
         <li>GO is 5/5 organs LIVE. HOLD until the kernel settles. NO-GO is F19 fail-closed.</li>
         <li>Scenes F1 F4 F7 F11 F12 F18 F19 F22 · shift-click stores</li>
         <li>
-          <kbd>space</kbd> run / stop sequencer
+          <kbd>space</kbd> run / stop sequencer when a control is not focused
         </li>
         <li>
           <kbd>Z</kbd>–<kbd>M</kbd> voice keys · shift = octave
         </li>
-        <li>
-          <kbd>1</kbd>–<kbd>6</kbd> modules on compact view
-        </li>
+        <li>Use the module buttons on compact view. Tab remains standard keyboard navigation.</li>
         <li>
           <kbd>esc</kbd> panic / all notes off
         </li>
@@ -744,6 +814,6 @@ function Help({ onClose }: { onClose: () => void }) {
           cables reroute the chain.
         </li>
       </ul>
-    </div>
+    </dialog>
   );
 }

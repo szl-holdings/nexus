@@ -1,0 +1,37 @@
+{
+  "schema": "szl.native-frontend-projection/v1",
+  "kind": "UNSIGNED_SOURCE_PROJECTION",
+  "canonical_repository": "https://github.com/szl-holdings/szl-brand",
+  "token_source_revision": "27d12e77fc0f9f1a0e5fae8b34adf2380d51d070",
+  "consumer": "szl-holdings/nexus",
+  "assets": [
+    {
+      "name": "szl-tokens.css",
+      "revision": "4309f6fce89179331b0b3ed8c99494e76c5be256",
+      "source": "kanchay/szl-tokens.css",
+      "sha256": "81f7c9baeef0b435e6e3f9d0c4e0d70e40fa17df5d1f30697f623cd3ef5f8eab"
+    },
+    {
+      "name": "SOURCE.json",
+      "revision": "4309f6fce89179331b0b3ed8c99494e76c5be256",
+      "source": "kanchay/SOURCE.json",
+      "sha256": "967a77235227f1d75852fb61873e46336e67403cbc0e7e12b141e31c83fbd93d"
+    },
+    {
+      "name": "szl-icon-32.svg",
+      "revision": "fd62fe5856ed8e5f660eaae5a9c52957cd71b0a7",
+      "source": "kit/logos/orbit-v2/suite/szl-icon-32.svg",
+      "sha256": "6e2b7d72a3af3d9602b79de41df0194ede6496a9661f057108ec224c0efc92e6"
+    },
+    {
+      "name": "szl-icon-16.svg",
+      "revision": "fd62fe5856ed8e5f660eaae5a9c52957cd71b0a7",
+      "source": "kit/logos/orbit-v2/suite/szl-icon-16.svg",
+      "sha256": "6e2dc7c9794dc452fbccb44ffadbd168c2584361904e8bcaeba542427d9e1a3a"
+    }
+  ],
+  "upstream_manifest": "SOURCE.json is unchanged and describes the complete upstream bundle. Only the four explicitly listed files are installed here.",
+  "attribution": "Brand artwork © 2026 SZL Holdings / Stephen Lutar, CC BY 4.0; code Apache-2.0. ORCID 0009-0001-0110-4173.",
+  "geometry": "Native icon32 at 40px with 10px clear space; native icon16 for favicon. No redraw, tint, distortion, rotation or filter.",
+  "limits": "This local projection metadata does not attest runtime availability, publication, source signatures or cryptographic product receipts."
+}

@@ -6,6 +6,7 @@ import { ModuleFrame } from "./ModuleFrame";
 function Reel({ spinning, size = 72 }: { spinning: boolean; size?: number }) {
   return (
     <div
+      aria-hidden="true"
       className="nx-reel relative rounded-full"
       style={{
         width: size,
@@ -65,7 +66,7 @@ export function TapeDeck() {
       <div className="flex h-full flex-col gap-3">
         <div className="flex items-center justify-between gap-2">
           <Reel spinning={t.motor} size={64} />
-          <svg viewBox="0 0 120 64" className="h-12 flex-1 sm:h-16">
+          <svg viewBox="0 0 120 64" className="h-12 flex-1 sm:h-16" aria-hidden="true">
             <path
               d="M8 20 C 40 8, 80 8, 112 20"
               fill="none"
@@ -76,7 +77,14 @@ export function TapeDeck() {
             <circle cx="28" cy="36" r="7" fill="#3a414c" stroke="#1a1f24" />
             <circle cx="92" cy="36" r="7" fill="#3a414c" stroke="#1a1f24" />
             <rect x="54" y="28" width="12" height="18" rx="2" fill="#2a3138" />
-            <text x="60" y="58" textAnchor="middle" fill="#6e7868" fontSize="7" fontFamily="IBM Plex Mono">
+            <text
+              x="60"
+              y="58"
+              textAnchor="middle"
+              fill="var(--text-sub)"
+              fontSize="10"
+              fontFamily="monospace"
+            >
               3-HEAD
             </text>
           </svg>
@@ -90,6 +98,7 @@ export function TapeDeck() {
               type="button"
               className={`nx-btn min-h-11 px-3 py-2 ${t.motor ? "nx-btn-on" : ""}`}
               onClick={() => engine.setTape({ motor: !t.motor })}
+              aria-pressed={t.motor}
             >
               Play
             </button>
@@ -104,6 +113,7 @@ export function TapeDeck() {
               type="button"
               className={`nx-btn nx-btn-rec min-h-11 px-3 py-2 ${t.rec ? "nx-btn-rec-on" : ""}`}
               onClick={() => engine.setTape({ rec: !t.rec, motor: true })}
+              aria-pressed={t.rec}
             >
               Rec
             </button>
@@ -118,12 +128,54 @@ export function TapeDeck() {
           </div>
         </div>
         <div className="nx-knobs">
-          <Knob label="Time" value={t.time} min={0.05} max={1.4} onChange={(v) => engine.setTape({ time: v })} format={(v) => `${v.toFixed(2)}s`} />
-          <Knob label="Feedback" value={t.feedback} min={0} max={0.92} onChange={(v) => engine.setTape({ feedback: v })} format={(v) => v.toFixed(2)} />
-          <Knob label="Wow" value={t.wow} min={0} max={1} onChange={(v) => engine.setTape({ wow: v })} format={(v) => v.toFixed(2)} />
-          <Knob label="Flutter" value={t.flutter} min={0} max={1} onChange={(v) => engine.setTape({ flutter: v })} format={(v) => v.toFixed(2)} />
-          <Knob label="Mix" value={t.mix} min={0} max={1} onChange={(v) => engine.setTape({ mix: v })} format={(v) => v.toFixed(2)} />
-          <Knob label="Drive" value={t.saturate} min={0} max={1} onChange={(v) => engine.setTape({ saturate: v })} format={(v) => v.toFixed(2)} />
+          <Knob
+            label="Time"
+            value={t.time}
+            min={0.05}
+            max={1.4}
+            onChange={(v) => engine.setTape({ time: v })}
+            format={(v) => `${v.toFixed(2)}s`}
+          />
+          <Knob
+            label="Feedback"
+            value={t.feedback}
+            min={0}
+            max={0.92}
+            onChange={(v) => engine.setTape({ feedback: v })}
+            format={(v) => v.toFixed(2)}
+          />
+          <Knob
+            label="Wow"
+            value={t.wow}
+            min={0}
+            max={1}
+            onChange={(v) => engine.setTape({ wow: v })}
+            format={(v) => v.toFixed(2)}
+          />
+          <Knob
+            label="Flutter"
+            value={t.flutter}
+            min={0}
+            max={1}
+            onChange={(v) => engine.setTape({ flutter: v })}
+            format={(v) => v.toFixed(2)}
+          />
+          <Knob
+            label="Mix"
+            value={t.mix}
+            min={0}
+            max={1}
+            onChange={(v) => engine.setTape({ mix: v })}
+            format={(v) => v.toFixed(2)}
+          />
+          <Knob
+            label="Drive"
+            value={t.saturate}
+            min={0}
+            max={1}
+            onChange={(v) => engine.setTape({ saturate: v })}
+            format={(v) => v.toFixed(2)}
+          />
         </div>
       </div>
     </ModuleFrame>
@@ -134,7 +186,11 @@ function Vu({ label, barRef }: { label: string; barRef: RefObject<HTMLDivElement
   return (
     <div className="flex flex-col items-center gap-1">
       <div className="relative h-16 w-2.5 overflow-hidden rounded-sm bg-bg">
-        <div className="nx-vu absolute inset-0 origin-bottom" ref={barRef} style={{ transform: "scaleY(0.05)" }} />
+        <div
+          className="nx-vu absolute inset-0 origin-bottom"
+          ref={barRef}
+          style={{ transform: "scaleY(0.05)" }}
+        />
       </div>
       <span className="nx-label">{label}</span>
     </div>

@@ -101,7 +101,8 @@ export function Oscilloscope() {
     };
   }, []);
 
-  const prog = ANALOG_PROGRAMS.find((p) => p.id === (snap.analog.program ?? "lorenz"))?.label ?? "LRNZ";
+  const prog =
+    ANALOG_PROGRAMS.find((p) => p.id === (snap.analog.program ?? "lorenz"))?.label ?? "LRNZ";
   const caption =
     snap.scopeMode === "holo"
       ? `WILLAY · 2ND BRAIN · 5ORG · ${prog} · Λ ${engine.getKernel().lambda.toFixed(3)} · C1 OPEN`
@@ -123,15 +124,21 @@ export function Oscilloscope() {
               type="button"
               className={`nx-btn min-h-11 px-3 ${snap.scopeMode === m.id ? "nx-btn-on" : ""}`}
               onClick={() => engine.setScopeMode(m.id)}
+              aria-pressed={snap.scopeMode === m.id}
             >
               {m.label}
             </button>
           ))}
         </div>
         <div className="relative min-h-40 w-full flex-1 overflow-hidden rounded-sm bg-[#07100c]">
-          <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
-          <HoloCaption live={snap.scopeMode === "holo"} fallback={caption} />
+          <canvas
+            ref={canvasRef}
+            className="absolute inset-0 h-full w-full"
+            role="img"
+            aria-label={`${snap.scopeMode.toUpperCase()} display of the local instrument. Research state appears below.`}
+          />
         </div>
+        <HoloCaption live={snap.scopeMode === "holo"} fallback={caption} />
       </div>
     </ModuleFrame>
   );
@@ -158,7 +165,7 @@ function HoloCaption({ live, fallback }: { live: boolean; fallback: string }) {
     return () => cancelAnimationFrame(raf);
   }, [live, fallback]);
   return (
-    <div ref={ref} className="pointer-events-none absolute left-2 top-2 font-mono text-micro tracking-widest text-phosphor-dim">
+    <div ref={ref} className="nx-scope-caption">
       {fallback}
     </div>
   );
@@ -390,7 +397,8 @@ function drawHolo(ctx: CanvasRenderingContext2D, w: number, h: number) {
     const p = project(Math.cos(ang) * R, Math.sin(ang) * 0.12, Math.sin(ang) * R);
     const organ = k.organs.find((g) => g.id === o.id);
     const membrane = analogBank && analogBank.length >= 5 ? analogBank[i] : undefined;
-    const analogFace = membrane !== undefined && Number.isFinite(membrane) ? (membrane + 70) / 110 : 0.5;
+    const analogFace =
+      membrane !== undefined && Number.isFinite(membrane) ? (membrane + 70) / 110 : 0.5;
     return { ...o, p, live: organ?.status !== "DOWN", metric: organ?.metric ?? 0, analogFace };
   });
 
@@ -413,7 +421,12 @@ function drawHolo(ctx: CanvasRenderingContext2D, w: number, h: number) {
     { v: k.maxAgg, color: "rgba(255,176,0,0.28)", dash: [3, 3], width: 1 },
     { v: k.lambdaEgy, color: "rgba(255,176,0,0.45)", dash: [], width: 1 },
     { v: k.lambdaSym, color: "rgba(124,255,107,0.28)", dash: [], width: 1 },
-    { v: k.lambda, color: k.blocked ? "rgba(196,74,56,0.45)" : "rgba(124,255,107,0.55)", dash: [], width: 1.2 },
+    {
+      v: k.lambda,
+      color: k.blocked ? "rgba(196,74,56,0.45)" : "rgba(124,255,107,0.55)",
+      dash: [],
+      width: 1.2,
+    },
   ];
   for (const r of rings) {
     ctx.beginPath();
