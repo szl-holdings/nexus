@@ -1,0 +1,20 @@
+{
+  "schema": "szl.surface-foundry/v3",
+  "surfaces": [
+    {
+      "slug": "nexus",
+      "display_name": "NEXUS MK-II",
+      "kind": "repo",
+      "one_liner": "Play and inspect a browser-local analog research instrument with explicit evidence boundaries.",
+      "decision_path": "Explore the playable workstation and its six analog reference programs.",
+      "builder_path": "Inspect source, local reproduction and the canonical publication contract.",
+      "primary_url": "https://huggingface.co/spaces/SZLHOLDINGS/nexus",
+      "source_url": "https://github.com/szl-holdings/nexus",
+      "evidence_url": "https://github.com/szl-holdings/nexus/blob/00edebc993282efd5b43b0144b3d3d27ab43e264/README.md",
+      "evidence_label": "REPORTED",
+      "operational_state": "UNKNOWN",
+      "limitations": "Source presentation; provider and runtime readback are separate gates. IMMUNE is the read-only verification plane. Energy remains UNAVAILABLE; Λ remains Conjecture 1.",
+      "image_url": "./readme-surface-card.svg"
+    }
+  ]
+}
