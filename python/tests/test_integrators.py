@@ -180,7 +180,7 @@ def test_step_dt_outside_contract_is_clamped_like_the_instrument(program, method
 
 
 def test_nemo_step_dt_is_clamped_to_its_own_instrument_range() -> None:
-    """NEMO clamps the tick to 0.25..80 ms (math.ts analogNemoStep, server.py), not 0.4..80 ms.
+    """NEMO clamps the tick to 0.25..80 ms (math.ts analogNemoTick, server.py analog_nemo_step), not 0.4..80 ms.
 
     Pinned as instrument parity: any dt below 0.25 ms runs a 0.25 ms tick, which
     is shorter than the contract minimum dt (0.4 ms). Requests never reach it,
