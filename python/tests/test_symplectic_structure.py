@@ -5,11 +5,14 @@ These are software checks of the numerical maps in ``nexus_dynamics``. They are
 not physical measurements: ``physicalHardware=false``, Energy UNAVAILABLE and
 Lambda / Conjecture 1 OPEN are unchanged, and nothing here touches the engine.
 
-A. Reversibility. One velocity-Verlet substep of ``-h`` undoes one substep of
-   ``+h``; flipping the momentum, integrating forward and flipping again returns
-   the start (R o Phi^N o R o Phi^N = id). The Duffing Strang substep is a
-   symmetric composition, so it is reversible too. RK4 and forward Euler are
-   not symmetric and serve as negative controls, so the checks can fail.
+A. Symmetry and reversibility. One velocity-Verlet substep of ``-h`` undoes
+   one substep of ``+h``; for the conservative Verlet maps, flipping the
+   momentum, integrating forward and flipping again returns the start
+   (R o Phi^N o R o Phi^N = id). The Duffing Strang substep is a symmetric
+   composition: its ``-h`` substep started at ``t + h`` inverts it. With
+   damping on it is not momentum-flip reversible (det J = exp(-delta h) < 1,
+   see part B), so only its symmetry is checked. RK4 and forward Euler are not
+   symmetric and serve as negative controls, so the checks can fail.
 B. Jacobians (central differences). The conservative Verlet maps satisfy
    J^T Omega J = Omega with det J = 1. The damped Duffing Strang substep is
    conformally symplectic: det J = exp(-delta h), because its exact damping
@@ -142,7 +145,8 @@ def test_duffing_strang_substep_roundtrip(chaos, drive, h) -> None:
     """B(h/2) A(h) B(h/2) is symmetric: the substep of -h starting at t + h undoes it.
 
     B is the exact damped/forced flow, so B(-s) inverts B(s) even with damping on;
-    the composition is reversible, not area-preserving (see part B).
+    the composition is invertible by its -h substep, but it is neither
+    area-preserving nor momentum-flip reversible while damping is on (see part B).
     """
     t = 1.7
     k = nd.coefficients("duffing", chaos)
@@ -327,14 +331,17 @@ def test_euler_substep_is_not_symplectic() -> None:
 
 # ---------------------------------------------------------------- C. nondimensional equivalence
 #
-# NOT a unit or quantity contract. The engine has no units: the vendored
-# contract (contracts/immune-nexus.v1.json) gives dt no unit, and omega lies in
-# [1, 4] per instrument time unit. The helpers below assume, inside this file
-# only, that one instrument time unit is one second, then check that two
-# consistent unit systems (SI and CGS) describing the same spring-mass set-up
-# reduce to the same dimensionless engine inputs and the same trajectory. This
-# is test-local nondimensionalization; whether a formal unit contract is wanted
-# is owner decision D4 and would originate in szl-holdings/immune.
+# NOT a unit or quantity contract. The contract has no units: the vendored
+# contracts/immune-nexus.v1.json gives dt no unit (NEMO's instrument code reads
+# dt * 1000 as milliseconds), and omega lies in [1, 4] per instrument time unit.
+# The helpers below assume, inside this file only, that one instrument time
+# unit is one second. They check that two consistent unit systems (SI and CGS)
+# describing the same spring-mass set-up reduce to the same dimensionless engine
+# inputs (a check of the helper alone), and that the engine trajectory, once
+# re-dimensionalized, follows the analytic solution of m x'' = -k x in each unit
+# system's own units (a check of the engine). This is test-local
+# nondimensionalization; whether a formal unit contract is wanted is owner
+# decision D4 and would originate in szl-holdings/immune.
 
 SECONDS_PER_INSTRUMENT_TIME_UNIT = 1.0  # test-local assumption, not a contract
 
@@ -370,35 +377,67 @@ def _nondimensionalize(mass: float, stiffness: float, x0: float, v0: float):
 
 
 def _redimensionalized_trajectory(setup: dict, ticks: int, dt: float):
+    """Run the engine on the dimensionless inputs; return (seconds, x, v) in the set-up's units."""
     chaos, xi, eta, length = _nondimensionalize(setup["mass"], setup["stiffness"], setup["x0"], setup["v0"])
+    seconds = SECONDS_PER_INSTRUMENT_TIME_UNIT
     state = NexusState(xi, eta, 0.0, 0.0)
     out = []
     for _ in range(ticks):
         state = nd.step("harmonic", state, dt, chaos, 0.5, "symplectic")
-        out.append((state.t, state.x * length, state.y * length / SECONDS_PER_INSTRUMENT_TIME_UNIT))
+        out.append((state.t * seconds, state.x * length, state.y * length / seconds))
     return out
 
 
+def _analytic_spring_mass(setup: dict, seconds: float) -> tuple[float, float]:
+    """Exact (x, v) of m x'' = -k x at ``seconds``, in the set-up's own units."""
+    omega = math.sqrt(setup["stiffness"] / setup["mass"])
+    x0, v0 = setup["x0"], setup["v0"]
+    c, s = math.cos(omega * seconds), math.sin(omega * seconds)
+    return x0 * c + (v0 / omega) * s, -x0 * omega * s + v0 * c
+
+
 @pytest.mark.parametrize("name", sorted(PHYSICAL_SETUPS))
-def test_si_and_cgs_reduce_to_the_same_engine_inputs_and_trajectory(name) -> None:
+def test_si_and_cgs_reduce_to_the_same_engine_inputs(name) -> None:
+    """Both unit systems give the same dimensionless engine inputs.
+
+    This checks the test-local nondimensionalization helper only, not the
+    engine: the inputs are identical, so the engine cannot tell the two unit
+    systems apart. The engine is checked against the analytic solution below.
+    """
     si, cgs = PHYSICAL_SETUPS[name]["SI"], PHYSICAL_SETUPS[name]["CGS"]
     ratio = cgs["length_per_metre"] / si["length_per_metre"]
     a = _nondimensionalize(si["mass"], si["stiffness"], si["x0"], si["v0"])
     b = _nondimensionalize(cgs["mass"], cgs["stiffness"], cgs["x0"], cgs["v0"])
+    # measured: chaos, xi0 and eta0 are bit-identical in SI and CGS
     for p, q in zip(a[:3], b[:3]):
         assert math.isclose(p, q, rel_tol=1e-15, abs_tol=0), (a, b)
-    assert math.isclose(b[3], ratio * a[3], rel_tol=1e-15, abs_tol=0)
+    # measured relative difference 1.9e-16 (omega-2.5) and 0.0 (omega-4)
+    assert math.isclose(b[3], ratio * a[3], rel_tol=1e-14, abs_tol=0), (a, b)
 
+
+@pytest.mark.parametrize("unit_system", ("SI", "CGS"))
+@pytest.mark.parametrize("name", sorted(PHYSICAL_SETUPS))
+def test_redimensionalized_trajectory_follows_the_analytic_spring_mass_solution(name, unit_system) -> None:
+    """600 symplectic ticks, re-dimensionalized, track x0 cos(wt) + (v0/w) sin(wt).
+
+    The comparison is made in the set-up's own units (m and m/s, or cm and
+    cm/s), relative to the amplitude L for x and omega L for v, so zero
+    crossings do not inflate it. The error left is velocity Verlet's truncation
+    error, dominated by the phase drift omega T (omega h)^2 / 24, which predicts
+    4.6e-4 (omega 4) and 1.1e-4 (omega 2.5) over T = 10 s with h = dt / 4.
+    """
+    setup = PHYSICAL_SETUPS[name][unit_system]
+    omega = math.sqrt(setup["stiffness"] / setup["mass"])
+    length = _nondimensionalize(setup["mass"], setup["stiffness"], setup["x0"], setup["v0"])[3]
     ticks, dt = 600, 1 / 60  # 10 instrument time units at 60 ticks per unit
-    traj_si = _redimensionalized_trajectory(si, ticks, dt)
-    traj_cgs = _redimensionalized_trajectory(cgs, ticks, dt)
-    amplitude = b[3]  # in CGS length units
-    worst = 0.0
-    for (t_si, x_si, v_si), (t_cgs, x_cgs, v_cgs) in zip(traj_si, traj_cgs):
-        assert t_si == t_cgs
-        worst = max(worst, abs(x_cgs - ratio * x_si), abs(v_cgs - ratio * v_si))
-    # Relative to the amplitude, so zero crossings do not inflate it; measured 8.4e-16.
-    assert worst / amplitude < 1e-12, worst / amplitude
+    worst_x = worst_v = 0.0
+    for seconds, x, v in _redimensionalized_trajectory(setup, ticks, dt):
+        x_exact, v_exact = _analytic_spring_mass(setup, seconds)
+        worst_x = max(worst_x, abs(x - x_exact) / length)
+        worst_v = max(worst_v, abs(v - v_exact) / (omega * length))
+    # measured x 4.4e-4, v 4.3e-4 (omega-4) and x 1.1e-4, v 1.2e-4 (omega-2.5),
+    # the same in SI and CGS; the bound keeps an 11x margin.
+    assert worst_x < 5e-3 and worst_v < 5e-3, (worst_x, worst_v)
 
 
 @pytest.mark.parametrize("method", ("euler4", "rk4", "symplectic"))

@@ -159,10 +159,16 @@ def test_step_dt_outside_contract_is_clamped_like_the_instrument(program, method
     """step() clamps an out-of-contract dt exactly like the instrument; it does not reject it.
 
     substep_size is Math.max(0.0004, Math.min(0.08, dt)) / 4, as in
-    src/lib/nexus/math.ts (both dt clamps) and server.py analog_step. This pins
-    that audio-parity behaviour and changes nothing. Requests are still
-    range-checked at the contract boundary (test_schema: dt -0.01 and 0.0 are
-    OUT_OF_RANGE).
+    src/lib/nexus/math.ts (both dt clamps) and server.py analog_step. This is
+    the instrument clamp shared by all methods (integrators module docstring);
+    it is audio parity for euler4 only. The test pins today's behaviour and
+    changes nothing; it is not a contract. Requests are still range-checked at
+    the contract boundary (test_schema: dt -0.01 and 0.0 are OUT_OF_RANGE).
+
+    TODO(owner decision D7): should step() reject a dt outside the contract
+    range (for rk4 and symplectic at least) instead of clamping it? If so,
+    replace this pin with a fail-closed test; a failure here after that change
+    is the intended update, not a regression.
     """
     state = nd.seed(program, 0.3)
     low = _bits(nd.step(program, state, DT_MIN, 0.5, 0.7, method))
