@@ -21,11 +21,14 @@ C. Nondimensional equivalence, computed inside this file only (see its note).
 D. Contrast for a non-Hamiltonian flow: the RK4 substep of van der Pol follows
    Liouville's formula det J = exp(integral of div f) to local order h^5.
 
-Each upper bound keeps at least a 10x margin over the value measured on the
-author's machine (Windows, CPython 3.11 and 3.12 gave identical values); the
-measured value is noted next to each bound so a reviewer can see the margin.
-The negative controls use lower bounds on truncation errors instead; their
-measured minima are listed in those tests.
+Each upper bound on an engine map keeps at least a 10x margin over the value
+measured on the author's machine (Windows, CPython 3.11 and 3.12 gave identical
+values); the measured value is noted next to each bound so a reviewer can see
+the margin. The helper sanity checks in test_helpers_reproduce_known_matrices
+are the exception: their bounds sit at the rounding scale of the helper
+arithmetic, with less than a 10x margin, and their measured values are noted
+there. The negative controls use lower bounds on truncation errors instead;
+their measured minima are listed in those tests.
 """
 from __future__ import annotations
 
@@ -105,12 +108,16 @@ def _gap(a: NexusState, b: NexusState) -> float:
 
 
 def test_helpers_reproduce_known_matrices() -> None:
+    # Rounding-scale bounds, not 10x-margin bounds (module docstring). Measured
+    # 0.0 for both; a 1-ulp change in cos(0.3) or sin(0.3) gives at most 3.3e-16.
     rotation = ((math.cos(0.3), math.sin(0.3)), (-math.sin(0.3), math.cos(0.3)))
     assert _symplectic_defect(rotation) < 1e-15 and abs(_det(rotation) - 1) < 1e-15
     shear = ((2.0, 0.0), (0.0, 0.25))  # area contraction by 1/2
     assert _det(shear) == 0.5
     assert _symplectic_defect(shear) == 0.5 and _symplectic_defect(shear, 0.5) == 0.0
-    # The FD Jacobian is exact (up to rounding) for a linear map.
+    # The FD Jacobian is exact (up to rounding) for a linear map. Measured max
+    # 1.6e-11, about 6x under the bound; the rounding scale eps * |f| / (2 d) is
+    # about 2e-11 here, so this checks the helper, not a 10x margin.
     j = _jacobian_fd(lambda x, y: (3 * x - y, 0.5 * y), 0.4, -0.7)
     assert max(abs(j[0][0] - 3), abs(j[0][1] + 1), abs(j[1][0]), abs(j[1][1] - 0.5)) < 1e-10
 
@@ -456,7 +463,7 @@ def test_time_rescaling_equivalence(method) -> None:
         slow = nd.step("harmonic", slow, 0.04, slow_chaos, 0.5, method)
         fast = nd.step("harmonic", fast, 0.02, fast_chaos, 0.5, method)
         worst = max(worst, abs(slow.x - fast.x), abs(slow.y / slow_omega - fast.y / fast_omega))
-        assert math.isclose(slow.t, 2 * fast.t, rel_tol=1e-15, abs_tol=0)
+        assert math.isclose(slow.t, 2 * fast.t, rel_tol=1e-15, abs_tol=0)  # measured 0.0
     assert worst < 1e-12, worst  # measured 0.0; not asserted bitwise on purpose
 
 

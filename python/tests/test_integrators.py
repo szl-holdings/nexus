@@ -185,15 +185,23 @@ def test_nemo_step_dt_is_clamped_to_its_own_instrument_range() -> None:
     Pinned as instrument parity: any dt below 0.25 ms runs a 0.25 ms tick, which
     is shorter than the contract minimum dt (0.4 ms). Requests never reach it,
     because the contract rejects dt < 0.0004.
+
+    Both ends are anchored. The references are dt = 0.00025 and dt = DT_MAX,
+    because 0.00025 * 1000 == 0.25 and 0.08 * 1000 == 80.0 exactly in binary
+    floating point. A dt just outside an end must give the reference tick, and a
+    dt just inside it (0.2500001 ms, 79.9999 ms) must not. Together these hold
+    the floor in [0.25, 0.2500001) ms and the ceiling in (79.9999, 80] ms.
     """
     state = nd.seed("nemo", 0.3)
-    floor = _bits(nd.step("nemo", state, 0.0002, 0.45, 0.7))
-    for dt in (-0.01, -0.0, 0.0, 1e-9):
+    floor = _bits(nd.step("nemo", state, 0.00025, 0.45, 0.7))
+    for dt in (0.0002499999, 0.0002, 1e-9, 0.0, -0.0, -0.01):
         assert _bits(nd.step("nemo", state, dt, 0.45, 0.7)) == floor, dt
-    assert floor != _bits(nd.step("nemo", state, DT_MIN, 0.45, 0.7))
+    for dt in (0.0002500001, DT_MIN):
+        assert _bits(nd.step("nemo", state, dt, 0.45, 0.7)) != floor, dt
     high = _bits(nd.step("nemo", state, DT_MAX, 0.45, 0.7))
-    for dt in (1.0, 1e300):
+    for dt in (0.0800001, 1.0, 1e300):
         assert _bits(nd.step("nemo", state, dt, 0.45, 0.7)) == high, dt
+    assert _bits(nd.step("nemo", state, 0.0799999, 0.45, 0.7)) != high
 
 
 @pytest.mark.parametrize("length", [0, 3, 14, 16, 19, 21, 25])
