@@ -11,12 +11,12 @@ const CI = readFileSync(join(ROOT, ".github/workflows/ci.yml"), "utf8").replace(
 const PACKAGE = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
 const LOCK = JSON.parse(readFileSync(join(ROOT, "package-lock.json"), "utf8"));
 
-// The SHAs szl-holdings/.github already runs, so the org has one pin per action.
+// Reviewed immutable release commits; keep this independent of workflow values.
 const APPROVED_PINS = {
   "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1", // v7.0.1
-  "actions/setup-node": "820762786026740c76f36085b0efc47a31fe5020", // v7.0.0
+  "actions/setup-node": "949feb2413d6458794dcd2491c4babbbce0c15c1", // v7.1.0
   "actions/setup-python": "5fda3b95a4ea91299a34e894583c3862153e4b97", // v7.0.0
-  "step-security/harden-runner": "e14015d583714f6e62063499dc959a02595150a1", // v2.21.1
+  "step-security/harden-runner": "ccd8616d44fd3846e67624a50d5aad6d37bf2d25", // v2.22.1
 };
 
 function onBlock() {
@@ -48,7 +48,7 @@ test("CI is read-only", () => {
   assert.doesNotMatch(CI, /persist-credentials: true/);
 });
 
-test("every action is pinned to the SHA the org already uses", () => {
+test("every action is pinned to its reviewed immutable release commit", () => {
   const uses = [...CI.matchAll(/^\s*uses:\s*(\S+)/gm)].map((match) => match[1]);
   assert.ok(uses.length >= 6);
   for (const value of uses) {
