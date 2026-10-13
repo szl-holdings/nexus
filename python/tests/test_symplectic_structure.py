@@ -491,7 +491,7 @@ def test_vanderpol_rk4_phase_volume_matches_liouville() -> None:
     div f = mu (1 - x^2) (Liouville's formula). The RK4 substep matches it to
     local order h^5, so the error ratio per halving of h is near 2^5 = 32.
     The reference integral uses a fine RK4 trajectory (2000 substeps) and the
-    trapezoid rule; its error, estimated against Simpson's rule, is below 4e-12,
+    trapezoid rule; its error, estimated against Simpson's rule, is below 5e-12,
     far under the measured errors.
     """
     chaos, x0, y0 = 1.0, 2.0, -0.5
