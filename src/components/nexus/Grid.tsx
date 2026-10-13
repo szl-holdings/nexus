@@ -1,4 +1,4 @@
-import { useEffect, useRef, type PointerEvent } from "react";
+import { useEffect, useId, useRef, useState, type PointerEvent } from "react";
 import { COLS, ROWS } from "@/lib/nexus/types";
 import { engine, useEngine } from "@/lib/nexus/use-engine";
 import { ModuleFrame } from "./ModuleFrame";
@@ -7,9 +7,14 @@ const PHOSPHOR = "#7cff6b";
 
 export function Grid() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const heat = useRef<number[][]>(Array.from({ length: COLS }, () => Array.from({ length: ROWS }, () => 0)));
+  const heat = useRef<number[][]>(
+    Array.from({ length: COLS }, () => Array.from({ length: ROWS }, () => 0)),
+  );
   const hover = useRef<{ c: number; r: number } | null>(null);
   const snap = useEngine();
+  const editorId = useId();
+  const [column, setColumn] = useState(0);
+  const [row, setRow] = useState(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -90,34 +95,34 @@ export function Grid() {
         }
       }
 
-          if (playing) {
-            const x = pad + (play + 0.5) * gw;
-            ctx.strokeStyle = "rgba(255,176,0,0.55)";
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(x, pad);
-            ctx.lineTo(x, h - pad);
-            ctx.stroke();
-          }
+      if (playing) {
+        const x = pad + (play + 0.5) * gw;
+        ctx.strokeStyle = "rgba(255,176,0,0.55)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x, pad);
+        ctx.lineTo(x, h - pad);
+        ctx.stroke();
+      }
 
-          const analog = engine.getSnapshot().powered;
-          if (analog) {
-            const a = engine.getAnalog();
-            const x = pad + (a.col + 0.5) * gw;
-            const y = pad + (ROWS - 1 - a.row + 0.5) * gh;
-            const rad = Math.min(gw, gh) * 0.42;
-            ctx.save();
-            ctx.shadowColor = "#ffb000";
-            ctx.shadowBlur = 16;
-            ctx.strokeStyle = "#ffb000";
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(x, y, rad, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.fillStyle = "rgba(255,176,0,0.28)";
-            ctx.fill();
-            ctx.restore();
-          }
+      const analog = engine.getSnapshot().powered;
+      if (analog) {
+        const a = engine.getAnalog();
+        const x = pad + (a.col + 0.5) * gw;
+        const y = pad + (ROWS - 1 - a.row + 0.5) * gh;
+        const rad = Math.min(gw, gh) * 0.42;
+        ctx.save();
+        ctx.shadowColor = "#ffb000";
+        ctx.shadowBlur = 16;
+        ctx.strokeStyle = "#ffb000";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, rad, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = "rgba(255,176,0,0.28)";
+        ctx.fill();
+        ctx.restore();
+      }
 
       ctx.globalAlpha = 0.1;
       for (let y = 0; y < h; y += 3) {
@@ -153,6 +158,8 @@ export function Grid() {
         <div className="relative min-h-40 w-full flex-1">
           <canvas
             ref={canvasRef}
+            role="img"
+            aria-label="Grid pattern. The keyboard grid editor below provides controls for every cell."
             className="absolute inset-0 h-full w-full rounded-sm bg-bg"
             style={{ touchAction: "none" }}
             onPointerDown={(e) => {
@@ -168,7 +175,7 @@ export function Grid() {
               if (cell && engine.getSnapshot().powered) {
                 engine.setGridXY(cell.c / (COLS - 1), cell.r / (ROWS - 1));
               }
-              if ((e.buttons & 1) && cell) {
+              if (e.buttons & 1 && cell) {
                 const g = engine.getSnapshot().grid;
                 if (!g[cell.c]?.[cell.r]) engine.toggleCell(cell.c, cell.r);
               }
@@ -182,6 +189,51 @@ export function Grid() {
           {snap.seq.playing ? "scan" : "idle"} · {snap.seq.scale}
           {snap.frontier ? " · analog pen" : " · drag to write"}
         </p>
+        <details className="nx-grid-editor">
+          <summary>Keyboard grid editor</summary>
+          <div className="nx-grid-editor-controls">
+            <label>
+              <span id={`${editorId}-column`}>Column</span>
+              <select
+                aria-labelledby={`${editorId}-column`}
+                value={column}
+                onChange={(e) => setColumn(Number(e.target.value))}
+              >
+                {Array.from({ length: COLS }, (_, i) => (
+                  <option key={i} value={i}>
+                    {i + 1}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span id={`${editorId}-row`}>Row</span>
+              <select
+                aria-labelledby={`${editorId}-row`}
+                value={row}
+                onChange={(e) => setRow(Number(e.target.value))}
+              >
+                {Array.from({ length: ROWS }, (_, i) => (
+                  <option key={i} value={i}>
+                    {i + 1}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="nx-btn"
+              aria-pressed={Boolean(snap.grid[column]?.[row])}
+              aria-label={`Toggle grid cell column ${column + 1}, row ${row + 1}`}
+              onClick={() => {
+                engine.toggleCell(column, row);
+                if (snap.powered) engine.triggerCell(column, row);
+              }}
+            >
+              {snap.grid[column]?.[row] ? "Clear cell" : "Write cell"}
+            </button>
+          </div>
+        </details>
       </div>
     </ModuleFrame>
   );

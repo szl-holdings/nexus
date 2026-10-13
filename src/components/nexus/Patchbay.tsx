@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
-import { DEST_PORTS, PORT_META, SOURCE_PORTS, type PortId } from "@/lib/nexus/types";
+import {
+  DEST_PORTS,
+  PORT_META,
+  SOURCE_PORTS,
+  type PatchCable,
+  type PortId,
+} from "@/lib/nexus/types";
 import { engine, useEngine } from "@/lib/nexus/use-engine";
 import { ModuleFrame } from "./ModuleFrame";
 
@@ -45,7 +51,7 @@ export function Patchbay() {
         const d = `M ${a.x} ${a.y} C ${a.x} ${a.y + sag}, ${b.x} ${b.y + sag}, ${b.x} ${b.y}`;
         return { p, d, color: COLORS[i % COLORS.length]! };
       })
-      .filter(Boolean) as { p: (typeof snap.patches)[number]; d: string; color: string }[];
+      .filter(Boolean) as { p: PatchCable; d: string; color: string }[];
   }, [pts, snap.patches]);
 
   function onJack(id: PortId, kind: "src" | "dst") {
@@ -78,13 +84,30 @@ export function Patchbay() {
           const br = rootRef.current.getBoundingClientRect();
           setDrag({ ...drag, x: e.clientX - br.left, y: e.clientY - br.top });
         }}
-        onPointerUp={() => setDrag(null)}
       >
         <div className="flex flex-col gap-6 px-1 pt-2 sm:px-2">
-          <JackRow ids={SOURCE_PORTS} kind="src" jackRefs={jackRefs} onJack={onJack} hot={drag?.from} cols="src" />
-          <JackRow ids={DEST_PORTS} kind="dst" jackRefs={jackRefs} onJack={onJack} hot={undefined} cols="dst" />
+          <JackRow
+            ids={SOURCE_PORTS}
+            kind="src"
+            jackRefs={jackRefs}
+            onJack={onJack}
+            hot={drag?.from}
+            cols="src"
+          />
+          <JackRow
+            ids={DEST_PORTS}
+            kind="dst"
+            jackRefs={jackRefs}
+            onJack={onJack}
+            hot={undefined}
+            cols="dst"
+          />
         </div>
-        <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${size.w} ${size.h}`}>
+        <svg
+          className="pointer-events-none absolute inset-0 h-full w-full"
+          viewBox={`0 0 ${size.w} ${size.h}`}
+          aria-hidden="true"
+        >
           {cables.map(({ p, d, color }) => (
             <path
               key={p.id}
@@ -105,7 +128,35 @@ export function Patchbay() {
             />
           ) : null}
         </svg>
-        <p className="nx-label mt-3 text-center">drag source → dest · click cable to pull</p>
+        <div className="nx-patch-instruction">
+          <p role="status">
+            {drag
+              ? `${PORT_META[drag.from].label} selected. Choose a destination.`
+              : "Choose a source, then a destination."}
+          </p>
+          {drag ? (
+            <button type="button" className="nx-btn" onClick={() => setDrag(null)}>
+              Cancel
+            </button>
+          ) : null}
+        </div>
+        <details className="nx-patch-list">
+          <summary>Connections ({snap.patches.length})</summary>
+          <ul>
+            {snap.patches.map((p) => (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  className="nx-btn"
+                  onClick={() => engine.removePatch(p.id)}
+                  aria-label={`Remove ${PORT_META[p.from].label} to ${PORT_META[p.to].label} connection`}
+                >
+                  {PORT_META[p.from].label} → {PORT_META[p.to].label} · remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
       </div>
     </ModuleFrame>
   );
@@ -127,7 +178,7 @@ function JackRow({
   cols: "src" | "dst";
 }) {
   return (
-    <div className={`grid gap-1 ${cols === "src" ? "grid-cols-5 sm:grid-cols-9" : "grid-cols-4 sm:grid-cols-7"}`}>
+    <div className="nx-jack-row grid gap-1" data-port-group={cols}>
       {ids.map((id) => (
         <button
           key={id}
@@ -136,6 +187,8 @@ function JackRow({
             jackRefs.current[id] = el;
           }}
           className="flex min-h-11 min-w-11 flex-col items-center gap-1"
+          aria-label={`${PORT_META[id].label} ${kind === "src" ? "source" : "destination"}`}
+          aria-pressed={kind === "src" ? hot === id : undefined}
           onClick={() => onJack(id, kind)}
         >
           <span className={`nx-jack ${hot === id ? "nx-jack-hot" : ""}`} />

@@ -32,20 +32,27 @@ export function Sequencer() {
             type="button"
             className={`nx-btn min-h-11 px-3 py-2 ${seq.playing ? "nx-btn-on" : ""}`}
             onClick={() => engine.togglePlay()}
+            aria-pressed={seq.playing}
           >
             {seq.playing ? "Stop" : "Run"}
           </button>
-          <button type="button" className="nx-btn min-h-11 px-3 py-2" onClick={() => engine.applyEuclid()}>
+          <button
+            type="button"
+            className="nx-btn min-h-11 px-3 py-2"
+            onClick={() => engine.applyEuclid()}
+          >
             Euclid
           </button>
           <button
             type="button"
             className={`nx-btn min-h-11 px-3 py-2 ${seq.arp ? "nx-btn-on" : ""}`}
             onClick={() => engine.setSeq({ arp: !seq.arp })}
+            aria-pressed={seq.arp}
           >
             Arp
           </button>
           <select
+            aria-label="Sequencer scale"
             className="nx-btn min-h-11 bg-panel px-2 py-2 text-fg"
             value={seq.scale}
             onChange={(e) => engine.setSeq({ scale: e.target.value as typeof seq.scale })}
@@ -58,17 +65,19 @@ export function Sequencer() {
         </div>
         <LoopReadout />
         <F18Face />
-        <div className="grid grid-cols-8 gap-0.5 sm:gap-1">
+        <div className="nx-step-grid">
           {steps.map((s, i) => (
             <button
               key={i}
               type="button"
+              aria-label={`Step ${i + 1}`}
+              aria-pressed={s.gate}
               onClick={() => engine.setStep(i, { gate: !s.gate })}
               onContextMenu={(e) => {
                 e.preventDefault();
                 engine.setStep(i, { accent: !s.accent, note: (s.note + 1) % 8 });
               }}
-              className={`relative min-h-10 rounded-sm border font-mono text-micro tabular-nums sm:min-h-11 ${
+              className={`relative min-h-11 min-w-11 rounded-sm border font-mono text-micro tabular-nums ${
                 s.gate
                   ? s.accent
                     ? "border-amber bg-amber text-bg"
@@ -82,14 +91,62 @@ export function Sequencer() {
           ))}
         </div>
         <div className="nx-knobs">
-          <Knob label="BPM" value={seq.bpm} min={48} max={200} step={1} onChange={(v) => engine.setSeq({ bpm: v })} format={(v) => `${Math.round(v)}`} />
-          <Knob label="Swing" value={seq.swing} min={0} max={0.45} onChange={(v) => engine.setSeq({ swing: v })} format={(v) => v.toFixed(2)} />
-          <Knob label="Hits" value={seq.euclidHits} min={1} max={16} step={1} onChange={(v) => engine.setSeq({ euclidHits: v })} format={(v) => `${Math.round(v)}`} />
-          <Knob label="Steps" value={seq.euclidSteps} min={4} max={16} step={1} onChange={(v) => engine.setSeq({ euclidSteps: v })} format={(v) => `${Math.round(v)}`} />
-          <Knob label="Rotate" value={seq.euclidRot} min={0} max={15} step={1} onChange={(v) => engine.setSeq({ euclidRot: v })} format={(v) => `${Math.round(v)}`} />
-          <Knob label="Prob" value={seq.probability} min={0.1} max={1} onChange={(v) => engine.setSeq({ probability: v })} format={(v) => v.toFixed(2)} />
+          <Knob
+            label="BPM"
+            value={seq.bpm}
+            min={48}
+            max={200}
+            step={1}
+            onChange={(v) => engine.setSeq({ bpm: v })}
+            format={(v) => `${Math.round(v)}`}
+          />
+          <Knob
+            label="Swing"
+            value={seq.swing}
+            min={0}
+            max={0.45}
+            onChange={(v) => engine.setSeq({ swing: v })}
+            format={(v) => v.toFixed(2)}
+          />
+          <Knob
+            label="Hits"
+            value={seq.euclidHits}
+            min={1}
+            max={16}
+            step={1}
+            onChange={(v) => engine.setSeq({ euclidHits: v })}
+            format={(v) => `${Math.round(v)}`}
+          />
+          <Knob
+            label="Steps"
+            value={seq.euclidSteps}
+            min={4}
+            max={16}
+            step={1}
+            onChange={(v) => engine.setSeq({ euclidSteps: v })}
+            format={(v) => `${Math.round(v)}`}
+          />
+          <Knob
+            label="Rotate"
+            value={seq.euclidRot}
+            min={0}
+            max={15}
+            step={1}
+            onChange={(v) => engine.setSeq({ euclidRot: v })}
+            format={(v) => `${Math.round(v)}`}
+          />
+          <Knob
+            label="Prob"
+            value={seq.probability}
+            min={0.1}
+            max={1}
+            onChange={(v) => engine.setSeq({ probability: v })}
+            format={(v) => v.toFixed(2)}
+          />
         </div>
-        <p className="nx-label text-center">{COLS}-step · right-click accent/row · space to run · ouroboros 8</p>
+        <p className="nx-label text-center">
+          {COLS}-step · right-click accent/row · space to run · ouroboros 8
+        </p>
       </div>
     </ModuleFrame>
   );

@@ -46,7 +46,8 @@ export function Knob({
       const range = max - min;
       let next = start.current.v + (dy / 110) * range;
       next = Math.min(max, Math.max(min, next));
-      if (step > 0) next = Math.round(next / step) * step;
+      if (step > 0)
+        next = Math.min(max, Math.max(min, min + Math.round((next - min) / step) * step));
       onChange(next);
     },
     [max, min, onChange, step],
@@ -62,12 +63,17 @@ export function Knob({
         aria-valuemin={min}
         aria-valuemax={max}
         aria-valuenow={Number(value.toFixed(3))}
+        aria-valuetext={readout}
         tabIndex={0}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onDoubleClick={() => onChange((min + max) / 2)}
         onKeyDown={(e) => {
-          const delta = (max - min) * (e.shiftKey ? 0.01 : 0.05);
+          const delta = step > 0 ? step : (max - min) * (e.shiftKey ? 0.01 : 0.05);
+          if (e.key === "Home" || e.key === "End") {
+            e.preventDefault();
+            onChange(e.key === "Home" ? min : max);
+          }
           if (e.key === "ArrowUp" || e.key === "ArrowRight") {
             e.preventDefault();
             onChange(Math.min(max, value + delta));
@@ -80,9 +86,22 @@ export function Knob({
         className="relative touch-none select-none"
         style={{ width: size, height: size }}
       >
-        <svg viewBox="0 0 80 80" className="h-full w-full">
-          <circle cx="40" cy="40" r="34" className="fill-panel-hi stroke-aluminum" strokeWidth="2" />
-          <circle cx="40" cy="40" r="28" fill={`url(#${id}face)`} className="stroke-hairline" strokeWidth="1" />
+        <svg viewBox="0 0 80 80" className="h-full w-full" aria-hidden="true">
+          <circle
+            cx="40"
+            cy="40"
+            r="34"
+            className="fill-panel-hi stroke-aluminum"
+            strokeWidth="2"
+          />
+          <circle
+            cx="40"
+            cy="40"
+            r="28"
+            fill={`url(#${id}face)`}
+            className="stroke-hairline"
+            strokeWidth="1"
+          />
           {Array.from({ length: 11 }, (_, i) => {
             const a = ((-135 + i * 27) * Math.PI) / 180;
             const x1 = 40 + Math.cos(a) * 31;
@@ -102,7 +121,15 @@ export function Knob({
             );
           })}
           <g transform={`rotate(${angle} 40 40)`}>
-            <line x1="40" y1="40" x2="40" y2="16" className="stroke-amber" strokeWidth="2.4" strokeLinecap="round" />
+            <line
+              x1="40"
+              y1="40"
+              x2="40"
+              y2="16"
+              className="stroke-amber"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+            />
             <circle cx="40" cy="40" r="5" className="fill-bg stroke-aluminum-hi" />
           </g>
           <defs>

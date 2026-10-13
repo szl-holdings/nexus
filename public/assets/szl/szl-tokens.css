@@ -1,0 +1,161 @@
+/* KANCHAY tokens v1.3.0 (derived): only the custom properties of
+   szl-design-system.css. Palette, both polarities (on :root and on any
+   [data-surface] element), type, spacing, radius, shadow, motion and z tokens.
+   No element or class rules. Built by `szl-brand kanchay-build`; never edit by
+   hand. Use it when a surface keeps its own component CSS.
+   Brand assets (c) 2026 SZL Holdings, CC BY 4.0; code Apache-2.0. */
+:root {
+  --font-body:
+    system-ui, -apple-system, "Segoe UI", "Helvetica Neue", "Liberation Sans",
+    Arial, sans-serif;
+  --font-display:
+    system-ui, -apple-system, "Segoe UI", "Helvetica Neue", "Liberation Sans",
+    Arial, sans-serif;
+  --font-heading: var(--font-display);
+  --font-mono:
+    ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", "IBM Plex Mono",
+    "Liberation Mono", Menlo, Consolas, monospace;
+}
+:root {
+  /* yawar (blood / circulatory receipt ledger) — KEEP */
+  --color-yawar-50:#fdecec; --color-yawar-100:#f9cfcf; --color-yawar-200:#f0a3a3;
+  --color-yawar-300:#e57373; --color-yawar-400:#d65151; --color-yawar-500:#c0392b;
+  --color-yawar-600:#a32a1f; --color-yawar-700:#822018; --color-yawar-800:#5e1712;
+  --color-yawar-900:#3d0f0c;
+  /* yuyay (thought / 13-axis heart gate) — KEEP; focus ring lives here */
+  --color-yuyay-50:#e6f7f6; --color-yuyay-100:#bfeae8; --color-yuyay-200:#8fd9d5;
+  --color-yuyay-300:#5cc4bf; --color-yuyay-400:#34aaa4; --color-yuyay-500:#168f89;
+  --color-yuyay-600:#0f726e; --color-yuyay-700:#0b5957; --color-yuyay-800:#083f3e;
+  --color-yuyay-900:#052827;
+  /* hatun (great / premium accent, doctrine governance) — KEEP */
+  --color-hatun-50:#faf5e9; --color-hatun-100:#f0e3c4; --color-hatun-200:#e4cf99;
+  --color-hatun-300:#d7b96b; --color-hatun-400:#cda64a; --color-hatun-500:#c08f2f;
+  --color-hatun-600:#a3741f; --color-hatun-700:#825a18; --color-hatun-800:#5e4012;
+  --color-hatun-900:#3d290b;
+  /* neutral gray scale — KEEP */
+  --color-gray-50:#f5f7fa; --color-gray-100:#e6eaf1; --color-gray-200:#c9d2df;
+  --color-gray-300:#a4b1c4; --color-gray-400:#76859b; --color-gray-500:#525f73;
+  --color-gray-600:#3c4757; --color-gray-700:#2a3340; --color-gray-800:#1b222c;
+  --color-gray-900:#10151c; --color-gray-950:#0a0f1e;
+  /* NEW · canonical logo palette (founder-approved) */
+  --color-space-900:#030F29; --color-space-800:#061536;
+  --color-space-700:#0a1e47; --color-space-600:#102a5e;
+  --color-coral-300:#F0917E; --color-coral-400:#DF735F; --color-coral-500:#C4543F;
+  --color-silver-100:#E9EEF6; --color-silver-300:#9AA7BD; --color-silver-500:#5C6B86;
+  /* NEW 1.3.0 · graphite operational neutrals and warm editorial neutrals (2026-10-06) */
+  --color-graphite-950:#05070C; --color-graphite-900:#080B12; --color-graphite-800:#111722;
+  --color-graphite-750:#141B27; --color-graphite-700:#182232; --color-graphite-600:#2B3749;
+  --color-graphite-400:#71829B; --color-graphite-300:#8B98AC; --color-graphite-200:#AAB7C9;
+  --color-graphite-50:#F1F4F8;
+  --color-paper-100:#F5F3EE; --color-paper-200:#ECE9E2; --color-mist-100:#EBEEF2;
+  --color-mist-200:#D6DBE3; --color-ink-600:#516075; --color-ink-500:#5E6A7C;
+  --color-ink-400:#6E7A8C;
+  --color-white:#FFFFFF; --color-ink:#0a0f1e; --color-ink-soft:#2a3340;
+  /* semantic (status) — KEEP */
+  --color-success:#1f9d57; --color-success-strong:#116b3d; --color-success-light:#3fce82;
+  --color-warning:#c08f2f; --color-warning-light:#e4cf99;
+  --color-error:#c0392b;   --color-error-light:#f0a3a3;
+  --color-info:#2f7fb5;    --color-info-light:#7cb8e0;
+}
+:root, [data-surface="dark"] {
+  --bg:var(--color-graphite-900); --bg-deep:var(--color-graphite-950);
+  --surface:var(--color-graphite-800); --surface-alt:var(--color-graphite-750);
+  --surface-raised:var(--color-graphite-700);
+  --border:var(--color-graphite-600);
+  --border-subtle:color-mix(in srgb, var(--color-graphite-600) 55%, transparent);
+  --hairline:color-mix(in srgb, var(--color-silver-500) 38%, transparent);
+  --control-edge:var(--color-graphite-400);
+  --text:var(--color-graphite-50); --text-sub:var(--color-graphite-200);
+  --text-ghost:var(--color-graphite-300);
+  --accent:var(--color-coral-400); --accent-hover:var(--color-coral-300);
+  --accent-press:var(--color-coral-500); --accent-ink:var(--color-space-900);
+  /* Action fills are distinct from decorative coral: every small-text state must
+     meet 4.5:1. Press keeps the legible fill and adds the button's tactile offset. */
+  --action-bg:var(--color-coral-400); --action-hover-bg:var(--color-coral-300);
+  --action-press-bg:var(--color-coral-400); --action-ink:var(--color-space-900);
+  --hero-atmosphere:color-mix(in srgb, var(--color-space-700) 60%, transparent);
+  --holo-silver:var(--color-silver-100); --holo-teal:var(--color-yuyay-300);
+  --shadow-card:var(--shadow-sm); --shadow-card-hover:var(--shadow-md);
+  --premium:var(--color-hatun-300);
+  --link:var(--color-yuyay-200); --link-hover:var(--color-yuyay-100);
+  --focus:var(--color-yuyay-400);
+  --chip-ok:var(--color-success-light); --chip-warn:var(--color-warning-light);
+  --chip-bad:var(--color-error-light);
+  color-scheme:dark;
+}
+[data-surface="light"] {
+  --bg:var(--color-paper-100); --bg-deep:var(--color-paper-200);
+  --surface:var(--color-white); --surface-alt:var(--color-mist-100); --surface-raised:var(--color-white);
+  --border:var(--color-mist-200);
+  --border-subtle:color-mix(in srgb, var(--color-mist-200) 60%, transparent);
+  --hairline:color-mix(in srgb, var(--color-silver-500) 30%, transparent);
+  --control-edge:var(--color-ink-400);
+  --text:var(--color-graphite-800); --text-sub:var(--color-ink-600);
+  --text-ghost:var(--color-ink-500);
+  --accent:var(--color-coral-500); --accent-hover:var(--color-coral-400);
+  --accent-press:#a8442f; --accent-ink:var(--color-white);
+  /* White on unmodified coral-500 is 4.48:1. This local navy mix preserves the
+     palette primitive while making the small primary label legible. */
+  --action-bg:color-mix(in srgb, var(--color-coral-500) 94%, var(--color-space-900));
+  --action-hover-bg:var(--accent-press);
+  --action-press-bg:color-mix(in srgb, var(--accent-press) 90%, var(--color-space-900));
+  --action-ink:var(--color-white);
+  --hero-atmosphere:color-mix(in srgb, var(--color-silver-300) 16%, transparent);
+  --holo-silver:var(--color-silver-500); --holo-teal:var(--color-yuyay-700);
+  --shadow-card:0 1px 2px rgba(3,15,41,.08);
+  --shadow-card-hover:0 4px 16px rgba(3,15,41,.10);
+  --premium:var(--color-hatun-700);
+  --link:var(--color-yuyay-700); --link-hover:var(--color-yuyay-800);
+  --focus:var(--color-yuyay-600);
+  --chip-ok:var(--color-success-strong); --chip-warn:#6b4f00; --chip-bad:#9f281e;
+  color-scheme:light;
+}
+:root, [data-surface="dark"], [data-surface="light"] {
+  --shadow-focus:0 0 0 3px color-mix(in srgb, var(--focus) 55%, transparent);
+  --holo-edge:linear-gradient(128deg, var(--holo-silver), var(--border) 24%,
+    var(--holo-teal) 48%, var(--border) 72%, var(--holo-silver));
+}
+:root {
+  --code-bg:var(--color-graphite-950); --code-ink:var(--color-graphite-50);
+  --code-muted:var(--color-graphite-300); --code-border:var(--color-graphite-600);
+  --code-edge:var(--color-graphite-400); --code-focus:var(--color-yuyay-400);
+  --code-link:var(--color-yuyay-200); --code-link-hover:var(--color-yuyay-100);
+  --code-string:var(--color-success-light); --code-number:var(--color-hatun-300);
+}
+:root {
+  --text-xs:0.75rem; --text-sm:0.875rem; --text-base:1rem; --text-lg:1.25rem;
+  --text-xl:1.563rem; --text-2xl:1.953rem; --text-3xl:2.441rem;
+  --text-4xl:3.052rem; --text-5xl:3.815rem; --text-6xl:4.768rem;
+  --leading-tight:1.1; --leading-snug:1.2; --leading-normal:1.6; --leading-mono:1.5;
+  --tracking-tight:-0.011em; --tracking-normal:0; --tracking-caps:0.08em;
+  --weight-regular:400; --weight-medium:500; --weight-semibold:600; --weight-bold:700;
+}
+:root {
+  --space-px:1px; --space-1:.25rem; --space-2:.5rem; --space-3:.75rem; --space-4:1rem;
+  --space-5:1.25rem; --space-6:1.5rem; --space-8:2rem; --space-10:2.5rem; --space-12:3rem;
+  --space-16:4rem; --space-20:5rem; --space-24:6rem;
+  --radius-sm:4px; --radius-md:8px; --radius-lg:12px; --radius-xl:16px;
+  --radius-2xl:24px; --radius-full:9999px;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.40); --shadow-md:0 2px 8px rgba(0,0,0,.45);
+  --shadow-lg:0 8px 24px rgba(0,0,0,.50); --shadow-xl:0 16px 48px rgba(0,0,0,.55);
+  --shadow-glow-hatun:0 0 0 1px var(--color-hatun-500),
+                      0 0 16px color-mix(in srgb, var(--color-hatun-400) 30%, transparent);
+  --shadow-node:0 0 0 1px var(--color-coral-500),
+                0 0 18px color-mix(in srgb, var(--color-coral-400) 32%, transparent);
+  --ease-standard:cubic-bezier(.2,0,0,1); --ease-emphasized:cubic-bezier(.3,0,.1,1);
+  --ease-out:cubic-bezier(0,0,.2,1); --ease-in:cubic-bezier(.4,0,1,1);
+  --ease-orbit:cubic-bezier(.45,.05,.25,1);
+  --duration-instant:75ms; --duration-fast:150ms; --duration-base:250ms;
+  --duration-slow:400ms; --duration-slower:600ms; --duration-orbit:24s;
+  --z-base:0; --z-raised:10; --z-dropdown:1000; --z-sticky:1100; --z-overlay:1200;
+  --z-modal:1300; --z-popover:1400; --z-toast:1500; --z-max:2147483000;
+  --z-control-dock:var(--z-popover);
+  --border-hairline:1px; --border-thick:2px; --border-focus:3px;
+  --measure:68ch; --container:1200px;
+  --safe-area-top:env(safe-area-inset-top,0px);
+  --safe-area-right:env(safe-area-inset-right,0px);
+  --safe-area-bottom:env(safe-area-inset-bottom,0px);
+  --safe-area-left:env(safe-area-inset-left,0px);
+  --target-size-min:24px; --target-size-coarse:44px;
+  --control-dock-max-inline-size:24rem;
+}

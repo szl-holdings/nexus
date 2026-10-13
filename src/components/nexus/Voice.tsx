@@ -49,22 +49,95 @@ export function Voice() {
               type="button"
               className={`nx-btn min-h-11 min-w-11 px-2 py-1.5 ${v.waveform === w ? "nx-btn-on" : ""}`}
               onClick={() => engine.setVoice({ waveform: w })}
+              aria-label={`${w} waveform`}
+              aria-pressed={v.waveform === w}
             >
               {w.slice(0, 3)}
             </button>
           ))}
         </div>
         <div className="nx-knobs">
-          <Knob label="Morph" value={v.morph} min={0} max={1} onChange={(n) => engine.setVoice({ morph: n })} format={(n) => n.toFixed(2)} />
-          <Knob label="Cutoff" value={v.cutoff} min={80} max={8000} onChange={(n) => engine.setVoice({ cutoff: n })} format={(n) => `${Math.round(n)}`} />
-          <Knob label="Res" value={v.resonance} min={0.2} max={18} onChange={(n) => engine.setVoice({ resonance: n })} format={(n) => n.toFixed(1)} />
-          <Knob label="FM" value={v.fmIndex} min={0} max={24} onChange={(n) => engine.setVoice({ fmIndex: n })} format={(n) => n.toFixed(2)} />
-          <Knob label="Atk" value={v.attack} min={0.002} max={1.2} onChange={(n) => engine.setVoice({ attack: n })} format={(n) => n.toFixed(2)} />
-          <Knob label="Dec" value={v.decay} min={0.02} max={1.4} onChange={(n) => engine.setVoice({ decay: n })} format={(n) => n.toFixed(2)} />
-          <Knob label="Sus" value={v.sustain} min={0} max={1} onChange={(n) => engine.setVoice({ sustain: n })} format={(n) => n.toFixed(2)} />
-          <Knob label="Rel" value={v.release} min={0.02} max={2.2} onChange={(n) => engine.setVoice({ release: n })} format={(n) => n.toFixed(2)} />
-          <Knob label="Uni" value={v.unison} min={1} max={5} step={2} onChange={(n) => engine.setVoice({ unison: n })} format={(n) => `${Math.round(n)}`} />
-          <Knob label="Det" value={v.detune} min={0} max={40} onChange={(n) => engine.setVoice({ detune: n })} format={(n) => n.toFixed(0)} />
+          <Knob
+            label="Morph"
+            value={v.morph}
+            min={0}
+            max={1}
+            onChange={(n) => engine.setVoice({ morph: n })}
+            format={(n) => n.toFixed(2)}
+          />
+          <Knob
+            label="Cutoff"
+            value={v.cutoff}
+            min={80}
+            max={8000}
+            onChange={(n) => engine.setVoice({ cutoff: n })}
+            format={(n) => `${Math.round(n)}`}
+          />
+          <Knob
+            label="Res"
+            value={v.resonance}
+            min={0.2}
+            max={18}
+            onChange={(n) => engine.setVoice({ resonance: n })}
+            format={(n) => n.toFixed(1)}
+          />
+          <Knob
+            label="FM"
+            value={v.fmIndex}
+            min={0}
+            max={24}
+            onChange={(n) => engine.setVoice({ fmIndex: n })}
+            format={(n) => n.toFixed(2)}
+          />
+          <Knob
+            label="Atk"
+            value={v.attack}
+            min={0.002}
+            max={1.2}
+            onChange={(n) => engine.setVoice({ attack: n })}
+            format={(n) => n.toFixed(2)}
+          />
+          <Knob
+            label="Dec"
+            value={v.decay}
+            min={0.02}
+            max={1.4}
+            onChange={(n) => engine.setVoice({ decay: n })}
+            format={(n) => n.toFixed(2)}
+          />
+          <Knob
+            label="Sus"
+            value={v.sustain}
+            min={0}
+            max={1}
+            onChange={(n) => engine.setVoice({ sustain: n })}
+            format={(n) => n.toFixed(2)}
+          />
+          <Knob
+            label="Rel"
+            value={v.release}
+            min={0.02}
+            max={2.2}
+            onChange={(n) => engine.setVoice({ release: n })}
+            format={(n) => n.toFixed(2)}
+          />
+          <Knob
+            label="Uni"
+            value={v.unison}
+            min={1}
+            max={5}
+            step={2}
+            onChange={(n) => engine.setVoice({ unison: n })}
+            format={(n) => `${Math.round(n)}`}
+          />
+          <Knob
+            label="Det"
+            value={v.detune}
+            min={0}
+            max={40}
+            onChange={(n) => engine.setVoice({ detune: n })}
+            format={(n) => n.toFixed(0)}
+          />
         </div>
         <p className="nx-label">
           Analog computer · {prog} · {(a.mode ?? "op").toUpperCase()} · {coef.label}
@@ -78,6 +151,8 @@ export function Voice() {
               type="button"
               className={`nx-btn min-h-11 min-w-11 px-2 py-1.5 ${a.program === p.id ? "nx-btn-on" : ""}`}
               onClick={() => engine.setAnalog({ program: p.id })}
+              aria-label={`${p.label} analog program`}
+              aria-pressed={a.program === p.id}
             >
               {p.label}
             </button>
@@ -90,6 +165,8 @@ export function Voice() {
               type="button"
               className={`nx-btn min-h-11 min-w-11 px-2 py-1.5 ${a.mode === m.id ? "nx-btn-on" : ""}`}
               onClick={() => engine.setAnalog({ mode: m.id })}
+              aria-label={`${m.label} analog mode`}
+              aria-pressed={a.mode === m.id}
             >
               {m.label}
             </button>
@@ -98,63 +175,159 @@ export function Voice() {
             type="button"
             className={`nx-btn min-h-11 min-w-11 px-2 py-1.5 ${a.cycle ? "nx-btn-on" : ""}`}
             onClick={() => engine.setAnalog({ cycle: !a.cycle })}
+            aria-pressed={a.cycle}
           >
             Cycle
           </button>
         </div>
         <div className="nx-knobs">
-          <Knob label="Fold" value={v.fold} min={0} max={1} onChange={(n) => engine.setVoice({ fold: n })} format={(n) => n.toFixed(2)} />
-          <Knob label="LFO" value={v.lfoRate} min={0.05} max={12} onChange={(n) => engine.setVoice({ lfoRate: n })} format={(n) => `${n.toFixed(2)}Hz`} />
-          <Knob label="Depth" value={v.lfoDepth} min={0} max={1} onChange={(n) => engine.setVoice({ lfoDepth: n })} format={(n) => n.toFixed(2)} />
-          <Knob label="S&H" value={v.shAmt} min={0} max={1} onChange={(n) => engine.setVoice({ shAmt: n })} format={(n) => n.toFixed(2)} />
-          <Knob label="Ring" value={v.ring} min={0} max={1} onChange={(n) => engine.setVoice({ ring: n })} format={(n) => n.toFixed(2)} />
-          <Knob label="Rate" value={a.rate} min={0.08} max={1.6} onChange={(n) => engine.setAnalog({ rate: n })} format={(n) => n.toFixed(2)} />
-          <Knob label="Chaos" value={a.chaos} min={0} max={1} onChange={(n) => engine.setAnalog({ chaos: n })} format={(n) => n.toFixed(2)} />
-          <Knob label="Drive" value={a.drive} min={0} max={1} onChange={(n) => engine.setAnalog({ drive: n })} format={(n) => n.toFixed(2)} />
+          <Knob
+            label="Fold"
+            value={v.fold}
+            min={0}
+            max={1}
+            onChange={(n) => engine.setVoice({ fold: n })}
+            format={(n) => n.toFixed(2)}
+          />
+          <Knob
+            label="LFO"
+            value={v.lfoRate}
+            min={0.05}
+            max={12}
+            onChange={(n) => engine.setVoice({ lfoRate: n })}
+            format={(n) => `${n.toFixed(2)}Hz`}
+          />
+          <Knob
+            label="Depth"
+            value={v.lfoDepth}
+            min={0}
+            max={1}
+            onChange={(n) => engine.setVoice({ lfoDepth: n })}
+            format={(n) => n.toFixed(2)}
+          />
+          <Knob
+            label="S&H"
+            value={v.shAmt}
+            min={0}
+            max={1}
+            onChange={(n) => engine.setVoice({ shAmt: n })}
+            format={(n) => n.toFixed(2)}
+          />
+          <Knob
+            label="Ring"
+            value={v.ring}
+            min={0}
+            max={1}
+            onChange={(n) => engine.setVoice({ ring: n })}
+            format={(n) => n.toFixed(2)}
+          />
+          <Knob
+            label="Rate"
+            value={a.rate}
+            min={0.08}
+            max={1.6}
+            onChange={(n) => engine.setAnalog({ rate: n })}
+            format={(n) => n.toFixed(2)}
+          />
+          <Knob
+            label="Chaos"
+            value={a.chaos}
+            min={0}
+            max={1}
+            onChange={(n) => engine.setAnalog({ chaos: n })}
+            format={(n) => n.toFixed(2)}
+          />
+          <Knob
+            label="Drive"
+            value={a.drive}
+            min={0}
+            max={1}
+            onChange={(n) => engine.setAnalog({ drive: n })}
+            format={(n) => n.toFixed(2)}
+          />
         </div>
-        <div className="relative mt-auto h-20 min-h-20">
-          <div className="absolute inset-0 flex">
-            {whites.map((k) => (
-              <button
-                key={k.midi}
-                type="button"
-                className={`nx-key relative min-h-11 flex-1 ${snap.heldKeys.includes(k.midi) ? "nx-key-on" : ""}`}
-                onPointerDown={(e) => {
-                  e.currentTarget.setPointerCapture(e.pointerId);
-                  engine.noteOn(k.midi);
-                }}
-                onPointerUp={() => engine.noteOff(k.midi)}
-                onPointerCancel={() => engine.noteOff(k.midi)}
-              >
-                <span className="absolute bottom-1 left-1/2 -translate-x-1/2 font-mono text-micro">{k.label}</span>
-              </button>
-            ))}
-          </div>
-          <div className="pointer-events-none absolute inset-x-0 top-0 flex h-[58%]">
-            {whites.map((k, i) => {
-              const next = whites[i + 1];
-              const black = blacks.find((b) => next && b.midi > k.midi && b.midi < next.midi);
-              return (
-                <div key={k.midi} className="relative flex-1">
-                  {black ? (
-                    <button
-                      type="button"
-                      className={`nx-key nx-key-black pointer-events-auto absolute left-full z-10 h-full min-w-11 w-[70%] -translate-x-1/2 ${
-                        snap.heldKeys.includes(black.midi) ? "nx-key-on" : ""
-                      }`}
-                      onPointerDown={(e) => {
-                        e.currentTarget.setPointerCapture(e.pointerId);
-                        engine.noteOn(black.midi);
-                      }}
-                      onPointerUp={() => engine.noteOff(black.midi)}
-                      onPointerCancel={() => engine.noteOff(black.midi)}
-                    />
-                  ) : null}
-                </div>
-              );
-            })}
+        <div className="nx-piano-scroll" role="group" aria-label="Piano keys">
+          <div className="nx-piano relative mt-auto h-20 min-h-20">
+            <div className="absolute inset-0 flex">
+              {whites.map((k) => (
+                <button
+                  key={k.midi}
+                  type="button"
+                  aria-label={`MIDI note ${k.midi}, keyboard ${k.label}`}
+                  aria-pressed={snap.heldKeys.includes(k.midi)}
+                  className={`nx-key relative min-h-11 flex-1 ${snap.heldKeys.includes(k.midi) ? "nx-key-on" : ""}`}
+                  onPointerDown={(e) => {
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    engine.noteOn(k.midi);
+                  }}
+                  onPointerUp={() => engine.noteOff(k.midi)}
+                  onPointerCancel={() => engine.noteOff(k.midi)}
+                  onLostPointerCapture={() => engine.noteOff(k.midi)}
+                  onBlur={() => engine.noteOff(k.midi)}
+                  onKeyDown={(e) => {
+                    if (e.key === " " || e.key === "Enter") {
+                      e.preventDefault();
+                      if (!e.repeat) engine.noteOn(k.midi);
+                    }
+                  }}
+                  onKeyUp={(e) => {
+                    if (e.key === " " || e.key === "Enter") {
+                      e.preventDefault();
+                      engine.noteOff(k.midi);
+                    }
+                  }}
+                >
+                  <span className="absolute bottom-1 left-1/2 -translate-x-1/2 font-mono text-micro">
+                    {k.label}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="pointer-events-none absolute inset-x-0 top-0 flex h-[58%]">
+              {whites.map((k, i) => {
+                const next = whites[i + 1];
+                const black = blacks.find((b) => next && b.midi > k.midi && b.midi < next.midi);
+                return (
+                  <div key={k.midi} className="relative flex-1">
+                    {black ? (
+                      <button
+                        type="button"
+                        aria-label={`MIDI note ${black.midi}, keyboard ${black.label}`}
+                        aria-pressed={snap.heldKeys.includes(black.midi)}
+                        className={`nx-key nx-key-black pointer-events-auto absolute left-full z-10 h-full min-w-11 w-[70%] -translate-x-1/2 ${
+                          snap.heldKeys.includes(black.midi) ? "nx-key-on" : ""
+                        }`}
+                        onPointerDown={(e) => {
+                          e.currentTarget.setPointerCapture(e.pointerId);
+                          engine.noteOn(black.midi);
+                        }}
+                        onPointerUp={() => engine.noteOff(black.midi)}
+                        onPointerCancel={() => engine.noteOff(black.midi)}
+                        onLostPointerCapture={() => engine.noteOff(black.midi)}
+                        onBlur={() => engine.noteOff(black.midi)}
+                        onKeyDown={(e) => {
+                          if (e.key === " " || e.key === "Enter") {
+                            e.preventDefault();
+                            if (!e.repeat) engine.noteOn(black.midi);
+                          }
+                        }}
+                        onKeyUp={(e) => {
+                          if (e.key === " " || e.key === "Enter") {
+                            e.preventDefault();
+                            engine.noteOff(black.midi);
+                          }
+                        }}
+                      />
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
+        <p className="nx-piano-note">
+          Focus a key and hold Space or Enter to play. Scroll the keyboard on narrow screens.
+        </p>
       </div>
     </ModuleFrame>
   );
