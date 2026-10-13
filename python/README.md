@@ -75,6 +75,23 @@ also compare Euler, velocity Verlet, and RK4 with the analytical solution
 `y = y0*cos(omega*tau) - omega*x0*sin(omega*tau)`, where `tau = t - t0`.
 They cover three frequencies and nonzero initial velocities above roundoff.
 
+`tests/test_symplectic_structure.py` checks the structure of the maps. A Verlet
+substep of `-h` undoes one of `+h`, a momentum flip returns the start for the
+conservative Verlet maps, and the Strang method undoes itself under
+`advance(-h)`, while RK4 and Euler do not. Central-difference Jacobians give
+`det J = 1` (`J^T Ω J = Ω`) for the Verlet maps and `det J = exp(-delta*h)` for
+the damped Duffing substep, which is conformally symplectic rather than
+area-preserving. The van der Pol RK4 substep follows Liouville's formula to
+local order h^5. SI and CGS descriptions of one spring-mass set-up reduce to
+the same engine inputs, and in each unit system the re-dimensionalized
+trajectory follows the analytic spring-mass solution within the Verlet
+truncation error. The nondimensionalization lives only in that test file; it
+is not a unit contract. `test_integrators.py` also rejects non-finite state,
+`dt`, `chaos` and `drive` at `step()` and pins the instrument's silent dt clamp
+as today's behaviour (an owner decision, not a contract). These are software
+simulation checks; `physicalHardware=false`, Energy UNAVAILABLE, and
+Conjecture 1 OPEN remain unchanged.
+
 The separate optical tests compare forward intensity with the squared magnitude
 of the summed complex fields, plus beam symmetry, common-phase invariance, and
 amplitude-squared scaling. One intensity cannot identify the object amplitude:

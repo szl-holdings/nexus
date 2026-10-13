@@ -2,6 +2,7 @@
 """Integrators: instrument compatibility, method matrix, fail-closed, order of accuracy."""
 from __future__ import annotations
 
+import dataclasses
 import math
 
 import pytest
@@ -12,6 +13,7 @@ import nexus_dynamics as nd
 from nexus_dynamics import NexusDynamicsError, NexusState
 from nexus_dynamics.integrators import advance, rk4_substep, step_with_events
 from nexus_dynamics.programs import duffing, harmonic, lotka
+from nexus_dynamics.schema import DT_MAX, DT_MIN
 
 unit = st.floats(min_value=0.0, max_value=1.0)
 dts = st.floats(min_value=0.0004, max_value=0.08)
@@ -121,6 +123,109 @@ def test_non_finite_inputs_are_rejected() -> None:
     with pytest.raises(NexusDynamicsError) as caught:
         nd.step("nemo", NexusState(-65, -70, 0.0, 0.0, tuple(bank)), 0.01, 0.5)
     assert caught.value.code == "NON_FINITE_NUMBER"
+
+
+NON_FINITE = [pytest.param(math.nan, id="nan"), pytest.param(math.inf, id="inf"), pytest.param(-math.inf, id="-inf")]
+PROGRAM_METHODS = [(program, method) for program in nd.PROGRAMS for method in nd.supported_methods(program)]
+
+
+@pytest.mark.parametrize(("program", "method"), PROGRAM_METHODS)
+@pytest.mark.parametrize("field", ["x", "y", "z", "t"])
+@pytest.mark.parametrize("bad", NON_FINITE)
+def test_non_finite_state_fields_are_rejected_for_every_method(program, method, field, bad) -> None:
+    state = dataclasses.replace(nd.seed(program, 0.3), **{field: bad})
+    with pytest.raises(NexusDynamicsError) as caught:
+        nd.step(program, state, 0.01, 0.5, 0.5, method)
+    assert caught.value.code == "NON_FINITE_NUMBER"
+
+
+@pytest.mark.parametrize("program", nd.PROGRAMS)
+@pytest.mark.parametrize("name", ["dt", "chaos", "drive"])
+@pytest.mark.parametrize("bad", [*NON_FINITE, pytest.param(True, id="bool"), pytest.param("0.5", id="string")])
+def test_non_finite_or_non_number_scalars_are_rejected(program, name, bad) -> None:
+    args = {"dt": 0.01, "chaos": 0.5, "drive": 0.5, name: bad}
+    with pytest.raises(NexusDynamicsError) as caught:
+        nd.step(program, nd.seed(program, 0.3), **args)
+    assert caught.value.code == "NON_FINITE_NUMBER"
+
+
+def _bits(state: NexusState) -> tuple[str, ...]:
+    """Bitwise identity of every state value (float.hex also tells -0.0 from 0.0)."""
+    return tuple(float(value).hex() for value in state.values())
+
+
+@pytest.mark.parametrize(("program", "method"), [(p, m) for p, m in PROGRAM_METHODS if p != "nemo"])
+def test_step_dt_outside_contract_is_clamped_like_the_instrument(program, method) -> None:
+    """step() clamps an out-of-contract dt exactly like the instrument; it does not reject it.
+
+    substep_size is Math.max(0.0004, Math.min(0.08, dt)) / 4, as in
+    src/lib/nexus/math.ts (both dt clamps) and server.py analog_step. This is
+    the instrument clamp shared by all methods (integrators module docstring);
+    it is audio parity for euler4 only. The test pins today's behaviour and
+    changes nothing; it is not a contract. Requests are still range-checked at
+    the contract boundary (test_schema: dt -0.01 and 0.0 are OUT_OF_RANGE).
+
+    TODO(owner decision D7): should step() reject a dt outside the contract
+    range (for rk4 and symplectic at least) instead of clamping it? If so,
+    replace this pin with a fail-closed test; a failure here after that change
+    is the intended update, not a regression.
+    """
+    state = nd.seed(program, 0.3)
+    low = _bits(nd.step(program, state, DT_MIN, 0.5, 0.7, method))
+    for dt in (-0.01, -1e300, -0.0, 0.0, 1e-9, DT_MIN / 2):
+        assert _bits(nd.step(program, state, dt, 0.5, 0.7, method)) == low, dt
+    high = _bits(nd.step(program, state, DT_MAX, 0.5, 0.7, method))
+    for dt in (0.0800001, 1.0, 1e300):
+        assert _bits(nd.step(program, state, dt, 0.5, 0.7, method)) == high, dt
+
+
+def test_nemo_step_dt_is_clamped_to_its_own_instrument_range() -> None:
+    """NEMO clamps the tick to 0.25..80 ms (math.ts analogNemoTick, server.py analog_nemo_step), not 0.4..80 ms.
+
+    Pinned as instrument parity: any dt below 0.25 ms runs a 0.25 ms tick, which
+    is shorter than the contract minimum dt (0.4 ms). Requests never reach it,
+    because the contract rejects dt < 0.0004.
+
+    Both ends are anchored. The references are dt = 0.00025 and dt = DT_MAX,
+    because 0.00025 * 1000 == 0.25 and 0.08 * 1000 == 80.0 exactly in binary
+    floating point. A dt just outside an end must give the reference tick, and a
+    dt just inside it (0.2500001 ms, 79.9999 ms) must not. Together these hold
+    the floor in [0.25, 0.2500001) ms and the ceiling in (79.9999, 80] ms.
+    """
+    state = nd.seed("nemo", 0.3)
+    floor = _bits(nd.step("nemo", state, 0.00025, 0.45, 0.7))
+    for dt in (0.0002499999, 0.0002, 1e-9, 0.0, -0.0, -0.01):
+        assert _bits(nd.step("nemo", state, dt, 0.45, 0.7)) == floor, dt
+    for dt in (0.0002500001, DT_MIN):
+        assert _bits(nd.step("nemo", state, dt, 0.45, 0.7)) != floor, dt
+    high = _bits(nd.step("nemo", state, DT_MAX, 0.45, 0.7))
+    for dt in (0.0800001, 1.0, 1e300):
+        assert _bits(nd.step("nemo", state, dt, 0.45, 0.7)) == high, dt
+    assert _bits(nd.step("nemo", state, 0.0799999, 0.45, 0.7)) != high
+
+
+@pytest.mark.parametrize("length", [0, 3, 14, 16, 19, 21, 25])
+def test_nemo_bank_of_wrong_length_is_rejected_at_step(length) -> None:
+    state = NexusState(-65.0, -70.0, 0.06, 0.0, tuple([0.0] * length))
+    with pytest.raises(NexusDynamicsError) as caught:
+        nd.step("nemo", state, 0.01, 0.5)
+    assert caught.value.code == "INVALID_NEMO_BANK"
+
+
+@pytest.mark.parametrize(
+    "state",
+    [(1.0, 0.0, 0.0, 0.0), [1.0, 0.0, 0.0, 0.0], {"x": 1.0, "y": 0.0, "z": 0.0, "t": 0.0}, None],
+    ids=["tuple", "list", "dict", "none"],
+)
+def test_non_nexus_state_never_returns_a_state(state) -> None:
+    """Pins today's behaviour: a state that is not a NexusState never produces a result.
+
+    TODO(owner decision D1): step() currently fails with an untyped AttributeError
+    (from state.is_finite) instead of a typed NexusDynamicsError. Accepting either
+    keeps this test valid if a typed INVALID_STATE is adopted; narrow it then.
+    """
+    with pytest.raises((AttributeError, NexusDynamicsError)):
+        nd.step("harmonic", state, 0.01, 0.5)
 
 
 @settings(max_examples=60)
