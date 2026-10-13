@@ -28,7 +28,9 @@ the margin. The helper sanity checks in test_helpers_reproduce_known_matrices
 are the exception: their bounds sit at the rounding scale of the helper
 arithmetic, with less than a 10x margin, and their measured values are noted
 there. The negative controls use lower bounds on truncation errors instead;
-their measured minima are listed in those tests.
+their measured minima are listed in those tests. The van der Pol order check
+in part D uses a ratio window [24, 40] around the theoretical 32 (measured
+30.9 and 31.5) rather than a 10x-margin bound.
 """
 from __future__ import annotations
 
