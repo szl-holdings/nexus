@@ -59,7 +59,7 @@ async function port() {
   return value;
 }
 
-async function measure(page, name) {
+async function measure(page, name, { record = true } = {}) {
   const result = await page.evaluate(() => {
     const visible = (el) => {
       if (!el.getClientRects().length) return false;
@@ -162,7 +162,7 @@ async function measure(page, name) {
         });
     }
     for (const el of document.querySelectorAll(
-      "button,select,input[type='range'],summary,[role='slider']",
+      "button,select,input[type='range'],summary,[role='slider'],.nx-identity nav a[href]",
     )) {
       if (!visible(el)) continue;
       const rect = el.getBoundingClientRect();
@@ -192,6 +192,7 @@ async function measure(page, name) {
       theme: document.documentElement.dataset.surface,
     };
   });
+  if (!record) return result;
   measurements.push({ name, ...result });
   check(`${name}: no document overflow`, !result.overflow, result);
   check(
@@ -201,6 +202,22 @@ async function measure(page, name) {
   );
   check(`${name}: 44px controls`, !result.badTargets.length, result.badTargets);
   check(`${name}: controls named`, !result.unnamed.length, result.unnamed);
+  return result;
+}
+
+async function qualifyNavigationTargetDetection(page) {
+  for (const dimension of ["width", "height"]) {
+    const style = await page.addStyleTag({
+      content: `.nx-identity nav a:first-child { ${dimension}:22px !important; min-${dimension}:22px !important; max-${dimension}:22px !important; padding:0 !important; overflow:hidden !important; }`,
+    });
+    try {
+      const observed = await measure(page, `navigation ${dimension} negative control`, { record: false });
+      const source = observed.badTargets.find((target) => target.tag === "A" && target.label === "Source");
+      check(`navigation ${dimension}: detector rejects 22px Source link`, Boolean(source && source[dimension] < 43.9), observed.badTargets);
+    } finally {
+      await style.evaluate((element) => element.remove());
+    }
+  }
 }
 
 async function contextFor(origin, options = {}) {
@@ -519,13 +536,14 @@ async function interactions(page, width) {
   for (const width of widths) {
     for (const theme of ["dark", "light"]) {
       console.log(`Rendering ${width}px ${theme} entry and workstation`);
-      const context = await contextFor(origin, { viewport: { width, height: 1000 } });
+      const context = await contextFor(origin, { viewport: { width, height: 1000 }, hasTouch: width <= 768 });
       const page = await context.newPage();
       await page.goto(origin, { waitUntil: "domcontentloaded" });
       await page.getByRole("button", { name: "Open instrument", exact: true }).waitFor();
       if (theme === "light")
         await page.getByRole("button", { name: "Switch to light appearance" }).click();
       await settle(page);
+      if (width === 320 && theme === "dark") await qualifyNavigationTargetDetection(page);
       await measure(page, `entry ${width} ${theme}`);
       check(
         `entry ${width} ${theme}: no passive audio or MIDI`,
