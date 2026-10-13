@@ -4,7 +4,7 @@
 # Do not point reusable-hf-deploy at this file.
 # Explicit COPY sources: the org deployer forbids bare `COPY .`.
 # Base image: estate HF factory pin (public.ecr.aws), matching yarqa.
-FROM public.ecr.aws/docker/library/node:26-bookworm-slim@sha256:662933cf47f013bc8e4beb31a6116448427a82057ba7c42c97e4c5ba766504c2
+FROM public.ecr.aws/docker/library/node:26-bookworm-slim@sha256:86f07bc9c5dce4578cf37e5a418b7bfc7f817cda25cde66e2b66e95ed86c4567
 
 ARG HF_CACHE_BUST=mkiii-4
 
