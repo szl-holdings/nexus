@@ -39,7 +39,6 @@ import math
 import pytest
 
 import nexus_dynamics as nd
-from nexus_dynamics import NexusState
 from nexus_dynamics.integrators import advance, rk4_substep
 from nexus_dynamics.programs import duffing, harmonic, vanderpol
 from nexus_dynamics.schema import DT_MAX, DT_MIN
@@ -105,7 +104,7 @@ def _duffing_strang_substep(chaos: float, drive: float, h: float, t: float):
     return lambda x, y: duffing.symplectic_substep(x, y, t, h, k, drive)
 
 
-def _gap(a: NexusState, b: NexusState) -> float:
+def _gap(a: nd.NexusState, b: nd.NexusState) -> float:
     return max(abs(a.x - b.x), abs(a.y - b.y))
 
 
@@ -191,7 +190,7 @@ def test_verlet_momentum_flip_reversibility(substep) -> None:
 # not validate h today; whether backward integration is a supported API is owner
 # decision D3. The substep-level checks above stay valid whatever D3 decides.
 ADVANCE_STATES = tuple(
-    NexusState(x, y, 0.5, t)
+    nd.NexusState(x, y, 0.5, t)
     for x, y, t in (
         (0.9, -0.3, 0.25), (1.0, 0.35, 0.0), (-0.6, -0.8, 2.0), (0.0, 0.7, 0.0), (1.3, 0.0, 0.0), (0.69, 0.8, 0.0),
     )
@@ -212,7 +211,7 @@ ROUNDTRIP_CASES = [
 LONG_HORIZON = {"harmonic": (1000, 1e-12), "duffing": (500, 1e-10)}
 
 
-def _roundtrip(program, state, h, substeps, chaos, drive, method) -> NexusState:
+def _roundtrip(program, state, h, substeps, chaos, drive, method) -> nd.NexusState:
     forward = advance(program, state, h, substeps, chaos, drive, method)
     return advance(program, forward, -h, substeps, chaos, drive, method)
 
@@ -311,7 +310,7 @@ def test_instrument_tick_jacobian(program, dt, chaos, drive) -> None:
     expected = 1.0 if program == "harmonic" else math.exp(-nd.coefficients("duffing", chaos).delta * dt)
 
     def tick(x, y):
-        out = nd.step(program, NexusState(x, y, 0.5, 1.7), dt, chaos, drive, "symplectic")
+        out = nd.step(program, nd.NexusState(x, y, 0.5, 1.7), dt, chaos, drive, "symplectic")
         return out.x, out.y
 
     for x0, y0 in STATES:
@@ -328,7 +327,7 @@ def test_euler_substep_is_not_symplectic() -> None:
     assert omega == 4.0
 
     def euler(x, y):
-        out = advance("harmonic", NexusState(x, y, 0.5, 0.0), h, 1, 1.0, 0.5, "euler4")
+        out = advance("harmonic", nd.NexusState(x, y, 0.5, 0.0), h, 1, 1.0, 0.5, "euler4")
         return out.x, out.y
 
     for x0, y0 in STATES:
@@ -390,7 +389,7 @@ def _redimensionalized_trajectory(setup: dict, ticks: int, dt: float):
     """Run the engine on the dimensionless inputs; return (seconds, x, v) in the set-up's units."""
     chaos, xi, eta, length = _nondimensionalize(setup["mass"], setup["stiffness"], setup["x0"], setup["v0"])
     seconds = SECONDS_PER_INSTRUMENT_TIME_UNIT
-    state = NexusState(xi, eta, 0.0, 0.0)
+    state = nd.NexusState(xi, eta, 0.0, 0.0)
     out = []
     for _ in range(ticks):
         state = nd.step("harmonic", state, dt, chaos, 0.5, "symplectic")
@@ -458,8 +457,8 @@ def test_time_rescaling_equivalence(method) -> None:
     fast_omega = nd.coefficients("harmonic", fast_chaos).omega
     assert (slow_omega, fast_omega) == (2.0, 4.0)
     x0, u0 = 0.8, -0.45  # u = y / omega
-    slow = NexusState(x0, u0 * slow_omega, 0.5, 0.0)
-    fast = NexusState(x0, u0 * fast_omega, 0.5, 0.0)
+    slow = nd.NexusState(x0, u0 * slow_omega, 0.5, 0.0)
+    fast = nd.NexusState(x0, u0 * fast_omega, 0.5, 0.0)
     worst = 0.0
     for _ in range(500):
         slow = nd.step("harmonic", slow, 0.04, slow_chaos, 0.5, method)
@@ -474,8 +473,8 @@ def test_time_rescaling_equivalence(method) -> None:
 def test_power_of_two_amplitude_scaling_is_bit_exact(method, chaos) -> None:
     """The oscillator maps are linear, and scaling by 2**10 is exact in binary floating point."""
     scale = 1024.0
-    base = NexusState(0.7, -0.25, 0.5, 0.0)
-    scaled = NexusState(base.x * scale, base.y * scale, base.z, base.t)
+    base = nd.NexusState(0.7, -0.25, 0.5, 0.0)
+    scaled = nd.NexusState(base.x * scale, base.y * scale, base.z, base.t)
     for _ in range(300):
         base = nd.step("harmonic", base, 0.02, chaos, 0.5, method)
         scaled = nd.step("harmonic", scaled, 0.02, chaos, 0.5, method)
