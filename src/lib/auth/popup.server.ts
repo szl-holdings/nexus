@@ -16,7 +16,7 @@
  * React route here paints the full app shell in the popup. The opener lives in
  * `client.ts` (`signIn` → `openSignInPopup`).
  */
-import { auth, SESSION_TOKEN_COOKIE } from "./server";
+import { auth, authRefusal, SESSION_TOKEN_COOKIE } from "./server";
 
 /** Message shape the popup posts to the opener (must match `client.ts`). */
 type PopupMessage = {
@@ -56,6 +56,16 @@ export async function handleAuthPopupRequest(request: Request): Promise<Response
     return new Response("Missing providerId", {
       status: 400,
       headers: { "content-type": "text/plain; charset=utf-8" },
+    });
+  }
+
+  // Federation was refused at startup (see `./federation`): say so plainly
+  // instead of failing on a provider that was never registered.
+  if (authRefusal !== null) {
+    return completionResponse({
+      source: "grok-auth-popup",
+      token: null,
+      error: "federated_sign_in_unavailable",
     });
   }
 

@@ -11,13 +11,18 @@
  * app only holds its own client id/secret and names the upstream it wants via
  * each provider's `idp` hint.
  *
- * Tri-mode:
+ * Modes (decided in `./federation`):
  *   - Deployed: the deployer injects a per-app `GROK_AUTH_*` + `BETTER_AUTH_URL`
  *     + `DATABASE_URL`, so real federated auth is persisted in Postgres.
- *   - Sandbox live preview: no injection -> falls back to the shared **preview
- *     client** (`./preview`) and derives the preview's `https://*.grok-sandbox.com`
- *     origin from the request, so real sign-in works (no demo users). Sessions
- *     and identities persist in the embedded PGLite DB (same DB as app data);
+ *   - Refused (fail closed): `BETTER_AUTH_URL` is set but the per-app
+ *     `GROK_AUTH_CLIENT_ID` / `GROK_AUTH_CLIENT_SECRET` pair is not. Federated
+ *     sign-in is unavailable and logged as an error; the shared preview client
+ *     is never substituted, and `requireUserId` refuses instead of resolving
+ *     the dev user (see `verify.server.ts`).
+ *   - Sandbox live preview: no `BETTER_AUTH_URL` -> the shared **preview
+ *     client** (`./preview`) and the preview's `https://*.grok-sandbox.com`
+ *     origin derived from the request, so real sign-in works (no demo users).
+ *     Sessions and identities persist in the embedded PGLite DB (same DB as app data);
  *     the process restart wipes both. Live-preview iframe clients use a bearer
  *     token (partitioned cookies) — see `client.ts`.
  *   - Off (`VITE_AUTH_ENABLED=false`, the shipped default): no providers;
@@ -40,6 +45,7 @@ import { emailAndPasswordEnabled } from "./email-password";
 import { GATE_PROVIDER_ID, gateIdentitySessions } from "./gate-session.server";
 import { GROK_PROVIDERS } from "./providers";
 import { pgliteDialect } from "./pglite-dialect";
+import { resolveFederation, type FederationMode } from "./federation";
 import {
   GROK_ISSUER_DEFAULT,
   PREVIEW_ALLOWED_HOSTS,
@@ -70,20 +76,33 @@ const env = (key: string): string | undefined => {
   return value ? value : undefined;
 };
 
-// Explicit off-switch. The deployer sets `VITE_AUTH_ENABLED=true` when it
-// provisions auth; set it to "false" to force auth off everywhere (dev user).
-const authDisabled = env("VITE_AUTH_ENABLED") === "false";
-
-// Broker federation creds: the deployer injects a per-app client when deployed;
-// otherwise fall back to the shared live-preview client, which the broker accepts
-// for any `*.grok-sandbox.com` callback (see `./preview`).
+// Broker federation creds. `VITE_AUTH_ENABLED=false` forces auth off everywhere
+// (dev user). When deployed (`BETTER_AUTH_URL` set) the deployer must inject a
+// per-app client; without both values federation is REFUSED, never backfilled
+// with the shared preview client. Only the dynamic sandbox preview (no
+// `BETTER_AUTH_URL`) may use the preview client, which the broker accepts for
+// any `*.grok-sandbox.com` callback (see `./preview` and `./federation`).
+const federation = resolveFederation(env, {
+  clientId: PREVIEW_CLIENT_ID,
+  clientSecret: PREVIEW_CLIENT_SECRET,
+});
 const grokIssuer = env("GROK_AUTH_ISSUER") ?? GROK_ISSUER_DEFAULT;
-const grokClientId = env("GROK_AUTH_CLIENT_ID") ?? PREVIEW_CLIENT_ID;
-const grokClientSecret = env("GROK_AUTH_CLIENT_SECRET") ?? PREVIEW_CLIENT_SECRET;
+const grokClient =
+  federation.mode === "preview" || federation.mode === "deployed" ? federation : null;
+
+/** Which federation mode this server resolved (see `./federation`). */
+export const authMode: FederationMode = federation.mode;
 
 /** True when federated sign-in is active (real auth is enforced). */
-export const authConfigured =
-  !authDisabled && Boolean(grokClientId && grokClientSecret);
+export const authConfigured = grokClient !== null;
+
+/**
+ * Why federated sign-in was refused (fail closed), or null. Names environment
+ * variables only, never values.
+ */
+export const authRefusal: string | null =
+  federation.mode === "refused" ? federation.reason : null;
+if (authRefusal !== null) console.error(`[auth] ${authRefusal}`);
 
 // This app's own Better Auth origin. When deployed the deployer injects the
 // public URL. In the sandbox live preview there's no fixed URL (each preview gets
@@ -150,12 +169,12 @@ export const SESSION_TOKEN_COOKIE = "__Host-grok-auth.session_token";
 
 // Built separately so the `betterAuth({...})` call stays easy to edit without
 // breaking brackets (models often trip on the conditional plugin spread).
-const grokOAuthPlugin = authConfigured
+const grokOAuthPlugin = grokClient
   ? genericOAuth({
       config: GROK_PROVIDERS.map(({ providerId, idp }) => ({
         providerId,
-        clientId: grokClientId as string,
-        clientSecret: grokClientSecret as string,
+        clientId: grokClient.clientId,
+        clientSecret: grokClient.clientSecret,
         // Prefer static endpoints over `discoveryUrl` so initiating (and
         // completing) OAuth does not wait on a broker discovery fetch.
         authorizationUrl: grokAuthorizationUrl,

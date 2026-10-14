@@ -1,6 +1,7 @@
 import { getRequest } from "@tanstack/react-start/server";
+import { requestAuthPolicy } from "./federation";
 import { gateIdentityEnabled } from "./gate-identity.server";
-import { auth, authConfigured } from "./server";
+import { auth, authConfigured, authMode, authRefusal } from "./server";
 
 /**
  * Server-side session resolution (server-only).
@@ -16,9 +17,17 @@ import { auth, authConfigured } from "./server";
 const databaseConfigured = Boolean(process.env.DATABASE_URL?.trim());
 
 /** Re-export so callers can branch on it without importing `server.ts`. */
-export { authConfigured };
+export { authConfigured, authRefusal };
 
-if (databaseConfigured && !authConfigured) {
+/** How this request is authenticated (see `requestAuthPolicy` in `./federation`). */
+function policy() {
+  return requestAuthPolicy(authMode, {
+    gateIdentity: gateIdentityEnabled(),
+    databaseConfigured,
+  });
+}
+
+if (databaseConfigured && authMode === "disabled") {
   console.error(
     "[auth] DATABASE_URL is set but auth is disabled (VITE_AUTH_ENABLED=false) " +
       "— requireUserId() will reject every request (fail closed) rather than " +
@@ -42,6 +51,20 @@ export class UnauthorizedError extends Error {
   }
 }
 
+/**
+ * Thrown by `requireUserId` when federated sign-in was refused at startup (a
+ * deployment without its own broker client; see `./federation`). Carries
+ * `status: 503`: the server is misconfigured, so the visitor is not sent to a
+ * sign-in that cannot work, and the shared dev user is never substituted.
+ */
+export class AuthUnavailableError extends Error {
+  readonly status = 503;
+  constructor(reason: string) {
+    super(`Auth unavailable: ${reason}`);
+    this.name = "AuthUnavailableError";
+  }
+}
+
 export type VerifiedUser = { id: string; email: string | null };
 
 /**
@@ -57,7 +80,7 @@ export type VerifiedUser = { id: string; email: string | null };
 export async function getSessionUser(
   bearerToken?: string,
 ): Promise<VerifiedUser | null> {
-  if (!authConfigured && !gateIdentityEnabled()) return null;
+  if (policy() !== "session") return null;
   const request = getRequest();
   if (!request) return null;
   let headers = request.headers;
@@ -80,16 +103,22 @@ export async function getSessionUser(
  *   closed): one shared dev user on a real database would let every visitor
  *   read/write everyone's rows.
  * - Auth disabled + no database -> the shared dev user id.
+ * - Federated sign-in refused (deployed without the per-app broker client) ->
+ *   throw `AuthUnavailableError`, with or without a database. Never the dev user.
  */
 export async function requireUserId(bearerToken?: string): Promise<string> {
-  if (!authConfigured && !gateIdentityEnabled()) {
-    if (databaseConfigured) {
+  switch (policy()) {
+    case "refuse-federation":
+      throw new AuthUnavailableError(authRefusal ?? "federated sign-in refused");
+    case "refuse-database":
       throw new Error(
         "Auth is disabled (VITE_AUTH_ENABLED=false) but DATABASE_URL is set — " +
           "refusing to fall back to the shared dev user against a real database.",
       );
-    }
-    return DEV_USER_ID;
+    case "dev-user":
+      return DEV_USER_ID;
+    case "session":
+      break;
   }
   const user = await getSessionUser(bearerToken);
   if (!user) throw new UnauthorizedError();
