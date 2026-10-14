@@ -212,20 +212,82 @@ def test_nemo_bank_of_wrong_length_is_rejected_at_step(length) -> None:
     assert caught.value.code == "INVALID_NEMO_BANK"
 
 
+@pytest.mark.parametrize("program", nd.PROGRAMS)
 @pytest.mark.parametrize(
     "state",
-    [(1.0, 0.0, 0.0, 0.0), [1.0, 0.0, 0.0, 0.0], {"x": 1.0, "y": 0.0, "z": 0.0, "t": 0.0}, None],
-    ids=["tuple", "list", "dict", "none"],
+    [(1.0, 0.0, 0.0, 0.0), [1.0, 0.0, 0.0, 0.0], {"x": 1.0, "y": 0.0, "z": 0.0, "t": 0.0}, None, "state"],
+    ids=["tuple", "list", "dict", "none", "str"],
 )
-def test_non_nexus_state_never_returns_a_state(state) -> None:
-    """Pins today's behaviour: a state that is not a NexusState never produces a result.
+def test_non_nexus_state_is_rejected_as_invalid_state(program, state) -> None:
+    """Owner decision D1: a state that is not a NexusState raises a typed INVALID_STATE.
 
-    TODO(owner decision D1): step() currently fails with an untyped AttributeError
-    (from state.is_finite) instead of a typed NexusDynamicsError. Accepting either
-    keeps this test valid if a typed INVALID_STATE is adopted; narrow it then.
+    Before D1 this failed with an untyped AttributeError from state.is_finite.
+    INVALID_STATE is the code the contract boundary already uses for a state
+    that is not an object (test_schema).
     """
-    with pytest.raises((AttributeError, NexusDynamicsError)):
-        nd.step("harmonic", state, 0.01, 0.5)
+    with pytest.raises(NexusDynamicsError) as caught:
+        nd.step(program, state, 0.01, 0.5)
+    assert caught.value.code == "INVALID_STATE"
+
+
+NON_NUMBER = [
+    pytest.param(True, id="true"),
+    pytest.param(False, id="false"),
+    pytest.param("0.5", id="string"),
+    pytest.param(None, id="none"),
+]
+
+
+@pytest.mark.parametrize(("program", "method"), PROGRAM_METHODS)
+@pytest.mark.parametrize("field", ["x", "y", "z", "t"])
+@pytest.mark.parametrize("bad", NON_NUMBER)
+def test_non_number_state_fields_are_rejected_as_invalid_state(program, method, field, bad) -> None:
+    """Owner decision D1: a bool (or any non-number) coordinate raises INVALID_STATE.
+
+    Before D1 a bool coordinate was accepted as 0 or 1, and a string or None
+    failed with an untyped TypeError. A NaN or infinite coordinate still raises
+    NON_FINITE_NUMBER (test_non_finite_state_fields_are_rejected_for_every_method).
+    """
+    state = dataclasses.replace(nd.seed(program, 0.3), **{field: bad})
+    with pytest.raises(NexusDynamicsError) as caught:
+        nd.step(program, state, 0.01, 0.5, 0.5, method)
+    assert caught.value.code == "INVALID_STATE"
+
+
+@pytest.mark.parametrize(("program", "method"), PROGRAM_METHODS)
+def test_int_state_fields_are_still_accepted(program, method) -> None:
+    """D1 rejects bools, not ints: an int coordinate (a JSON number) steps like the equal float."""
+    floats = nd.seed(program, 0.0)
+    ints = dataclasses.replace(floats, x=int(round(floats.x)), y=int(round(floats.y)), z=0, t=0)
+    as_floats = dataclasses.replace(floats, x=float(ints.x), y=float(ints.y), z=0.0, t=0.0)
+    assert all(type(v) is int for v in (ints.x, ints.y, ints.z, ints.t))
+    assert _bits(nd.step(program, ints, 0.01, 0.5, 0.5, method)) == _bits(
+        nd.step(program, as_floats, 0.01, 0.5, 0.5, method)
+    )
+
+
+@pytest.mark.parametrize("bad", NON_NUMBER)
+def test_non_number_nemo_bank_cells_are_rejected_as_invalid_state(bad) -> None:
+    """Owner decision D1 for the bank: a bool or other non-number cell raises INVALID_STATE."""
+    seeded = nd.seed("nemo", 0.3)
+    bank = list(seeded.bank or ())
+    bank[7] = bad
+    with pytest.raises(NexusDynamicsError) as caught:
+        nd.step("nemo", dataclasses.replace(seeded, bank=tuple(bank)), 0.01, 0.5)
+    assert caught.value.code == "INVALID_STATE"
+
+
+@pytest.mark.parametrize(
+    "bank",
+    ["v" * 20, 1.0, {index: 0.0 for index in range(20)}],
+    ids=["str", "float", "dict"],
+)
+def test_nemo_bank_that_is_not_a_tuple_or_list_is_rejected_as_invalid_state(bank) -> None:
+    """Before D1 a 20-key dict bank ran on its keys and a str or float bank raised TypeError."""
+    state = dataclasses.replace(nd.seed("nemo", 0.3), bank=bank)
+    with pytest.raises(NexusDynamicsError) as caught:
+        nd.step("nemo", state, 0.01, 0.5)
+    assert caught.value.code == "INVALID_STATE"
 
 
 @settings(max_examples=60)

@@ -30,6 +30,9 @@ of `h = dt / 4`.
 - `symplectic` (`strang-verlet/1`) is described in the table above.
 - An unsupported pair raises `UNSUPPORTED_METHOD`. A NaN or Infinity result
   raises `NON_FINITE_OUTPUT` and is never serialized.
+- `step()` rejects a malformed state with `INVALID_STATE`: a value that is not
+  a `NexusState`, or a coordinate or bank cell that is not a number (a bool
+  included). A NaN or infinite state value raises `NON_FINITE_NUMBER`.
 
 ## API
 
@@ -87,7 +90,8 @@ the same engine inputs, and in each unit system the re-dimensionalized
 trajectory follows the analytic spring-mass solution within the Verlet
 truncation error. The nondimensionalization lives only in that test file; it
 is not a unit contract. `test_integrators.py` also rejects non-finite state,
-`dt`, `chaos` and `drive` at `step()` and pins the instrument's silent dt clamp
+`dt`, `chaos` and `drive` at `step()`, rejects a malformed state with
+`INVALID_STATE` (owner decision D1), and pins the instrument's silent dt clamp
 as today's behaviour (an owner decision, not a contract). These are software
 simulation checks; `physicalHardware=false`, Energy UNAVAILABLE, and
 Conjecture 1 OPEN remain unchanged.
