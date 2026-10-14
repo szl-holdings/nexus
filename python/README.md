@@ -33,6 +33,9 @@ of `h = dt / 4`.
 - `step()` rejects a malformed state with `INVALID_STATE`: a value that is not
   a `NexusState`, or a coordinate or bank cell that is not a number (a bool
   included). A NaN or infinite state value raises `NON_FINITE_NUMBER`.
+- `clamp01` is `Math.min(1, Math.max(0, c))` as in `math.ts`, so a NaN chaos
+  stays NaN in `coefficients()` and `advance()` fails closed on it with
+  `NON_FINITE_OUTPUT`. Finite results are unchanged.
 
 ## API
 
@@ -91,10 +94,12 @@ trajectory follows the analytic spring-mass solution within the Verlet
 truncation error. The nondimensionalization lives only in that test file; it
 is not a unit contract. `test_integrators.py` also rejects non-finite state,
 `dt`, `chaos` and `drive` at `step()`, rejects a malformed state with
-`INVALID_STATE` (owner decision D1), and pins the instrument's silent dt clamp
-as today's behaviour (an owner decision, not a contract). These are software
-simulation checks; `physicalHardware=false`, Energy UNAVAILABLE, and
-Conjecture 1 OPEN remain unchanged.
+`INVALID_STATE` (owner decision D1), checks that a NaN chaos stays NaN like the
+TypeScript `clamp01` while finite clamps stay bit-identical (owner decision D2),
+and pins the instrument's silent dt clamp as today's behaviour (an owner
+decision, not a contract). These are software simulation checks;
+`physicalHardware=false`, Energy UNAVAILABLE, and Conjecture 1 OPEN remain
+unchanged.
 
 The separate optical tests compare forward intensity with the squared magnitude
 of the summed complex fields, plus beam symmetry, common-phase invariance, and
