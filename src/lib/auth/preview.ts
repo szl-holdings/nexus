@@ -9,8 +9,9 @@
  * remains unqualified and must be verified before enabling/publishing auth.
  * (broker: `app-builder-deployer/auth/src/preview-oauth.ts`). Baking it here lets
  * the live preview do REAL sign-in — no demo/mock users — with no platform
- * injection. When deployed the deployer injects a per-app
- * `GROK_AUTH_*` that overrides these (see `server.ts`).
+ * injection. Used ONLY on that dynamic preview path (no `BETTER_AUTH_URL`):
+ * a deployment must inject its own per-app `GROK_AUTH_*`, and one that does not
+ * fails closed rather than falling back to these (see `federation.ts`).
  *
  * These MUST equal the broker's `GROK_PREVIEW_CLIENT_ID` /
  * `GROK_PREVIEW_CLIENT_SECRET` (set in the broker's Vercel env; the broker stores
