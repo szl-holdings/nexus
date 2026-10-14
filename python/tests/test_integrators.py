@@ -292,6 +292,39 @@ def test_nemo_bank_that_is_not_a_tuple_or_list_is_rejected_as_invalid_state(bank
     assert caught.value.code == "INVALID_STATE"
 
 
+NON_NEMO_PROGRAM_METHODS = [(p, m) for p, m in PROGRAM_METHODS if p != "nemo"]
+
+
+@pytest.mark.parametrize(("program", "method"), NON_NEMO_PROGRAM_METHODS)
+@pytest.mark.parametrize(
+    "bank",
+    [(True,) * 20, ("v",) * 20, (None,) * 20, "v" * 20, 1.0, {index: 0.0 for index in range(20)}],
+    ids=["bool-cells", "str-cells", "none-cells", "str", "float", "dict"],
+)
+def test_malformed_bank_on_a_non_nemo_state_is_rejected_as_invalid_state(program, method, bank) -> None:
+    """D1 checks the bank's type on every program, not only NEMO.
+
+    Before D1 a non-NEMO step() accepted bool cells and a 20-key dict bank
+    (and dropped them), and raised an untyped TypeError for str/None cells or a
+    str/float bank.
+    """
+    state = dataclasses.replace(nd.seed(program, 0.3), bank=bank)
+    with pytest.raises(NexusDynamicsError) as caught:
+        nd.step(program, state, 0.01, 0.5, 0.5, method)
+    assert caught.value.code == "INVALID_STATE"
+
+
+@pytest.mark.parametrize(("program", "method"), NON_NEMO_PROGRAM_METHODS)
+def test_well_formed_bank_on_a_non_nemo_state_is_still_ignored(program, method) -> None:
+    """D1 does not reject a finite numeric bank on a non-NEMO state: step() still drops it."""
+    seeded = nd.seed(program, 0.3)
+    assert seeded.bank is None
+    with_bank = dataclasses.replace(seeded, bank=(0.25,) * 20)
+    out = nd.step(program, with_bank, 0.01, 0.5, 0.5, method)
+    assert out.bank is None
+    assert _bits(out) == _bits(nd.step(program, seeded, 0.01, 0.5, 0.5, method))
+
+
 # ---------------------------------------------------------------- NaN propagation (owner decision D2)
 
 # Math.min(1, Math.max(0, v)) in JavaScript (src/lib/nexus/math.ts clamp01),

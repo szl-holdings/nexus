@@ -16,9 +16,10 @@ methods share the same time grid:
 NEMO is a hybrid threshold/reset system and only runs its instrument scheme
 (``euler4``). Asking a program for a method it does not support raises
 ``UNSUPPORTED_METHOD``; a non-finite result raises ``NON_FINITE_OUTPUT``.
-``step`` rejects a malformed state (not a ``NexusState``, or a non-number or
-bool coordinate) with ``INVALID_STATE`` and a NaN or infinite state value
-with ``NON_FINITE_NUMBER``. ``advance``, the core that ``step`` calls after
+``step`` rejects a malformed state (not a ``NexusState``, a non-number or
+bool coordinate or bank cell, or a bank that is not a tuple or list, on every
+program) with ``INVALID_STATE`` and a NaN or infinite state value with
+``NON_FINITE_NUMBER``. ``advance``, the core that ``step`` calls after
 those checks, does not validate the state.
 
 A method's version string is part of every hashed output, so changing an

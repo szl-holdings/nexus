@@ -31,8 +31,10 @@ of `h = dt / 4`.
 - An unsupported pair raises `UNSUPPORTED_METHOD`. A NaN or Infinity result
   raises `NON_FINITE_OUTPUT` and is never serialized.
 - `step()` rejects a malformed state with `INVALID_STATE`: a value that is not
-  a `NexusState`, or a coordinate or bank cell that is not a number (a bool
-  included). A NaN or infinite state value raises `NON_FINITE_NUMBER`.
+  a `NexusState`, a coordinate or bank cell that is not a number (a bool
+  included), or a bank that is not a tuple or list. The bank check runs on
+  every program; a finite numeric bank on a non-NEMO state is still ignored. A
+  NaN or infinite state value raises `NON_FINITE_NUMBER`.
 - `clamp01` is `Math.min(1, Math.max(0, c))` as in `math.ts`, so a NaN chaos
   stays NaN in `coefficients()` and `advance()` fails closed on it with
   `NON_FINITE_OUTPUT`. Finite results are unchanged.
