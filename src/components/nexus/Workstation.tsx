@@ -10,6 +10,7 @@ import { Sequencer } from "./Sequencer";
 import { TapeDeck } from "./TapeDeck";
 import { Voice } from "./Voice";
 import { IdentityBar, NexusBoundaries, Welcome, type Surface } from "./NativeShell";
+import { AeroResearch } from "./AeroResearch";
 
 const KEY_NOTES: Record<string, number> = {
   KeyZ: 48,
@@ -311,6 +312,7 @@ export function Workstation() {
           </div>
         )}
       </main>
+      <AeroResearch />
       <NexusBoundaries />
     </div>
   );
