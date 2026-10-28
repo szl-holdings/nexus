@@ -162,7 +162,12 @@ export default defineConfig(({ command, isPreview }) => ({
     // Dev-only /__app-env, read by scripts/check-auth-invariant.mjs.
     appEnvPlugin(),
     tailwindcss(),
-    tanstackStart(),
+    // The Python-served Space ships "/" prerendered exactly as the Nitro server
+    // renders it, plus hashed assets. SPA-shell mode is not used: its shell omits
+    // the "/" match and the client hydration then mismatches (React #418).
+    process.env.NEXUS_BUILD_TARGET === "static"
+      ? tanstackStart({ prerender: { enabled: true, crawlLinks: false } })
+      : tanstackStart(),
     ...(command === "build" || isPreview
       ? [
           nitro({

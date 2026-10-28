@@ -25,7 +25,7 @@ export function buildInfo(rawRevision: unknown) {
     hf_repository: HF_REPOSITORY,
     deployment_authority: DEPLOYMENT_AUTHORITY,
     source_bound: sourceRevision !== UNAVAILABLE,
-    runtime: "NITRO_NODE_WEB_AUDIO",
+    runtime: "PYTHON_STDLIB_STATIC_WEB_AUDIO",
     frontend: "REACT_TANSTACK_WEB_AUDIO",
     audio_execution: "BROWSER_LOCAL_USER_GESTURE",
     deterministic_python_reference: "SOURCE_ONLY",
