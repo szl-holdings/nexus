@@ -27,6 +27,7 @@ import {
   type Waveform,
 } from "./types";
 import { loadPersisted, scheduleSave, type PersistedState } from "./store";
+import { restoreGrid } from "./persistence-grid";
 import { euclid, funcGenStep, midiToHz, analogCell, analogCircuit, analogCoefficients, analogCorrelate, analogJack, analogSchmitt, analogStep, scaleAnalog, seedAnalogState, opticalInterfere, opticalReconstruct, type AnalogState } from "./math";
 import {
   analogDelta,
@@ -307,7 +308,7 @@ class NexusEngine {
   async hydrate() {
     const data = await loadPersisted();
     if (!data || this.snapshot.powered) return;
-    const savedGrid = data.grid?.length === COLS ? data.grid : emptyGrid();
+    const savedGrid = restoreGrid(data.grid) ?? emptyGrid();
     const lit = savedGrid.some((col) => col.some(Boolean));
     this.snapshot = {
       ...this.snapshot,
@@ -1011,7 +1012,7 @@ class NexusEngine {
       seq: { ...DEFAULT_SEQ, ...sc.seq, playing: this.snapshot.seq.playing },
       analog: { ...DEFAULT_ANALOG, ...sc.analog },
       steps: sc.steps?.length === COLS ? sc.steps.map((st) => ({ ...st })) : this.snapshot.steps,
-      grid: sc.grid?.length === COLS ? sc.grid.map((c) => c.slice()) : this.snapshot.grid,
+      grid: restoreGrid(sc.grid) ?? this.snapshot.grid,
       patches: sc.patches?.length ? sc.patches.map((p) => ({ ...p })) : this.snapshot.patches,
       orbit: sc.orbit,
       scopeMode: sc.scopeMode,
