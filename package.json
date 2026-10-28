@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "node scripts/with-app-env.mjs vite dev --host 0.0.0.0 --port 8080",
     "build": "node scripts/with-app-env.mjs vite build && node scripts/verify-built-asset-closure.mjs && npm run db:migrate",
+    "build:static": "NEXUS_BUILD_TARGET=static node scripts/with-app-env.mjs vite build && node scripts/verify-built-asset-closure.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "build:dev": "node scripts/with-app-env.mjs vite build --mode development",
     "preview": "node scripts/with-app-env.mjs vite preview",
