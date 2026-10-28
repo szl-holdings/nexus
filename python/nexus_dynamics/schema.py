@@ -100,10 +100,25 @@ def finite_number(name: str, value: Any) -> float:
     """A JSON number (never a bool or a numeric string) that is finite."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise NexusDynamicsError(NON_FINITE_NUMBER, f"{name} must be a JSON number")
-    number = float(value)
+    try:
+        number = float(value)
+    except OverflowError:
+        # An int too large for a float; JSON.parse gives Infinity for it in dynamics.ts.
+        raise NexusDynamicsError(NON_FINITE_NUMBER, f"{name} must be finite") from None
     if not math.isfinite(number):
         raise NexusDynamicsError(NON_FINITE_NUMBER, f"{name} must be finite")
     return number
+
+
+def _is_finite(value: float) -> bool:
+    """``math.isfinite``, except that an int too large for a float is not finite
+    instead of raising OverflowError (``JSON.parse`` gives Infinity for it)."""
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        if isinstance(value, int):
+            return False
+        raise
 
 
 def number_in_range(name: str, value: Any, minimum: float, maximum: float) -> float:
@@ -145,7 +160,7 @@ class NexusState:
         return (self.x, self.y, self.z, self.t, *(self.bank or ()))
 
     def is_finite(self) -> bool:
-        return all(math.isfinite(value) for value in self.values())
+        return all(_is_finite(value) for value in self.values())
 
     @classmethod
     def from_dict(cls, program: str, payload: Any) -> "NexusState":
