@@ -149,6 +149,12 @@ interface VoiceSlot {
   filterB: BiquadFilterNode;
   pan: StereoPannerNode;
   stopAt: number;
+  /**
+   * Bumped every time the slot is triggered. A release cleanup timer only acts
+   * on the generation it released, so a slot that was reused or stolen in the
+   * meantime keeps its newer note (NEX-02).
+   */
+  gen: number;
 }
 
 class NexusEngine {
@@ -664,6 +670,7 @@ class NexusEngine {
       filterB,
       pan,
       stopAt: 0,
+      gen: 0,
     };
   }
 
@@ -1337,6 +1344,7 @@ class NexusEngine {
     time = Math.max(time, ctx.currentTime);
     const v = this.snapshot.voice;
     this.killOsc(slot, time);
+    slot.gen += 1;
     slot.busy = true;
     slot.midi = midi;
     slot.born = time;
@@ -1452,7 +1460,14 @@ class NexusEngine {
     slot.stopAt = time + rel + 0.05;
     slot.busy = false;
     slot.midi = -1;
-    window.setTimeout(() => this.killOsc(slot, time + rel), (rel + 0.08) * 1000);
+    const gen = slot.gen;
+    window.setTimeout(() => {
+      // Retriggered since this release (reuse, steal, note after panic): the
+      // previous note's sources were already stopped by triggerSlot, and the
+      // ones there now belong to the newer note.
+      if (slot.gen !== gen) return;
+      this.killOsc(slot, time + rel);
+    }, (rel + 0.08) * 1000);
   }
 
   private killOsc(slot: VoiceSlot, time: number) {
