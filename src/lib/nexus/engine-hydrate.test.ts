@@ -11,6 +11,7 @@ import {
   loadEngineHarness,
   type Harness,
 } from "./engine-test-harness.ts";
+import { savePersisted } from "./store.ts";
 import { COLS, ROWS, SCENE_COUNT, emptyGrid } from "./types.ts";
 
 let h: Harness;
@@ -158,5 +159,32 @@ describe("engine.loadScene grid restore (NEX-01)", () => {
     const sceneGrid = (scenes[0] as { grid: boolean[][] }).grid;
     assert.notEqual(grid, sceneGrid);
     assert.notEqual(grid[3], sceneGrid[3]);
+  });
+});
+
+describe("persistence fallback symmetry (NEX-01)", () => {
+  it("restores from localStorage when IndexedDB is absent, where the save path writes", async () => {
+    const storage = fakeLocalStorage();
+    h.setStorage({ indexedDB: undefined, localStorage: storage });
+    const writer = h.newEngine();
+    await savePersisted({ ...writer.persistNow(), master: 0.33, grid: diagonalGrid() });
+    assert.ok(storage.data.has("nexus-v1"), "save path wrote the localStorage fallback");
+
+    const reader = h.newEngine();
+    await reader.hydrate();
+    assert.equal(reader.getSnapshot().master, 0.33);
+    assert.deepEqual(reader.getSnapshot().grid, diagonalGrid());
+  });
+
+  it("still routes that localStorage record through the grid decoder", async () => {
+    const [malformed] = malformedGrids();
+    h.setStorage({
+      indexedDB: undefined,
+      localStorage: fakeLocalStorage({ "nexus-v1": JSON.stringify(record(malformed)) }),
+    });
+    const engine = h.newEngine();
+    await engine.hydrate();
+    assert.deepEqual(engine.getSnapshot().grid, emptyGrid());
+    assert.equal(engine.getSnapshot().master, 0.41);
   });
 });
