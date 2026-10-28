@@ -78,8 +78,8 @@ jobs:
                   raise SystemExit(f'local provider writer reintroduced: {fragment}')
           required = (
               'publish-nexus-space.yml',
-              'COPY --chown=node:node SOURCE_GITHUB_SHA /app/SOURCE_GITHUB_SHA',
-              'CMD ["node", ".output/server/index.mjs"]',
+              'COPY --chown=nexus:nexus SOURCE_GITHUB_SHA /app/SOURCE_GITHUB_SHA',
+              'CMD ["python", "-I", "-B", "/app/app_server.py"]',
               'PYTHON_STDLIB_STATIC_WEB_AUDIO',
               'path === "/api/build-info"',
               'source_revision: sourceRevision',
