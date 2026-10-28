@@ -229,7 +229,7 @@ jobs:
             done
           }
 
-          test "$(docker inspect --format '{{.Config.User}}' "$name")" = node
+          test "$(docker inspect --format '{{.Config.User}}' "$name")" = nexus
           wait_for_docker_health
 
       - name: Preserve container logs on failure

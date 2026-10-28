@@ -55,3 +55,14 @@ def test_missing_file_reads_unavailable(tmp_path):
 
 def test_dumps_is_compact_utf8():
     assert rt.dumps({"a": "·", "b": [1, True, None]}) == '{"a":"·","b":[1,true,null]}'.encode()
+
+
+def test_unreadable_revision_file_is_unavailable(tmp_path):
+    # Node readFileSync(path, "utf8") replaces invalid bytes; it never throws on them.
+    bad = tmp_path / "SOURCE_GITHUB_SHA"
+    bad.write_bytes(b"\xff" + SHA.encode())
+    assert rt.build_info(rt.read_source_revision(bad))["source_bound"] is False
+    crlf = tmp_path / "crlf"
+    crlf.write_bytes(SHA.encode() + b"\r\n")
+    assert rt.read_source_revision(crlf) == SHA + "\r\n"
+    assert rt.read_source_revision(tmp_path / "missing") == "UNAVAILABLE"

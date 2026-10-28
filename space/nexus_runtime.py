@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -43,7 +44,8 @@ def normalize_source_revision(raw: object) -> str:
 
 def read_source_revision(path: str | os.PathLike[str]) -> str:
     try:
-        with open(path, encoding="utf-8") as handle:
+        # Like Node readFileSync(path, "utf8"): bad bytes become U+FFFD, newlines stay.
+        with open(path, encoding="utf-8", errors="replace", newline="") as handle:
             return handle.read()
     except OSError:
         return UNAVAILABLE
@@ -95,8 +97,29 @@ ENDPOINTS = [
     {"id": "nexus-space", "label": "NEXUS hologram", "url": "https://szlholdings-nexus.hf.space/api/build-info"},
 ]
 
+FETCH_REDIRECT_LIMIT = 20
+# undici, behind Node's fetch, allows this much silence between body chunks.
+BODY_IDLE_TIMEOUT_S = 300.0
+
+
+class _FetchRedirects(urllib.request.HTTPRedirectHandler):
+    """Follow redirects like fetch: 20 at most, then a network error, not a status."""
+
+    max_repeats = max_redirections = FETCH_REDIRECT_LIMIT + 1  # the count below fails first
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        followed = getattr(req, "fetch_redirects", 0)
+        if followed == FETCH_REDIRECT_LIMIT:
+            fp.close()
+            raise urllib.error.URLError("redirect count exceeded")
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is not None:
+            new.fetch_redirects = followed + 1
+        return new
+
+
 # Node's fetch ignores proxy environment variables; so does this opener.
-_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), _FetchRedirects())
 
 
 class _NotJson(ValueError):
@@ -112,12 +135,49 @@ def _is_timeout(exc: BaseException) -> bool:
     return isinstance(exc, TimeoutError) or isinstance(reason, TimeoutError)
 
 
+def _open_head(url: str, timeout_s: float):
+    """Return the response once its head arrives within timeout_s of wall-clock time.
+
+    This is the TS abort timer: it covers DNS, connect, TLS, redirects and the head
+    together. The socket timeout is undici's body idle limit, which applies once the
+    head is in. A late attempt is abandoned and its response closed unread when it
+    arrives.
+    """
+    done = threading.Event()
+    lock = threading.Lock()
+    outcome: dict = {}
+
+    def attempt() -> None:
+        try:
+            result = (_OPENER.open(url, timeout=BODY_IDLE_TIMEOUT_S), None)
+        except BaseException as exc:  # noqa: BLE001 - re-raised in the caller
+            result = (None, exc)
+        with lock:
+            abandoned = "abandoned" in outcome
+            outcome["result"] = result
+        if abandoned:
+            late = result[0] if result[0] is not None else result[1]
+            getattr(late, "close", lambda: None)()  # an HTTPError holds a response too
+        done.set()
+
+    threading.Thread(target=attempt, daemon=True).start()
+    done.wait(timeout_s)
+    with lock:
+        if "result" not in outcome:
+            outcome["abandoned"] = True
+            raise TimeoutError("response head missed the deadline")
+    response, error = outcome["result"]
+    if error is not None:
+        raise error
+    return response
+
+
 def _probe_one(endpoint: dict, timeout_s: float, now_ms: Callable[[], int]) -> dict:
-    """Mirror probeOne(): the timeout covers the response head only, like the TS abort."""
+    """Mirror probeOne(): the deadline covers the response head only, like the TS abort."""
     at = now_ms()
     head = {"id": endpoint["id"], "label": endpoint["label"]}
     try:
-        response = _OPENER.open(endpoint["url"], timeout=timeout_s)
+        response = _open_head(endpoint["url"], timeout_s)
     except urllib.error.HTTPError as exc:
         exc.close()
         return {**head, "status": "UNAVAILABLE", "detail": f"HTTP {exc.code}", "at": at}

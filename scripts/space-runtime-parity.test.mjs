@@ -54,7 +54,35 @@ test("probe results match TS probeEstate() for every response class", async () =
   };
   const server = createServer((req, res) => {
     if (req.url === "/slow") {
-      setTimeout(() => res.end('{"status":"late"}'), 600);
+      setTimeout(() => res.end('{"status":"late"}'), 900);
+      return;
+    }
+    if (req.url === "/slow-body") {
+      const body = '{"status":"late body"}';
+      res.writeHead(200, { "content-length": Buffer.byteLength(body) });
+      res.flushHeaders();
+      setTimeout(() => res.end(body), 600);
+      return;
+    }
+    if (req.url === "/trickle") {
+      // Each gap is shorter than the timeout; the whole head arrives after it.
+      const body = '{"status":"ok"}';
+      const parts = ["HTTP/1.1 200 OK\r\n", "x-a: 1\r\n", "x-b: 1\r\n", "x-c: 1\r\n"];
+      parts.push(`content-length: ${body.length}\r\nconnection: close\r\n\r\n${body}`);
+      const tick = () => {
+        if (req.socket.destroyed) return;
+        req.socket.write(parts.shift());
+        if (parts.length) setTimeout(tick, 150);
+        else req.socket.end();
+      };
+      setTimeout(tick, 150);
+      return;
+    }
+    const hop = req.url.match(/^\/hop\/(\d+)$/);
+    if (hop) {
+      const left = Number(hop[1]);
+      if (left) res.writeHead(302, { location: `/hop/${left - 1}`, "content-length": 0 }).end();
+      else res.end('{"status":"ok"}');
       return;
     }
     const [status, body] = routes[req.url];
@@ -63,7 +91,7 @@ test("probe results match TS probeEstate() for every response class", async () =
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
-  const cases = [...Object.keys(routes), "/slow"].map((path) => ({
+  const cases = [...Object.keys(routes), "/slow", "/slow-body", "/trickle", "/hop/12", "/hop/21"].map((path) => ({
     id: path.startsWith("/role") || path === "/array" ? "nexus-space" : `e${path.slice(1)}`,
     label: path,
     url: base + path,
@@ -71,10 +99,10 @@ test("probe results match TS probeEstate() for every response class", async () =
   const original = ENDPOINTS.splice(0, ENDPOINTS.length, ...cases);
   try {
     const mask = (text) => text.replace(/"at":\d+/g, '"at":0');
-    const ts = JSON.stringify(await probeEstate(200));
+    const ts = JSON.stringify(await probeEstate(400));
     const { execFile } = await import("node:child_process");
     const py = await new Promise((resolve, reject) =>
-      execFile("python3", ["space/nexus_runtime.py", "probes", JSON.stringify(cases), "0.2"], (err, out) =>
+      execFile("python3", ["space/nexus_runtime.py", "probes", JSON.stringify(cases), "0.4"], (err, out) =>
         err ? reject(err) : resolve(out),
       ),
     );

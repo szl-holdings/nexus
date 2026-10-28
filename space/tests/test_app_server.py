@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """space/app_server.py: static workstation plus the runtime API, matching Nitro."""
+import socket
 import threading
 import time
 import urllib.error
@@ -39,6 +40,11 @@ def fetch(url, method="GET"):
             return response.status, {k.lower(): v for k, v in response.headers.items()}, response.read()
     except urllib.error.HTTPError as exc:
         return exc.code, {k.lower(): v for k, v in exc.headers.items()}, exc.read()
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
 
 
 API_HEADERS = {
@@ -83,7 +89,7 @@ def test_index_and_assets(site):
 
 
 def test_unknown_paths_are_404_html_like_nitro(site):
-    for path in ("/api/build-info/", "/some/client/route", "/assets/missing.js"):
+    for path in ("/some/client/route", "/assets/missing.js", "/" + "a" * 300):
         status, headers, _ = fetch(site + path)
         assert (status, headers["content-type"]) == (404, "text/html; charset=utf-8"), path
 
@@ -96,8 +102,37 @@ def test_traversal_never_leaves_static_dir(site):
 
 
 def test_non_get_methods_fall_through_to_404(site):
-    for method in ("POST", "PUT", "DELETE"):
-        assert fetch(site + "/healthz", method)[0] == 404, method
+    for method in ("POST", "PUT", "DELETE", "PROPFIND"):
+        status, headers, _ = fetch(site + "/healthz", method)
+        assert (status, headers["x-content-type-options"]) == (404, "nosniff"), method
+
+
+def test_api_paths_with_trailing_slashes_redirect_like_nitro(site):
+    no_redirects = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    for path, location in (
+        ("/api/build-info/", "/api/build-info"),
+        ("/api/build-info/?x=1", "/api/build-info?x=1"),
+        ("/healthz/", "/healthz"),
+        ("/health//", "/health"),
+        ("/api//build-info", "/api/build-info"),
+    ):
+        try:
+            no_redirects.open(site + path, timeout=5)
+        except urllib.error.HTTPError as exc:
+            assert (exc.code, exc.headers["location"]) == (307, location), path
+            assert exc.headers["x-content-type-options"] == "nosniff", path
+        else:
+            raise AssertionError(f"{path} was not redirected")
+    assert fetch(site + "/api/probes/")[0] == 200
+
+
+def test_malformed_requests_still_send_nosniff(site):
+    host, port = site.removeprefix("http://").split(":")
+    with socket.create_connection((host, int(port)), timeout=5) as conn:
+        conn.sendall(b"GET / HTTP/1.1\r\nx-long: " + b"a" * 70000 + b"\r\n\r\n")
+        reply = conn.recv(65536).decode("latin-1").lower()
+    assert reply.startswith("http/1.0 431"), reply[:40]
+    assert "x-content-type-options: nosniff" in reply
 
 
 def test_head_is_get_without_body(site):

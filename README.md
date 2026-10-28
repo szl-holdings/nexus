@@ -130,7 +130,7 @@ Then play the keys, patch ANLG into VCF, watch HOLO, and throw Chaos.
 - **Esc** panic (all notes off)
 - **?** shortcuts
 
-Patterns, patches, tape, and voice settings persist in IndexedDB on the machine that played them. No account is required. Audio execution and user state remain browser-local; the canonical Space uses a source-bound Nitro runtime for delivery and build identity, while the Python engine remains the deterministic reference and parity implementation.
+Patterns, patches, tape, and voice settings persist in IndexedDB on the machine that played them. No account is required. Audio execution and user state remain browser-local; the canonical Space serves the prerendered workstation and its source-bound build identity from a Python standard-library runtime (`space/app_server.py`), while the Python engine remains the deterministic reference and parity implementation.
 
 ## Source and runtime authority
 

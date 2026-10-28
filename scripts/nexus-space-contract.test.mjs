@@ -14,6 +14,7 @@ const workstation = readFileSync("src/components/nexus/Workstation.tsx", "utf8")
 const patchbay = readFileSync("src/components/nexus/Patchbay.tsx", "utf8");
 const voice = readFileSync("src/components/nexus/Voice.tsx", "utf8");
 const readme = readFileSync("README.md", "utf8");
+const ci = readFileSync(".github/workflows/ci.yml", "utf8");
 
 test("Space serves the prerendered Web Audio workstation from a Python-only runtime", () => {
   assert.match(packageJson.scripts.build, /verify-built-asset-closure\.mjs/);
@@ -40,6 +41,14 @@ test("Space serves the prerendered Web Audio workstation from a Python-only runt
   assert.doesNotMatch(dockerfile, /source_bound_server\.py/);
   const runtimeStage = dockerfile.slice(dockerfile.indexOf("AS runtime"));
   assert.doesNotMatch(runtimeStage, /\bnode\b(?!:)/, "runtime stage must not install or run Node");
+  assert.match(runtimeStage, /^USER nexus$/m);
+  assert.doesNotMatch(readme, /Nitro runtime/, "the Space card must name the runtime it ships");
+});
+
+test("CI container job checks the user the Space image runs as", () => {
+  const user = dockerfile.match(/^USER (\S+)$/m)?.[1];
+  assert.equal(user, "nexus");
+  assert.match(ci, new RegExp(`\\{\\{\\.Config\\.User\\}\\}' "\\$name"\\)" = ${user}$`, "m"));
 });
 
 test("root CSS is discovered from the client route manifest", () => {

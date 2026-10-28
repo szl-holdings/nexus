@@ -25,6 +25,7 @@ API_JSON_HEADERS = {
     "cache-control": "no-store",
 }
 IMMUTABLE = "public, max-age=31536000, immutable"
+REDIRECTED_API_PATHS = ("/api/build-info", "/health", "/healthz")
 
 
 class NexusHandler(BaseHTTPRequestHandler):
@@ -40,15 +41,29 @@ class NexusHandler(BaseHTTPRequestHandler):
     def _fall_through(self) -> None:
         self._respond(*self._not_found(), head=False)
 
-    do_POST = do_PUT = do_DELETE = do_PATCH = do_OPTIONS = _fall_through
+    def __getattr__(self, name: str):
+        # Every other method falls through to 404 like Nitro, not the stdlib 501 page.
+        if name.startswith("do_"):
+            return self._fall_through
+        raise AttributeError(name)
+
+    def end_headers(self) -> None:
+        # Every response says nosniff, including the stdlib's own error pages.
+        self.send_header("x-content-type-options", "nosniff")
+        super().end_headers()
 
     def _route(self) -> tuple[int, dict[str, str], bytes]:
-        path = urlsplit(self.path).path
+        url = urlsplit(self.path)
+        path = url.path
+        canonical = "/" + "/".join(segment for segment in path.split("/") if segment)
+        if canonical != path and canonical in REDIRECTED_API_PATHS:
+            # Nitro (TanStack Start) answers extra slashes with a 307 to the clean path.
+            return 307, {"location": canonical + (f"?{url.query}" if url.query else "")}, b""
         if path == "/api/build-info":
             return 200, dict(API_JSON_HEADERS), rt.dumps(rt.build_info(self._revision()))
         if path in ("/health", "/healthz"):
             return 200, dict(API_JSON_HEADERS), rt.dumps(rt.runtime_health(self._revision()))
-        if path == "/api/probes":
+        if canonical == "/api/probes":
             return 200, {"content-type": "application/json"}, rt.dumps(rt.probe_estate())
         return self._static(path)
 
@@ -60,13 +75,17 @@ class NexusHandler(BaseHTTPRequestHandler):
         relative = "index.html" if path == "/" else unquote(path).lstrip("/")
         if "\x00" in relative:
             return self._not_found()
-        candidate = (root / relative).resolve()
-        if not candidate.is_relative_to(root) or not candidate.is_file():
+        try:
+            candidate = (root / relative).resolve()
+            if not candidate.is_relative_to(root) or not candidate.is_file():
+                return self._not_found()
+            body = candidate.read_bytes()
+        except OSError:  # e.g. a path segment longer than the filesystem allows
             return self._not_found()
         headers = {"content-type": _content_type(candidate)}
         if candidate.is_relative_to(root / "assets"):
             headers["cache-control"] = IMMUTABLE
-        return 200, headers, candidate.read_bytes()
+        return 200, headers, body
 
     def _not_found(self) -> tuple[int, dict[str, str], bytes]:
         index = self.server.static_dir / "index.html"
@@ -77,7 +96,6 @@ class NexusHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         for key, value in headers.items():
             self.send_header(key, value)
-        self.send_header("x-content-type-options", "nosniff")
         self.send_header("content-length", str(len(body)))
         self.end_headers()
         if not head:

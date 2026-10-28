@@ -1,5 +1,5 @@
 # Leftover vite-dev image. NOT the Hugging Face Space image.
-# Space image is space/Dockerfile (prebuilt Nitro node-server, port 7860).
+# Space image is space/Dockerfile (prerendered static build served by Python, port 7860).
 # Canonical publisher: szl-holdings/yarqa deploy-nexus.yml.
 # Do not point reusable-hf-deploy at this file.
 # Explicit COPY sources: the org deployer forbids bare `COPY .`.
