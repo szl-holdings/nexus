@@ -1,6 +1,6 @@
 # Nexus/Immune seam: acoustic importer (PROPOSAL, FIXTURE_ONLY)
 
-Status: **PROPOSAL, not ratified.** Draft for owner review. Do not merge.
+Status: **PROPOSAL, not ratified.** Merged 2026-10-28 as an unratified proposal; reconcile with ACOUSTIC_IMPORT_CONTRACT.md before any admission decision.
 
 `ACOUSTIC_IMPORT_CONTRACT.md` was not found in any ref of `szl-holdings/nexus`
 or `szl-holdings/immune` (searched 2026-10-28 UTC). This importer is therefore
