@@ -15,8 +15,8 @@ const LOCK = JSON.parse(readFileSync(join(ROOT, "package-lock.json"), "utf8"));
 const APPROVED_PINS = {
   "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1", // v7.0.1
   "actions/setup-node": "949feb2413d6458794dcd2491c4babbbce0c15c1", // v7.1.0
-  "actions/setup-python": "5fda3b95a4ea91299a34e894583c3862153e4b97", // v7.0.0
-  "step-security/harden-runner": "ccd8616d44fd3846e67624a50d5aad6d37bf2d25", // v2.22.1
+  "actions/setup-python": "6d4fd22b20465ccc0f7354476588e8df7c9ca0e0", // v7.1.0
+  "step-security/harden-runner": "dc2769abcc0fcfbadfc1df54081c1608579ef6b2", // v2.22.2
 };
 
 function onBlock() {
