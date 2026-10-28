@@ -114,6 +114,13 @@ jobs:
           git ls-files -z -- '*.py' | xargs -0 -r python -m py_compile
           echo "compiled: $(git ls-files -- '*.py' | tr '\n' ' ')"
 
+      - name: Shared scripts/ template matches the a11oy-factory lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -I .github/scripts/check_template_drift.py
+          python -I -m unittest discover -s .github/scripts -p "test_check_template_drift.py" -v
+
       - name: Hologram server selftest
         run: python server.py --selftest
 
