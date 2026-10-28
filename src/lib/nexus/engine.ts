@@ -144,6 +144,8 @@ interface VoiceSlot {
   born: number;
   oscs: OscillatorNode[];
   noise: AudioBufferSourceNode | null;
+  /** Per-note non-source nodes (osc/FM gains, pluck delay loop), released with the note. */
+  parts: AudioNode[];
   env: GainNode;
   filterA: BiquadFilterNode;
   filterB: BiquadFilterNode;
@@ -665,6 +667,7 @@ class NexusEngine {
       born: 0,
       oscs: [],
       noise: null,
+      parts: [],
       env,
       filterA,
       filterB,
@@ -1391,6 +1394,7 @@ class NexusEngine {
           fmG.connect(oscA.frequency);
           fm.start(time);
           slot.oscs.push(fm);
+          slot.parts.push(fmG);
         }
         oscA.connect(gA);
         oscB.connect(gB);
@@ -1399,6 +1403,7 @@ class NexusEngine {
         oscA.start(time);
         oscB.start(time);
         slot.oscs.push(oscA, oscB);
+        slot.parts.push(gA, gB);
       }
     }
 
@@ -1437,6 +1442,9 @@ class NexusEngine {
     burst.start(time);
     burst.stop(time + period * 4);
     slot.noise = burst;
+    // The delay -> filter -> feedback loop is a cycle; it stays wired into the
+    // voice (and alive) until it is explicitly disconnected.
+    slot.parts.push(delay, lp, fb);
   }
 
   private glideSlot(slot: VoiceSlot, midi: number, time: number) {
@@ -1489,6 +1497,14 @@ class NexusEngine {
       }
       slot.noise = null;
     }
+    for (const node of slot.parts) {
+      try {
+        node.disconnect();
+      } catch {
+        /* already disconnected */
+      }
+    }
+    slot.parts = [];
   }
 
   triggerCell(col: number, row: number, vel = 0.85) {

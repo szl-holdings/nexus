@@ -163,3 +163,52 @@ describe("voice release fencing (NEX-02)", () => {
     assert.equal(r.engine.getSnapshot().activeNotes, held.length);
   });
 });
+
+describe("per-note node retention (NEX-02)", () => {
+  const voices = [
+    ["oscillator voice with unison and FM", { unison: 3, fmIndex: 0.4 }],
+    ["pluck voice", { waveform: "pluck" }],
+  ] as const;
+
+  for (const [label, voice] of voices) {
+    it(`${label}: every node built for a note is disconnected by its cleanup`, async () => {
+      const r = await rig();
+      r.engine.setVoice(voice);
+      const start = r.ctx.created.length;
+      r.engine.noteOn(60);
+      const perNote = r.ctx.created.slice(start);
+      assert.ok(perNote.length > 0, "the note built per-note nodes");
+      h.clock.advance(50);
+      r.engine.noteOff(60);
+      h.clock.advance(AFTER_RELEASE_MS);
+      const retained = perNote.filter((n) => n.outputs.size > 0).map((n) => n.kind);
+      assert.deepEqual(retained, [], "per-note nodes still wired into the voice");
+    });
+
+    it(`${label}: reusing a slot releases the previous note's nodes, not the new ones`, async () => {
+      const r = await rig();
+      r.engine.setVoice(voice);
+      const a = r.ctx.created.length;
+      r.engine.noteOn(60);
+      const b = r.ctx.created.length;
+      h.clock.advance(20);
+      r.engine.noteOff(60);
+      h.clock.advance(20);
+      r.engine.noteOn(62); // same slot
+      const c = r.ctx.created.length;
+      h.clock.advance(AFTER_RELEASE_MS);
+      const oldNodes = r.ctx.created.slice(a, b);
+      const newNodes = r.ctx.created.slice(b, c);
+      assert.deepEqual(
+        oldNodes.filter((n) => n.outputs.size > 0).map((n) => n.kind),
+        [],
+        "previous note's nodes retained after reuse",
+      );
+      assert.ok(newNodes.length > 0);
+      assert.ok(
+        newNodes.every((n) => n.outputs.size > 0),
+        "held note's nodes were disconnected",
+      );
+    });
+  }
+});
