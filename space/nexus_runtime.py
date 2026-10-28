@@ -150,7 +150,7 @@ def _open_head(url: str, timeout_s: float):
     def attempt() -> None:
         try:
             result = (_OPENER.open(url, timeout=BODY_IDLE_TIMEOUT_S), None)
-        except BaseException as exc:  # noqa: BLE001 - re-raised in the caller
+        except Exception as exc:  # noqa: BLE001 - re-raised in the caller
             result = (None, exc)
         with lock:
             abandoned = "abandoned" in outcome
