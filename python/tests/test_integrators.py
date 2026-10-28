@@ -6,12 +6,14 @@ import dataclasses
 import math
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 import nexus_dynamics as nd
 from nexus_dynamics import NexusDynamicsError, NexusState
-from nexus_dynamics.integrators import advance, rk4_substep, step_with_events
+from nexus_dynamics._num import clamp01
+from nexus_dynamics.analog import analog_circuit, analog_jack
+from nexus_dynamics.integrators import SUBSTEPS, advance, rk4_substep, step_with_events
 from nexus_dynamics.programs import duffing, harmonic, lotka
 from nexus_dynamics.schema import DT_MAX, DT_MIN
 
@@ -212,20 +214,200 @@ def test_nemo_bank_of_wrong_length_is_rejected_at_step(length) -> None:
     assert caught.value.code == "INVALID_NEMO_BANK"
 
 
+@pytest.mark.parametrize("program", nd.PROGRAMS)
 @pytest.mark.parametrize(
     "state",
-    [(1.0, 0.0, 0.0, 0.0), [1.0, 0.0, 0.0, 0.0], {"x": 1.0, "y": 0.0, "z": 0.0, "t": 0.0}, None],
-    ids=["tuple", "list", "dict", "none"],
+    [(1.0, 0.0, 0.0, 0.0), [1.0, 0.0, 0.0, 0.0], {"x": 1.0, "y": 0.0, "z": 0.0, "t": 0.0}, None, "state"],
+    ids=["tuple", "list", "dict", "none", "str"],
 )
-def test_non_nexus_state_never_returns_a_state(state) -> None:
-    """Pins today's behaviour: a state that is not a NexusState never produces a result.
+def test_non_nexus_state_is_rejected_as_invalid_state(program, state) -> None:
+    """Owner decision D1: a state that is not a NexusState raises a typed INVALID_STATE.
 
-    TODO(owner decision D1): step() currently fails with an untyped AttributeError
-    (from state.is_finite) instead of a typed NexusDynamicsError. Accepting either
-    keeps this test valid if a typed INVALID_STATE is adopted; narrow it then.
+    Before D1 this failed with an untyped AttributeError from state.is_finite.
+    INVALID_STATE is the code the contract boundary already uses for a state
+    that is not an object (test_schema).
     """
-    with pytest.raises((AttributeError, NexusDynamicsError)):
-        nd.step("harmonic", state, 0.01, 0.5)
+    with pytest.raises(NexusDynamicsError) as caught:
+        nd.step(program, state, 0.01, 0.5)
+    assert caught.value.code == "INVALID_STATE"
+
+
+NON_NUMBER = [
+    pytest.param(True, id="true"),
+    pytest.param(False, id="false"),
+    pytest.param("0.5", id="string"),
+    pytest.param(None, id="none"),
+]
+
+
+@pytest.mark.parametrize(("program", "method"), PROGRAM_METHODS)
+@pytest.mark.parametrize("field", ["x", "y", "z", "t"])
+@pytest.mark.parametrize("bad", NON_NUMBER)
+def test_non_number_state_fields_are_rejected_as_invalid_state(program, method, field, bad) -> None:
+    """Owner decision D1: a bool (or any non-number) coordinate raises INVALID_STATE.
+
+    Before D1 a bool coordinate was accepted as 0 or 1, and a string or None
+    failed with an untyped TypeError. A NaN or infinite coordinate still raises
+    NON_FINITE_NUMBER (test_non_finite_state_fields_are_rejected_for_every_method).
+    """
+    state = dataclasses.replace(nd.seed(program, 0.3), **{field: bad})
+    with pytest.raises(NexusDynamicsError) as caught:
+        nd.step(program, state, 0.01, 0.5, 0.5, method)
+    assert caught.value.code == "INVALID_STATE"
+
+
+@pytest.mark.parametrize(("program", "method"), PROGRAM_METHODS)
+def test_int_state_fields_are_still_accepted(program, method) -> None:
+    """D1 rejects bools, not ints: an int coordinate (a JSON number) steps like the equal float."""
+    floats = nd.seed(program, 0.0)
+    ints = dataclasses.replace(floats, x=int(round(floats.x)), y=int(round(floats.y)), z=0, t=0)
+    as_floats = dataclasses.replace(floats, x=float(ints.x), y=float(ints.y), z=0.0, t=0.0)
+    assert all(type(v) is int for v in (ints.x, ints.y, ints.z, ints.t))
+    assert _bits(nd.step(program, ints, 0.01, 0.5, 0.5, method)) == _bits(
+        nd.step(program, as_floats, 0.01, 0.5, 0.5, method)
+    )
+
+
+@pytest.mark.parametrize("bad", NON_NUMBER)
+def test_non_number_nemo_bank_cells_are_rejected_as_invalid_state(bad) -> None:
+    """Owner decision D1 for the bank: a bool or other non-number cell raises INVALID_STATE."""
+    seeded = nd.seed("nemo", 0.3)
+    bank = list(seeded.bank or ())
+    bank[7] = bad
+    with pytest.raises(NexusDynamicsError) as caught:
+        nd.step("nemo", dataclasses.replace(seeded, bank=tuple(bank)), 0.01, 0.5)
+    assert caught.value.code == "INVALID_STATE"
+
+
+@pytest.mark.parametrize(
+    "bank",
+    ["v" * 20, 1.0, {index: 0.0 for index in range(20)}],
+    ids=["str", "float", "dict"],
+)
+def test_nemo_bank_that_is_not_a_tuple_or_list_is_rejected_as_invalid_state(bank) -> None:
+    """Before D1 a 20-key dict bank ran on its keys and a str or float bank raised TypeError."""
+    state = dataclasses.replace(nd.seed("nemo", 0.3), bank=bank)
+    with pytest.raises(NexusDynamicsError) as caught:
+        nd.step("nemo", state, 0.01, 0.5)
+    assert caught.value.code == "INVALID_STATE"
+
+
+NON_NEMO_PROGRAM_METHODS = [(p, m) for p, m in PROGRAM_METHODS if p != "nemo"]
+
+
+@pytest.mark.parametrize(("program", "method"), NON_NEMO_PROGRAM_METHODS)
+@pytest.mark.parametrize(
+    "bank",
+    [(True,) * 20, ("v",) * 20, (None,) * 20, "v" * 20, 1.0, {index: 0.0 for index in range(20)}],
+    ids=["bool-cells", "str-cells", "none-cells", "str", "float", "dict"],
+)
+def test_malformed_bank_on_a_non_nemo_state_is_rejected_as_invalid_state(program, method, bank) -> None:
+    """D1 checks the bank's type on every program, not only NEMO.
+
+    Before D1 a non-NEMO step() accepted bool cells and a 20-key dict bank
+    (and dropped them), and raised an untyped TypeError for str/None cells or a
+    str/float bank.
+    """
+    state = dataclasses.replace(nd.seed(program, 0.3), bank=bank)
+    with pytest.raises(NexusDynamicsError) as caught:
+        nd.step(program, state, 0.01, 0.5, 0.5, method)
+    assert caught.value.code == "INVALID_STATE"
+
+
+@pytest.mark.parametrize(("program", "method"), NON_NEMO_PROGRAM_METHODS)
+def test_well_formed_bank_on_a_non_nemo_state_is_still_ignored(program, method) -> None:
+    """D1 does not reject a finite numeric bank on a non-NEMO state: step() still drops it."""
+    seeded = nd.seed(program, 0.3)
+    assert seeded.bank is None
+    with_bank = dataclasses.replace(seeded, bank=(0.25,) * 20)
+    out = nd.step(program, with_bank, 0.01, 0.5, 0.5, method)
+    assert out.bank is None
+    assert _bits(out) == _bits(nd.step(program, seeded, 0.01, 0.5, 0.5, method))
+
+
+# ---------------------------------------------------------------- NaN propagation (owner decision D2)
+
+# Math.min(1, Math.max(0, v)) in JavaScript (src/lib/nexus/math.ts clamp01),
+# recorded with Node 24 for each input. -0 gives +0 there, and here.
+JS_CLAMP01 = [
+    (-0.0, 0.0),
+    (0.0, 0.0),
+    (1.0, 1.0),
+    (-1.0, 0.0),
+    (2.0, 1.0),
+    (math.inf, 1.0),
+    (-math.inf, 0.0),
+    (0.5, 0.5),
+    (5e-324, 5e-324),
+    (-5e-324, 0.0),
+    (1 - 2**-53, 1 - 2**-53),
+]
+
+
+def test_clamp01_propagates_nan_like_math_ts() -> None:
+    assert math.isnan(clamp01(math.nan))
+    for value, expected in JS_CLAMP01:
+        assert clamp01(value).hex() == expected.hex(), value
+
+
+@example(-0.0)
+@example(0.0)
+@example(1.0)
+@example(math.inf)
+@example(-math.inf)
+@given(st.floats(allow_nan=False))
+def test_clamp01_is_bit_identical_to_the_old_formula_off_nan(value) -> None:
+    """D2 changes only NaN: every other input keeps the exact float, -0.0 included."""
+    assert clamp01(value).hex() == min(1.0, max(0.0, value)).hex()
+
+
+# Pots that are NaN in analogCoefficients(NaN, program) in src/lib/nexus/math.ts,
+# recorded with Node 24 (the label is a string and is left out).
+TS_NAN_POTS = {
+    "lorenz": {"rho"},
+    "harmonic": {"rho", "omega"},
+    "vanderpol": {"rho", "mu"},
+    "duffing": {"rho", "delta", "gamma"},
+    "lotka": {"rho", "beta", "delta", "alpha"},
+    "nemo": {"rho", "mu", "delta", "gamma"},
+}
+
+
+@pytest.mark.parametrize("program", nd.PROGRAMS)
+def test_coefficients_propagate_a_nan_chaos(program) -> None:
+    """D2: chaos = NaN gives NaN in exactly the chaos-dependent pots, as math.ts does.
+
+    Before D2, clamp01 masked NaN to 0, so coefficients(p, nan) equalled
+    coefficients(p, 0.0). The pots that do not depend on chaos are unchanged.
+    """
+    pots = nd.coefficients(program, math.nan).to_dict()
+    low = nd.coefficients(program, 0.0).to_dict()
+    high = nd.coefficients(program, 1.0).to_dict()
+    numeric = [key for key in pots if key != "label"]
+    nan_pots = {key for key in numeric if math.isnan(pots[key])}
+    assert nan_pots == TS_NAN_POTS[program]
+    assert nan_pots == {key for key in numeric if low[key] != high[key]}
+    assert all(pots[key] == low[key] for key in numeric if key not in nan_pots)
+
+
+@pytest.mark.parametrize(("program", "method"), [(p, m) for p, m in PROGRAM_METHODS if p != "nemo"])
+def test_advance_with_nan_chaos_fails_closed(program, method) -> None:
+    """D2: advance(chaos=nan) raises NON_FINITE_OUTPUT; before D2 it silently ran chaos = 0.
+
+    step() still rejects a NaN chaos up front with NON_FINITE_NUMBER
+    (test_non_finite_or_non_number_scalars_are_rejected).
+    """
+    with pytest.raises(NexusDynamicsError) as caught:
+        advance(program, nd.seed(program, 0.3), 0.005, SUBSTEPS, math.nan, 0.7, method)
+    assert caught.value.code == "NON_FINITE_OUTPUT"
+
+
+def test_analog_jack_with_nan_drive_matches_math_ts() -> None:
+    """D2: analogJack(analogCircuit(0.6, 0.3, 0.2), 0.4, NaN) is 0 in math.ts (recorded with
+    Node 24). Before D2 the Python port masked the NaN drive to 0 and returned 0.33."""
+    circuit = analog_circuit(0.6, 0.3, 0.2)
+    assert analog_jack(circuit, 0.4, 0.0) == pytest.approx(0.33, abs=1e-15)
+    assert analog_jack(circuit, 0.4, math.nan) == 0.0
 
 
 @settings(max_examples=60)

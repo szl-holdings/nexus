@@ -60,10 +60,6 @@ jobs:
           import re
 
           workflow = Path('.github/workflows/hf-deploy.yml').read_text(encoding='utf-8')
-          dockerfile = Path('space/Dockerfile').read_text(encoding='utf-8')
-          wrapper = Path('source_bound_server.py').read_text(encoding='utf-8')
-          runtime = Path('server/middleware/nexus-runtime.ts').read_text(encoding='utf-8')
-          identity = Path('src/lib/nexus/source-identity.ts').read_text(encoding='utf-8')
           readme = Path('README.md').read_text(encoding='utf-8')
           agents = Path('AGENTS.md').read_text(encoding='utf-8')
           forbidden = (
@@ -76,16 +72,21 @@ jobs:
           for fragment in forbidden:
               if fragment in workflow:
                   raise SystemExit(f'local provider writer reintroduced: {fragment}')
+          # Each control is looked up in the file that carries it, never in this
+          # workflow: the workflow spells every one of them here, so it would match all.
           required = (
-              'publish-nexus-space.yml',
-              'COPY --chown=nexus:nexus SOURCE_GITHUB_SHA /app/SOURCE_GITHUB_SHA',
-              'CMD ["python", "-I", "-B", "/app/app_server.py"]',
-              'PYTHON_STDLIB_STATIC_WEB_AUDIO',
-              'path === "/api/build-info"',
-              'source_revision: sourceRevision',
+              ('src/lib/nexus/source-identity.ts', 'publish-nexus-space.yml'),
+              ('space/Dockerfile', 'COPY --chown=nexus:nexus SOURCE_GITHUB_SHA /app/SOURCE_GITHUB_SHA'),
+              ('space/Dockerfile', 'CMD ["python", "-I", "-B", "/app/app_server.py"]'),
+              ('src/lib/nexus/source-identity.ts', 'PYTHON_STDLIB_STATIC_WEB_AUDIO'),
+              ('server/middleware/nexus-runtime.ts', 'path === "/api/build-info"'),
+              ('src/lib/nexus/source-identity.ts', 'source_revision: sourceRevision'),
           )
-          combined = workflow + '\n' + dockerfile + '\n' + wrapper + '\n' + runtime + '\n' + identity
-          missing = [fragment for fragment in required if fragment not in combined]
+          missing = [
+              f'{path}: {fragment}'
+              for path, fragment in required
+              if fragment not in Path(path).read_text(encoding='utf-8')
+          ]
           if missing:
               raise SystemExit(f'missing Nexus publication/source controls: {missing!r}')
 
