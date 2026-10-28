@@ -114,6 +114,11 @@ def test_nemo_bank_15_is_padded_with_unit_weights() -> None:
         ({"state": {"x": 0, "y": 0, "z": 0, "t": 0, "bank": [0.0] * 20}}, "UNSUPPORTED_STATE_FIELD"),
         ({"state": {"x": math.inf, "y": 0, "z": 0, "t": 0}}, "NON_FINITE_NUMBER"),
         ({"state": {"x": math.nan, "y": 0, "z": 0, "t": 0}}, "NON_FINITE_NUMBER"),
+        # A JSON integer too large for a float: json.loads keeps it an int, JSON.parse gives Infinity.
+        ({"dt": 2**1024}, "NON_FINITE_NUMBER"),
+        ({"axes": [10**400]}, "NON_FINITE_NUMBER"),
+        ({"state": {"x": 10**400, "y": 0, "z": 0, "t": 0}}, "NON_FINITE_NUMBER"),
+        ({"program": "nemo", "state": {"x": 0, "y": 0, "z": 0, "t": 0, "bank": [2**1024] * 20}}, "NON_FINITE_NUMBER"),
         ({"state": {"x": 0, "y": 0, "z": 0, "t": 2e6}}, "OUT_OF_RANGE"),
         ({"state": {"x": 0, "y": 0, "z": 0, "t": -1}}, "OUT_OF_RANGE"),
         ({"state": [1, 0, 0, 0]}, "INVALID_STATE"),
@@ -165,3 +170,11 @@ def test_valid_inputs_round_trip(payload) -> None:
     run = NexusRunInput.from_dict(payload)
     assert run.to_dict() == payload
     assert NexusRunInput.from_dict(run.to_dict()) == run
+
+
+def test_finite_number_returns_the_float_it_checked() -> None:
+    """One conversion, checked and returned: a float subclass whose __float__ gives inf fails closed."""
+    to_inf = type("ToInf", (float,), {"__float__": lambda self: math.inf})
+    with pytest.raises(NexusDynamicsError) as caught:
+        S.finite_number("dt", to_inf(0.01))
+    assert caught.value.code == "NON_FINITE_NUMBER"

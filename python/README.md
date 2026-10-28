@@ -34,7 +34,9 @@ of `h = dt / 4`.
   a `NexusState`, a coordinate or bank cell that is not a number (a bool
   included), or a bank that is not a tuple or list. The bank check runs on
   every program; a finite numeric bank on a non-NEMO state is still ignored. A
-  NaN or infinite state value raises `NON_FINITE_NUMBER`.
+  NaN or infinite state value raises `NON_FINITE_NUMBER`, and so does an int
+  too large for a float, there and at the contract boundary (`JSON.parse` gives
+  Infinity for it, which `dynamics.ts` and `math.ts` reject the same way).
 - `clamp01` is `Math.min(1, Math.max(0, c))` as in `math.ts`, so a NaN chaos
   stays NaN in `coefficients()` and `advance()` fails closed on it with
   `NON_FINITE_OUTPUT`. Finite results are unchanged.

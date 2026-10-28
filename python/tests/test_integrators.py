@@ -151,6 +151,38 @@ def test_non_finite_or_non_number_scalars_are_rejected(program, name, bad) -> No
     assert caught.value.code == "NON_FINITE_NUMBER"
 
 
+# An int that float() cannot hold (the TypeScript side gets Infinity for it from JSON.parse).
+OVERSIZED_INTS = [pytest.param(2**1024, id="2**1024"), pytest.param(-(10**400), id="-10**400")]
+
+
+@pytest.mark.parametrize(("program", "method"), PROGRAM_METHODS)
+@pytest.mark.parametrize("field", ["x", "y", "z", "t"])
+@pytest.mark.parametrize("bad", OVERSIZED_INTS)
+def test_int_too_large_for_a_float_in_a_state_field_is_non_finite(program, method, field, bad) -> None:
+    """NON_FINITE_NUMBER, not a raw OverflowError from math.isfinite."""
+    state = dataclasses.replace(nd.seed(program, 0.3), **{field: bad})
+    with pytest.raises(NexusDynamicsError) as caught:
+        nd.step(program, state, 0.01, 0.5, 0.5, method)
+    assert caught.value.code == "NON_FINITE_NUMBER"
+
+
+@pytest.mark.parametrize("program", nd.PROGRAMS)
+@pytest.mark.parametrize("bad", OVERSIZED_INTS)
+def test_int_too_large_for_a_float_in_a_bank_cell_or_scalar_is_non_finite(program, bad) -> None:
+    """The same for a bank cell (on every program) and for dt, chaos and drive (raw OverflowError from float())."""
+    seeded = nd.seed(program, 0.3)
+    bank = list(seeded.bank) if seeded.bank is not None else [0.25] * 20
+    bank[7] = bad
+    with pytest.raises(NexusDynamicsError) as caught:
+        nd.step(program, dataclasses.replace(seeded, bank=tuple(bank)), 0.01, 0.5)
+    assert caught.value.code == "NON_FINITE_NUMBER"
+    for name in ("dt", "chaos", "drive"):
+        args = {"dt": 0.01, "chaos": 0.5, "drive": 0.5, name: bad}
+        with pytest.raises(NexusDynamicsError) as caught:
+            nd.step(program, seeded, **args)
+        assert caught.value.code == "NON_FINITE_NUMBER", name
+
+
 def _bits(state: NexusState) -> tuple[str, ...]:
     """Bitwise identity of every state value (float.hex also tells -0.0 from 0.0)."""
     return tuple(float(value).hex() for value in state.values())
