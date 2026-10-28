@@ -30,6 +30,14 @@ of `h = dt / 4`.
 - `symplectic` (`strang-verlet/1`) is described in the table above.
 - An unsupported pair raises `UNSUPPORTED_METHOD`. A NaN or Infinity result
   raises `NON_FINITE_OUTPUT` and is never serialized.
+- `step()` rejects a malformed state with `INVALID_STATE`: a value that is not
+  a `NexusState`, a coordinate or bank cell that is not a number (a bool
+  included), or a bank that is not a tuple or list. The bank check runs on
+  every program; a finite numeric bank on a non-NEMO state is still ignored. A
+  NaN or infinite state value raises `NON_FINITE_NUMBER`.
+- `clamp01` is `Math.min(1, Math.max(0, c))` as in `math.ts`, so a NaN chaos
+  stays NaN in `coefficients()` and `advance()` fails closed on it with
+  `NON_FINITE_OUTPUT`. Finite results are unchanged.
 
 ## API
 
@@ -87,10 +95,13 @@ the same engine inputs, and in each unit system the re-dimensionalized
 trajectory follows the analytic spring-mass solution within the Verlet
 truncation error. The nondimensionalization lives only in that test file; it
 is not a unit contract. `test_integrators.py` also rejects non-finite state,
-`dt`, `chaos` and `drive` at `step()` and pins the instrument's silent dt clamp
-as today's behaviour (an owner decision, not a contract). These are software
-simulation checks; `physicalHardware=false`, Energy UNAVAILABLE, and
-Conjecture 1 OPEN remain unchanged.
+`dt`, `chaos` and `drive` at `step()`, rejects a malformed state with
+`INVALID_STATE` (owner decision D1), checks that a NaN chaos stays NaN like the
+TypeScript `clamp01` while finite clamps stay bit-identical (owner decision D2),
+and pins the instrument's silent dt clamp as today's behaviour (an owner
+decision, not a contract). These are software simulation checks;
+`physicalHardware=false`, Energy UNAVAILABLE, and Conjecture 1 OPEN remain
+unchanged.
 
 The separate optical tests compare forward intensity with the squared magnitude
 of the summed complex fields, plus beam symmetry, common-phase invariance, and

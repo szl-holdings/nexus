@@ -16,6 +16,11 @@ methods share the same time grid:
 NEMO is a hybrid threshold/reset system and only runs its instrument scheme
 (``euler4``). Asking a program for a method it does not support raises
 ``UNSUPPORTED_METHOD``; a non-finite result raises ``NON_FINITE_OUTPUT``.
+``step`` rejects a malformed state (not a ``NexusState``, a non-number or
+bool coordinate or bank cell, or a bank that is not a tuple or list, on every
+program) with ``INVALID_STATE`` and a NaN or infinite state value with
+``NON_FINITE_NUMBER``. ``advance``, the core that ``step`` calls after
+those checks, does not validate the state.
 
 A method's version string is part of every hashed output, so changing an
 algorithm must bump its version (and the parity vectors) on purpose.
@@ -27,6 +32,7 @@ from typing import Callable
 
 from . import programs
 from .errors import (
+    INVALID_STATE,
     NON_FINITE_NUMBER,
     UNKNOWN_METHOD,
     UNSUPPORTED_METHOD,
@@ -82,7 +88,41 @@ def rk4_substep(
     )
 
 
-def _require_finite_state(state: NexusState) -> None:
+def _is_number(value: object) -> bool:
+    """The type rule of ``schema.finite_number``: an int or float, never a bool."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _require_valid_state(state: object) -> None:
+    """Fail closed on a malformed state before any program sees it (owner decision D1).
+
+    A value that is not a ``NexusState``, a coordinate (or bank cell) that is not
+    a number (a bool included), or a bank that is not a tuple or list raises
+    ``INVALID_STATE``. A well-formed state with a NaN or an infinity still raises
+    ``NON_FINITE_NUMBER``; NEMO bank length is still checked by the NEMO program
+    (``INVALID_NEMO_BANK``).
+    """
+    if not isinstance(state, NexusState):
+        raise NexusDynamicsError(
+            INVALID_STATE, f"state must be a NexusState, not {type(state).__name__}"
+        )
+    for name in ("x", "y", "z", "t"):
+        value = getattr(state, name)
+        if not _is_number(value):
+            raise NexusDynamicsError(
+                INVALID_STATE, f"state.{name} must be a number, not {type(value).__name__}"
+            )
+    if state.bank is not None:
+        if not isinstance(state.bank, (tuple, list)):
+            raise NexusDynamicsError(
+                INVALID_STATE,
+                f"state.bank must be a tuple or list of numbers, not {type(state.bank).__name__}",
+            )
+        for index, value in enumerate(state.bank):
+            if not _is_number(value):
+                raise NexusDynamicsError(
+                    INVALID_STATE, f"state.bank[{index}] must be a number, not {type(value).__name__}"
+                )
     if not state.is_finite():
         raise NexusDynamicsError(NON_FINITE_NUMBER, "state values must be finite")
 
@@ -143,7 +183,7 @@ def step_with_events(
     dt = finite_number("dt", dt)
     chaos = finite_number("chaos", chaos)
     drive = finite_number("drive", drive)
-    _require_finite_state(state)
+    _require_valid_state(state)
     if program == "nemo":
         return programs.nemo.step(state, dt, chaos, drive)
     return advance(program, state, substep_size(dt), SUBSTEPS, chaos, drive, method), 0

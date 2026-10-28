@@ -6,7 +6,12 @@ import math
 
 
 def clamp01(value: float) -> float:
-    return min(1.0, max(0.0, float(value)))
+    """``Math.min(1, Math.max(0, value))``, the TypeScript ``clamp01`` in
+    ``src/lib/nexus/math.ts``: a NaN stays NaN (owner decision D2; the old
+    ``min(1.0, max(0.0, value))`` masked it to 0.0). Every other input gives
+    the same float as before, bit for bit: -0.0 still gives +0.0 (as
+    ``Math.max(0, -0)`` does), +inf gives 1.0 and -inf gives 0.0."""
+    return jmin(1.0, jmax(0.0, float(value)))
 
 
 def jmax(a: float, b: float) -> float:
