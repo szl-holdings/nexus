@@ -41,7 +41,9 @@ function openDb(): Promise<IDBDatabase> {
 }
 
 export async function loadPersisted(): Promise<PersistedState | null> {
-  if (typeof indexedDB === "undefined") return null;
+  // savePersisted writes the localStorage fallback when IndexedDB is absent,
+  // so the load path must read it back from the same place.
+  if (typeof indexedDB === "undefined") return readLocal();
   try {
     const db = await openDb();
     return await new Promise((resolve, reject) => {

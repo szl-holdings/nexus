@@ -27,6 +27,7 @@ import {
   type Waveform,
 } from "./types";
 import { loadPersisted, scheduleSave, type PersistedState } from "./store";
+import { restoreGrid } from "./persistence-grid";
 import { euclid, funcGenStep, midiToHz, analogCell, analogCircuit, analogCoefficients, analogCorrelate, analogJack, analogSchmitt, analogStep, scaleAnalog, seedAnalogState, opticalInterfere, opticalReconstruct, type AnalogState } from "./math";
 import {
   analogDelta,
@@ -143,11 +144,19 @@ interface VoiceSlot {
   born: number;
   oscs: OscillatorNode[];
   noise: AudioBufferSourceNode | null;
+  /** Per-note non-source nodes (osc/FM gains, pluck delay loop), released with the note. */
+  parts: AudioNode[];
   env: GainNode;
   filterA: BiquadFilterNode;
   filterB: BiquadFilterNode;
   pan: StereoPannerNode;
   stopAt: number;
+  /**
+   * Bumped every time the slot is triggered. A release cleanup timer only acts
+   * on the generation it released, so a slot that was reused or stolen in the
+   * meantime keeps its newer note (NEX-02).
+   */
+  gen: number;
 }
 
 class NexusEngine {
@@ -307,7 +316,7 @@ class NexusEngine {
   async hydrate() {
     const data = await loadPersisted();
     if (!data || this.snapshot.powered) return;
-    const savedGrid = data.grid?.length === COLS ? data.grid : emptyGrid();
+    const savedGrid = restoreGrid(data.grid) ?? emptyGrid();
     const lit = savedGrid.some((col) => col.some(Boolean));
     this.snapshot = {
       ...this.snapshot,
@@ -658,11 +667,13 @@ class NexusEngine {
       born: 0,
       oscs: [],
       noise: null,
+      parts: [],
       env,
       filterA,
       filterB,
       pan,
       stopAt: 0,
+      gen: 0,
     };
   }
 
@@ -1011,7 +1022,7 @@ class NexusEngine {
       seq: { ...DEFAULT_SEQ, ...sc.seq, playing: this.snapshot.seq.playing },
       analog: { ...DEFAULT_ANALOG, ...sc.analog },
       steps: sc.steps?.length === COLS ? sc.steps.map((st) => ({ ...st })) : this.snapshot.steps,
-      grid: sc.grid?.length === COLS ? sc.grid.map((c) => c.slice()) : this.snapshot.grid,
+      grid: restoreGrid(sc.grid) ?? this.snapshot.grid,
       patches: sc.patches?.length ? sc.patches.map((p) => ({ ...p })) : this.snapshot.patches,
       orbit: sc.orbit,
       scopeMode: sc.scopeMode,
@@ -1336,6 +1347,7 @@ class NexusEngine {
     time = Math.max(time, ctx.currentTime);
     const v = this.snapshot.voice;
     this.killOsc(slot, time);
+    slot.gen += 1;
     slot.busy = true;
     slot.midi = midi;
     slot.born = time;
@@ -1382,6 +1394,7 @@ class NexusEngine {
           fmG.connect(oscA.frequency);
           fm.start(time);
           slot.oscs.push(fm);
+          slot.parts.push(fmG);
         }
         oscA.connect(gA);
         oscB.connect(gB);
@@ -1390,6 +1403,7 @@ class NexusEngine {
         oscA.start(time);
         oscB.start(time);
         slot.oscs.push(oscA, oscB);
+        slot.parts.push(gA, gB);
       }
     }
 
@@ -1428,6 +1442,9 @@ class NexusEngine {
     burst.start(time);
     burst.stop(time + period * 4);
     slot.noise = burst;
+    // The delay -> filter -> feedback loop is a cycle; it stays wired into the
+    // voice (and alive) until it is explicitly disconnected.
+    slot.parts.push(delay, lp, fb);
   }
 
   private glideSlot(slot: VoiceSlot, midi: number, time: number) {
@@ -1451,7 +1468,14 @@ class NexusEngine {
     slot.stopAt = time + rel + 0.05;
     slot.busy = false;
     slot.midi = -1;
-    window.setTimeout(() => this.killOsc(slot, time + rel), (rel + 0.08) * 1000);
+    const gen = slot.gen;
+    window.setTimeout(() => {
+      // Retriggered since this release (reuse, steal, note after panic): the
+      // previous note's sources were already stopped by triggerSlot, and the
+      // ones there now belong to the newer note.
+      if (slot.gen !== gen) return;
+      this.killOsc(slot, time + rel);
+    }, (rel + 0.08) * 1000);
   }
 
   private killOsc(slot: VoiceSlot, time: number) {
@@ -1473,6 +1497,14 @@ class NexusEngine {
       }
       slot.noise = null;
     }
+    for (const node of slot.parts) {
+      try {
+        node.disconnect();
+      } catch {
+        /* already disconnected */
+      }
+    }
+    slot.parts = [];
   }
 
   triggerCell(col: number, row: number, vel = 0.85) {
