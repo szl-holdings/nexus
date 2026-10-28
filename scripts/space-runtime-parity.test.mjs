@@ -35,3 +35,52 @@ test("health JSON is byte-identical in TS and Python", () => {
     assert.equal(python("health", rev), JSON.stringify(runtimeHealth(rev)), JSON.stringify(rev));
   }
 });
+
+test("probe results match TS probeEstate() for every response class", async () => {
+  const { createServer } = await import("node:http");
+  const { ENDPOINTS, probeEstate } = await import("../src/lib/nexus/telemetry.ts");
+  const routes = {
+    "/ok": [200, '{"status":"ok"}'],
+    "/evidence": [200, '{"evidenceState":"X"}'],
+    "/sdk": [200, '{"sdk":"docker"}'],
+    "/text": [200, "not json"],
+    "/null": [200, "null"],
+    "/array": [200, "[1,2]"],
+    "/nan": [200, "NaN"],
+    "/missing": [404, "nope"],
+    "/broken": [500, "{}"],
+    "/role-live": [200, '{"role":"hologram-not-instrument","energy":"UNAVAILABLE"}'],
+    "/role-empty": [200, "{}"],
+  };
+  const server = createServer((req, res) => {
+    if (req.url === "/slow") {
+      setTimeout(() => res.end('{"status":"late"}'), 600);
+      return;
+    }
+    const [status, body] = routes[req.url];
+    res.writeHead(status, { "content-length": Buffer.byteLength(body) });
+    res.end(body);
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const cases = [...Object.keys(routes), "/slow"].map((path) => ({
+    id: path.startsWith("/role") || path === "/array" ? "nexus-space" : `e${path.slice(1)}`,
+    label: path,
+    url: base + path,
+  }));
+  const original = ENDPOINTS.splice(0, ENDPOINTS.length, ...cases);
+  try {
+    const mask = (text) => text.replace(/"at":\d+/g, '"at":0');
+    const ts = JSON.stringify(await probeEstate(200));
+    const { execFile } = await import("node:child_process");
+    const py = await new Promise((resolve, reject) =>
+      execFile("python3", ["space/nexus_runtime.py", "probes", JSON.stringify(cases), "0.2"], (err, out) =>
+        err ? reject(err) : resolve(out),
+      ),
+    );
+    assert.equal(mask(py), mask(ts));
+  } finally {
+    ENDPOINTS.splice(0, ENDPOINTS.length, ...original);
+    server.close();
+  }
+});

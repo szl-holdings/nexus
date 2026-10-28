@@ -12,6 +12,11 @@ import json
 import os
 import re
 import sys
+import time
+import urllib.error
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+from typing import Callable
 
 SOURCE_REPOSITORY = "szl-holdings/nexus"
 HF_REPOSITORY = "SZLHOLDINGS/nexus"
@@ -84,6 +89,76 @@ def runtime_health(raw_revision: object) -> dict:
     }
 
 
+ENDPOINTS = [
+    {"id": "hatun", "label": "Hatun MCP", "url": "https://szlholdings-hatun-mcp.hf.space/healthz"},
+    {"id": "anatomy", "label": "Anatomy", "url": "https://szlholdings-anatomy.hf.space/version"},
+    {"id": "nexus-space", "label": "NEXUS hologram", "url": "https://szlholdings-nexus.hf.space/api/build-info"},
+]
+
+# Node's fetch ignores proxy environment variables; so does this opener.
+_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+class _NotJson(ValueError):
+    pass
+
+
+def _reject_constant(name: str) -> object:
+    raise _NotJson(name)
+
+
+def _is_timeout(exc: BaseException) -> bool:
+    reason = getattr(exc, "reason", None)
+    return isinstance(exc, TimeoutError) or isinstance(reason, TimeoutError)
+
+
+def _probe_one(endpoint: dict, timeout_s: float, now_ms: Callable[[], int]) -> dict:
+    """Mirror probeOne(): the timeout covers the response head only, like the TS abort."""
+    at = now_ms()
+    head = {"id": endpoint["id"], "label": endpoint["label"]}
+    try:
+        response = _OPENER.open(endpoint["url"], timeout=timeout_s)
+    except urllib.error.HTTPError as exc:
+        exc.close()
+        return {**head, "status": "UNAVAILABLE", "detail": f"HTTP {exc.code}", "at": at}
+    except Exception as exc:  # noqa: BLE001 - every other failure is unreachable
+        detail = "timeout" if _is_timeout(exc) else "cors or unreachable"
+        return {**head, "status": "UNAVAILABLE", "detail": detail, "at": at}
+    with response:
+        status = response.status
+        detail = f"HTTP {status}"
+        live = True
+        try:
+            body = json.loads(response.read(), parse_constant=_reject_constant)
+            if body is None:
+                raise _NotJson("null")  # TS reads a property of null and lands in its catch
+            fields = body if isinstance(body, dict) else {}
+            if endpoint["id"] == "nexus-space":
+                role = fields.get("role") if isinstance(fields.get("role"), str) else ""
+                energy = fields.get("energy") if isinstance(fields.get("energy"), str) else ""
+                live = role == "hologram-not-instrument" and energy == "UNAVAILABLE"
+                detail = "hologram-not-instrument" if live else "instrument not bound · hologram only"
+            elif isinstance(fields.get("status"), str):
+                detail = fields["status"]
+            elif isinstance(fields.get("evidenceState"), str):
+                detail = fields["evidenceState"]
+            elif isinstance(fields.get("sdk"), str):
+                detail = fields["sdk"]
+        except Exception:  # noqa: BLE001 - mirrors the TS catch: keep LIVE, report the status
+            detail = f"HTTP {status}"
+    return {**head, "status": "LIVE" if live else "UNAVAILABLE", "detail": detail, "at": at}
+
+
+def probe_estate(
+    timeout_s: float = 2.8,
+    endpoints: list[dict] | None = None,
+    now_ms: Callable[[], int] = lambda: int(time.time() * 1000),
+) -> list[dict]:
+    targets = ENDPOINTS if endpoints is None else endpoints
+    with ThreadPoolExecutor(max_workers=max(1, len(targets))) as pool:
+        return list(pool.map(lambda endpoint: _probe_one(endpoint, timeout_s, now_ms), targets))
+
+
 def dumps(payload: object) -> bytes:
     """Serialize like JavaScript ``JSON.stringify`` for these payloads."""
     return json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
@@ -91,11 +166,14 @@ def dumps(payload: object) -> bytes:
 
 def main(argv: list[str]) -> int:
     commands = {"build-info": build_info, "health": runtime_health}
-    if len(argv) != 2 or argv[0] not in commands:
-        print("usage: nexus_runtime.py build-info|health <revision>", file=sys.stderr)
-        return 2
-    sys.stdout.buffer.write(dumps(commands[argv[0]](argv[1])))
-    return 0
+    if len(argv) == 2 and argv[0] in commands:
+        sys.stdout.buffer.write(dumps(commands[argv[0]](argv[1])))
+        return 0
+    if len(argv) == 3 and argv[0] == "probes":
+        sys.stdout.buffer.write(dumps(probe_estate(float(argv[2]), json.loads(argv[1]))))
+        return 0
+    print("usage: nexus_runtime.py build-info|health <revision> | probes <endpoints-json> <timeout-s>", file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":
