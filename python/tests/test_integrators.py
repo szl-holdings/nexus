@@ -268,6 +268,20 @@ def test_int_state_fields_are_still_accepted(program, method) -> None:
     )
 
 
+def test_nemo_bank_may_be_a_list_or_hold_ints() -> None:
+    """D1 accepts a list bank and int bank cells: each steps like the equal tuple of floats."""
+    seeded = nd.seed("nemo", 0.3)
+    assert _bits(nd.step("nemo", dataclasses.replace(seeded, bank=list(seeded.bank)), 0.01, 0.5)) == _bits(
+        nd.step("nemo", seeded, 0.01, 0.5)
+    )
+    ints = tuple(int(round(value)) for value in seeded.bank)
+    as_floats = tuple(float(value) for value in ints)
+    assert all(type(value) is int for value in ints)
+    assert _bits(nd.step("nemo", dataclasses.replace(seeded, bank=ints), 0.01, 0.5)) == _bits(
+        nd.step("nemo", dataclasses.replace(seeded, bank=as_floats), 0.01, 0.5)
+    )
+
+
 @pytest.mark.parametrize("bad", NON_NUMBER)
 def test_non_number_nemo_bank_cells_are_rejected_as_invalid_state(bad) -> None:
     """Owner decision D1 for the bank: a bool or other non-number cell raises INVALID_STATE."""
@@ -315,11 +329,12 @@ def test_malformed_bank_on_a_non_nemo_state_is_rejected_as_invalid_state(program
 
 
 @pytest.mark.parametrize(("program", "method"), NON_NEMO_PROGRAM_METHODS)
-def test_well_formed_bank_on_a_non_nemo_state_is_still_ignored(program, method) -> None:
+@pytest.mark.parametrize("bank", [(0.25,) * 20, [0.25] * 20, (1,) * 20], ids=["tuple", "list", "ints"])
+def test_well_formed_bank_on_a_non_nemo_state_is_still_ignored(program, method, bank) -> None:
     """D1 does not reject a finite numeric bank on a non-NEMO state: step() still drops it."""
     seeded = nd.seed(program, 0.3)
     assert seeded.bank is None
-    with_bank = dataclasses.replace(seeded, bank=(0.25,) * 20)
+    with_bank = dataclasses.replace(seeded, bank=bank)
     out = nd.step(program, with_bank, 0.01, 0.5, 0.5, method)
     assert out.bank is None
     assert _bits(out) == _bits(nd.step(program, seeded, 0.01, 0.5, 0.5, method))
