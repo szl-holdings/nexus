@@ -205,7 +205,7 @@ jobs:
           root = Path("/tmp/nexus-root.html").read_text(encoding="utf-8")
           assert health["ready"] is True and health["source_revision"] == expected, health
           assert build["source_bound"] is True and build["source_revision"] == expected, build
-          assert build["runtime"] == "NITRO_NODE_WEB_AUDIO", build
+          assert build["runtime"] == "PYTHON_STDLIB_STATIC_WEB_AUDIO", build
           assert "NEXUS MK-II" in root, root[:500]
           PY
           wait_for_docker_health() {

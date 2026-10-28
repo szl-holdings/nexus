@@ -216,7 +216,7 @@ export function NexusBoundaries() {
       if (
         row.schema !== "szl.nexus-source-binding/v2" ||
         row.source_repository !== SOURCE_REPOSITORY ||
-        row.runtime !== "NITRO_NODE_WEB_AUDIO" ||
+        row.runtime !== "PYTHON_STDLIB_STATIC_WEB_AUDIO" ||
         row.source_bound !== true ||
         revision === UNAVAILABLE
       )

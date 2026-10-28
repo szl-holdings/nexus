@@ -80,7 +80,7 @@ jobs:
               'publish-nexus-space.yml',
               'COPY --chown=node:node SOURCE_GITHUB_SHA /app/SOURCE_GITHUB_SHA',
               'CMD ["node", ".output/server/index.mjs"]',
-              'NITRO_NODE_WEB_AUDIO',
+              'PYTHON_STDLIB_STATIC_WEB_AUDIO',
               'path === "/api/build-info"',
               'source_revision: sourceRevision',
           )

@@ -68,7 +68,7 @@ test("Space retains an immutable publisher-injected source revision", () => {
 
 test("local repository workflow delegates provider writes to the central publisher", () => {
   assert.match(ownership, /publish-nexus-space\.yml/);
-  assert.match(ownership, /NITRO_NODE_WEB_AUDIO/);
+  assert.match(ownership, /PYTHON_STDLIB_STATIC_WEB_AUDIO/);
   assert.match(ownership, /CMD \["node", "\.output\/server\/index\.mjs"\]/);
   assert.doesNotMatch(ownership, /secrets\.HF_/);
 });
