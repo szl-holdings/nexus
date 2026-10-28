@@ -20,7 +20,9 @@ NEMO is a hybrid threshold/reset system and only runs its instrument scheme
 bool coordinate or bank cell, or a bank that is not a tuple or list, on every
 program) with ``INVALID_STATE`` and a NaN or infinite state value with
 ``NON_FINITE_NUMBER``. ``advance``, the core that ``step`` calls after
-those checks, does not validate the state.
+those checks, does not validate the state. For a wrongly typed state these
+codes differ from ``analogIntegrate`` in ``math.ts`` (``NON_FINITE_NUMBER`` /
+``INVALID_NEMO_BANK``); the contract boundary codes are the same in both.
 
 A method's version string is part of every hashed output, so changing an
 algorithm must bump its version (and the parity vectors) on purpose.

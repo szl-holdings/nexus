@@ -38,6 +38,12 @@ of `h = dt / 4`.
 - `clamp01` is `Math.min(1, Math.max(0, c))` as in `math.ts`, so a NaN chaos
   stays NaN in `coefficients()` and `advance()` fails closed on it with
   `NON_FINITE_OUTPUT`. Finite results are unchanged.
+- Error codes for a wrongly typed state differ between the two bindings only
+  on a direct `step()` call: Python raises `INVALID_STATE` (owner decision D1)
+  where `math.ts` `analogIntegrate` raises `NON_FINITE_NUMBER` for a non-number
+  coordinate or bank cell and `INVALID_NEMO_BANK` for a NEMO bank that is not
+  an array. At the contract boundary (`NexusRunInput.from_dict` and
+  `dynamics.ts` `normalizeDynamicsInput`) both give the same codes.
 
 ## API
 
