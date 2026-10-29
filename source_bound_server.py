@@ -9,7 +9,6 @@ exact GitHub source revision derived from ``space/Dockerfile``.
 """
 from __future__ import annotations
 
-import json
 import os
 from http.server import ThreadingHTTPServer
 from pathlib import Path

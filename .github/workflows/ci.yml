@@ -137,12 +137,8 @@ jobs:
             exit 0
           fi
           printf 'pytest files:\n%s\n' "$tests"
-          if [ -f python/requirements-dev.txt ]; then
-            # Pinned test-only deps for python/tests (pytest + hypothesis); nexus_dynamics itself is stdlib only.
-            python -m pip install --disable-pip-version-check -r python/requirements-dev.txt
-          else
-            python -m pip install --disable-pip-version-check 'pytest==9.1.1'
-          fi
+          # Require the complete hash-locked test graph; a missing manifest must fail closed.
+          python -m pip install --disable-pip-version-check --require-hashes -r python/requirements-dev.txt
           python -m pytest -q
   space:
     name: Space container (exact source, non-root, smoke)

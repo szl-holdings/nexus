@@ -74,7 +74,7 @@
     },
     "scripts/with-app-env.mjs": {
       "reason": "runtime extended beyond the template (+104 lines: file-identity checks, script-extension handling); review whether to upstream or keep",
-      "sha256": "016dde7413aa56295a865a5693a0849447defd4abe1638cd98549fc5a2ca59d7"
+      "sha256": "4c3d2072bafc205b7f2735055c3eede6917c2e228ef6e8c3618a26b211c21481"
     },
     "scripts/with-app-env.test.mjs": {
       "reason": "test file diverged from the template with repo-local cases; intent not yet reviewed",
