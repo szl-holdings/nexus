@@ -19,7 +19,8 @@ def jmax(a: float, b: float) -> float:
     second argument), and +0 wins over -0. Identical to ``max`` for all other
     inputs, so finite trajectories stay bit-identical to the TypeScript binding
     while a NaN can never be masked into a finite value."""
-    if a != a or b != b:
+    # Guard float predicates to avoid coercing arbitrarily large ints to float.
+    if (isinstance(a, float) and math.isnan(a)) or (isinstance(b, float) and math.isnan(b)):
         return math.nan
     if a == b:
         return b if math.copysign(1.0, a) < 0 else a
@@ -28,7 +29,7 @@ def jmax(a: float, b: float) -> float:
 
 def jmin(a: float, b: float) -> float:
     """``Math.min(a, b)``: NaN-propagating, and -0 wins over +0."""
-    if a != a or b != b:
+    if (isinstance(a, float) and math.isnan(a)) or (isinstance(b, float) and math.isnan(b)):
         return math.nan
     if a == b:
         return a if math.copysign(1.0, a) < 0 else b

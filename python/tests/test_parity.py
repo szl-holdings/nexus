@@ -11,8 +11,10 @@ import dataclasses
 import pytest
 
 import nexus_dynamics as nd
-from nexus_dynamics import NexusRunInput, immune_v1, parity
+import nexus_dynamics.immune_v1 as immune_v1
+import nexus_dynamics.parity as parity
 from nexus_dynamics.programs import lotka
+from nexus_dynamics.schema import NexusRunInput
 
 DOC_VECTORS = parity.vector_specs()
 

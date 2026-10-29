@@ -10,12 +10,12 @@ from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 import nexus_dynamics as nd
-from nexus_dynamics import NexusDynamicsError, NexusState
 from nexus_dynamics._num import clamp01
 from nexus_dynamics.analog import analog_circuit, analog_jack
+from nexus_dynamics.errors import NexusDynamicsError
 from nexus_dynamics.integrators import SUBSTEPS, advance, rk4_substep, step_with_events
 from nexus_dynamics.programs import duffing, harmonic, lotka
-from nexus_dynamics.schema import DT_MAX, DT_MIN
+from nexus_dynamics.schema import DT_MAX, DT_MIN, NexusState
 
 unit = st.floats(min_value=0.0, max_value=1.0)
 dts = st.floats(min_value=0.0004, max_value=0.08)

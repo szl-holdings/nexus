@@ -10,12 +10,11 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 import nexus_dynamics as nd
-from nexus_dynamics import NexusRunInput, NexusState
 from nexus_dynamics.canonical import canonical_json
 from nexus_dynamics.integrators import step_with_events, substep_size
 from nexus_dynamics.programs import harmonic, lorenz, lotka, nemo
 from nexus_dynamics.run import run
-from nexus_dynamics.schema import DT_MAX, DT_MIN, STEPS_MAX
+from nexus_dynamics.schema import DT_MAX, DT_MIN, STEPS_MAX, NexusRunInput, NexusState
 
 unit = st.floats(min_value=0.0, max_value=1.0)
 dts = st.floats(min_value=DT_MIN, max_value=DT_MAX)
