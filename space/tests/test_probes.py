@@ -22,6 +22,8 @@ ROUTES = {
     "/broken": (500, b"{}"),
     "/role-live": (200, b'{"role":"hologram-not-instrument","energy":"UNAVAILABLE"}'),
     "/role-empty": (200, b"{}"),
+    "/body-at-limit": (200, b'{"status":"ok","pad":"' + b"x" * (65536 - 24) + b'"}'),
+    "/body-over-limit": (200, b'{"status":"ok","pad":"' + b"x" * (65537 - 24) + b'"}'),
 }
 
 
@@ -48,6 +50,13 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/slow":
             time.sleep(0.6)
             status, body = 200, b'{"status":"late"}'
+        elif self.path == "/truncated-body":
+            body = ROUTES["/runtime-live"][1]
+            self.send_response(200)
+            self.send_header("content-length", str(len(body) + 10))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         else:
             status, body = ROUTES[self.path]
         self.send_response(status)
@@ -120,7 +129,7 @@ def test_retired_hatun_never_fetches_an_unqualified_substitute(monkeypatch):
     def unexpected_fetch(*args):
         pytest.fail("retired Hatun must not make a network request")
 
-    monkeypatch.setattr(rt, "_open_head", unexpected_fetch)
+    monkeypatch.setattr(rt, "_read_response", unexpected_fetch)
     hatun = next(e for e in rt.ENDPOINTS if e["id"] == "hatun")
     assert "url" not in hatun
     [probe] = rt.probe_estate(endpoints=[hatun], now_ms=lambda: 123)
@@ -197,6 +206,43 @@ def test_redirects_follow_fetch_limit(base):
     assert one(base, "/hop/21") == ("UNAVAILABLE", "cors or unreachable")
 
 
-def test_body_is_read_after_the_head_deadline_like_fetch(base):
-    # TS clears its timer once the head arrives; undici then allows 300 s of silence.
-    assert one(base, "/slow-body", timeout_s=0.3) == ("LIVE", "late body")
+def test_body_must_arrive_within_the_same_deadline(base):
+    started = time.monotonic()
+    assert one(base, "/slow-body", timeout_s=0.3) == ("UNAVAILABLE", "timeout")
+    assert time.monotonic() - started < 0.55
+
+
+def test_probe_body_limit_uses_actual_bytes(base):
+    assert len(ROUTES["/body-at-limit"][1]) == rt.MAX_PROBE_BYTES
+    assert one(base, "/body-at-limit") == ("LIVE", "ok")
+    assert one(base, "/body-over-limit") == ("UNAVAILABLE", "response too large")
+
+
+def test_truncated_response_cannot_qualify_runtime(base):
+    assert one(base, "/truncated-body", "nexus-space") == ("UNAVAILABLE", "cors or unreachable")
+
+
+def test_timed_out_body_attempt_closes_response(base, monkeypatch):
+    closed = threading.Event()
+
+    class SlowResponse:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            closed.set()
+
+        def read1(self, size):
+            time.sleep(0.15)
+            return b" "
+
+    class Opener:
+        def open(self, url, timeout):
+            assert timeout == 0.1
+            return SlowResponse()
+
+    monkeypatch.setattr(rt, "_OPENER", Opener())
+    assert one(base, "/ok", timeout_s=0.1) == ("UNAVAILABLE", "timeout")
+    assert closed.wait(0.5)

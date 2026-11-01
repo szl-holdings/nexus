@@ -100,8 +100,7 @@ ENDPOINTS = [
 ]
 
 FETCH_REDIRECT_LIMIT = 20
-# undici, behind Node's fetch, allows this much silence between body chunks.
-BODY_IDLE_TIMEOUT_S = 300.0
+MAX_PROBE_BYTES = 64 * 1024
 
 
 class _FetchRedirects(urllib.request.HTTPRedirectHandler):
@@ -137,108 +136,117 @@ def _is_timeout(exc: BaseException) -> bool:
     return isinstance(exc, TimeoutError) or isinstance(reason, TimeoutError)
 
 
-def _open_head(url: str, timeout_s: float):
-    """Return the response once its head arrives within timeout_s of wall-clock time.
+class _ProbeTooLarge(ValueError):
+    pass
 
-    This is the TS abort timer: it covers DNS, connect, TLS, redirects and the head
-    together. The socket timeout is undici's body idle limit, which applies once the
-    head is in. A late attempt is abandoned and its response closed unread when it
-    arrives.
+
+def _read_response(url: str, timeout_s: float):
+    """Bound the entire response by wall-clock time and actual body bytes.
+
+    The daemon also covers DNS and header stalls outside socket timeouts. Its
+    response is always closed, including after the caller's deadline expires.
     """
+    deadline = time.monotonic() + timeout_s
     done = threading.Event()
-    lock = threading.Lock()
     outcome: dict = {}
 
     def attempt() -> None:
         try:
-            result = (_OPENER.open(url, timeout=BODY_IDLE_TIMEOUT_S), None)
+            with _OPENER.open(url, timeout=timeout_s) as response:
+                body = bytearray()
+                while True:
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError("response missed the deadline")
+                    chunk = response.read1(min(4096, MAX_PROBE_BYTES + 1 - len(body)))
+                    if not chunk:
+                        # read1(), unlike read(), permits premature EOF. A valid
+                        # JSON prefix must not qualify an incomplete response.
+                        if response.length is not None and response.length > 0:
+                            raise ConnectionError("incomplete response body")
+                        break
+                    body.extend(chunk)
+                    if len(body) > MAX_PROBE_BYTES:
+                        raise _ProbeTooLarge()
+                outcome["result"] = (response.status, bytes(body))
         except Exception as exc:  # noqa: BLE001 - re-raised in the caller
-            result = (None, exc)
-        with lock:
-            abandoned = "abandoned" in outcome
-            outcome["result"] = result
-        if abandoned:
-            late = result[0] if result[0] is not None else result[1]
-            getattr(late, "close", lambda: None)()  # an HTTPError holds a response too
-        done.set()
+            if isinstance(exc, urllib.error.HTTPError):
+                exc.close()
+            outcome["error"] = exc
+        finally:
+            done.set()
 
     threading.Thread(target=attempt, daemon=True).start()
-    done.wait(timeout_s)
-    with lock:
-        if "result" not in outcome:
-            outcome["abandoned"] = True
-            raise TimeoutError("response head missed the deadline")
-    response, error = outcome["result"]
-    if error is not None:
-        raise error
-    return response
+    if not done.wait(max(0.0, deadline - time.monotonic())):
+        raise TimeoutError("response missed the deadline")
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome["result"]
 
 
 def _probe_one(endpoint: dict, timeout_s: float, now_ms: Callable[[], int]) -> dict:
-    """Mirror probeOne(): the deadline covers the response head only, like the TS abort."""
+    """Mirror probeOne(): bound headers and body by one deadline and byte limit."""
     at = now_ms()
     head = {"id": endpoint["id"], "label": endpoint["label"]}
     if "unavailable" in endpoint:
         return {**head, "status": "UNAVAILABLE", "detail": endpoint["unavailable"], "at": at}
     try:
-        response = _open_head(endpoint["url"], timeout_s)
+        status, raw_body = _read_response(endpoint["url"], timeout_s)
     except urllib.error.HTTPError as exc:
         exc.close()
         return {**head, "status": "UNAVAILABLE", "detail": f"HTTP {exc.code}", "at": at}
     except Exception as exc:  # noqa: BLE001 - every other failure is unreachable
-        detail = "timeout" if _is_timeout(exc) else "cors or unreachable"
+        detail = ("response too large" if isinstance(exc, _ProbeTooLarge) else
+                  "timeout" if _is_timeout(exc) else "cors or unreachable")
         return {**head, "status": "UNAVAILABLE", "detail": detail, "at": at}
-    with response:
-        status = response.status
-        nexus = endpoint["id"] == "nexus-space"
-        anatomy = endpoint["id"] == "anatomy"
-        unavailable = (
-            "runtime source identity unavailable" if nexus else
-            "anatomy transport contract unavailable" if anatomy else f"HTTP {status}"
-        )
+    nexus = endpoint["id"] == "nexus-space"
+    anatomy = endpoint["id"] == "anatomy"
+    unavailable = (
+        "runtime source identity unavailable" if nexus else
+        "anatomy transport contract unavailable" if anatomy else f"HTTP {status}"
+    )
+    detail = unavailable
+    live = not nexus and not anatomy
+    try:
+        body = json.loads(raw_body, parse_constant=_reject_constant)
+        if body is None:
+            raise _NotJson("null")  # TS reads a property of null and lands in its catch
+        fields = body if isinstance(body, dict) else {}
+        if nexus:
+            revision = fields.get("source_revision")
+            live = (
+                fields.get("schema") == "szl.nexus-source-binding/v2"
+                and fields.get("source_repository") == SOURCE_REPOSITORY
+                and fields.get("hf_repository") == HF_REPOSITORY
+                and fields.get("deployment_authority") == DEPLOYMENT_AUTHORITY
+                and fields.get("source_bound") is True
+                and isinstance(revision, str)
+                and revision != UNAVAILABLE
+                and normalize_source_revision(revision) == revision
+                and fields.get("runtime") == RUNTIME
+                and fields.get("energy") == UNAVAILABLE
+                and fields.get("uniqueness") == "Conjecture 1"
+            )
+            detail = "source-bound Python runtime" if live else "runtime source identity unavailable"
+        elif anatomy:
+            # Transport for a read-only snapshot, not scientific/model qualification.
+            live = (
+                fields.get("service") == "anatomy-space"
+                and fields.get("organ") == "anatomy"
+                and fields.get("status") == "ok"
+                and fields.get("transport_state") == "REACHABLE"
+                and fields.get("authority_state") == "READ_ONLY"
+                and fields.get("evidence_state") == "SNAPSHOT"
+                and fields.get("verification_state") == "STRUCTURAL_ONLY"
+            )
+            detail = "read-only transport; snapshot evidence" if live else unavailable
+        elif isinstance(fields.get("status"), str):
+            detail = fields["status"]
+        elif isinstance(fields.get("evidenceState"), str):
+            detail = fields["evidenceState"]
+        elif isinstance(fields.get("sdk"), str):
+            detail = fields["sdk"]
+    except Exception:  # noqa: BLE001 - invalid service contracts must remain unavailable
         detail = unavailable
-        live = not nexus and not anatomy
-        try:
-            body = json.loads(response.read(), parse_constant=_reject_constant)
-            if body is None:
-                raise _NotJson("null")  # TS reads a property of null and lands in its catch
-            fields = body if isinstance(body, dict) else {}
-            if nexus:
-                revision = fields.get("source_revision")
-                live = (
-                    fields.get("schema") == "szl.nexus-source-binding/v2"
-                    and fields.get("source_repository") == SOURCE_REPOSITORY
-                    and fields.get("hf_repository") == HF_REPOSITORY
-                    and fields.get("deployment_authority") == DEPLOYMENT_AUTHORITY
-                    and fields.get("source_bound") is True
-                    and isinstance(revision, str)
-                    and revision != UNAVAILABLE
-                    and normalize_source_revision(revision) == revision
-                    and fields.get("runtime") == RUNTIME
-                    and fields.get("energy") == UNAVAILABLE
-                    and fields.get("uniqueness") == "Conjecture 1"
-                )
-                detail = "source-bound Python runtime" if live else "runtime source identity unavailable"
-            elif anatomy:
-                # Transport for a read-only snapshot, not scientific/model qualification.
-                live = (
-                    fields.get("service") == "anatomy-space"
-                    and fields.get("organ") == "anatomy"
-                    and fields.get("status") == "ok"
-                    and fields.get("transport_state") == "REACHABLE"
-                    and fields.get("authority_state") == "READ_ONLY"
-                    and fields.get("evidence_state") == "SNAPSHOT"
-                    and fields.get("verification_state") == "STRUCTURAL_ONLY"
-                )
-                detail = "read-only transport; snapshot evidence" if live else unavailable
-            elif isinstance(fields.get("status"), str):
-                detail = fields["status"]
-            elif isinstance(fields.get("evidenceState"), str):
-                detail = fields["evidenceState"]
-            elif isinstance(fields.get("sdk"), str):
-                detail = fields["sdk"]
-        except Exception:  # noqa: BLE001 - invalid service contracts must remain unavailable
-            detail = unavailable
     return {**head, "status": "LIVE" if live else "UNAVAILABLE", "detail": detail, "at": at}
 
 

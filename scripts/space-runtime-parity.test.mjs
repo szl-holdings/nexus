@@ -51,6 +51,8 @@ test("probe results match TS probeEstate() for every response class", async () =
     "/broken": [500, "{}"],
     "/role-live": [200, '{"role":"hologram-not-instrument","energy":"UNAVAILABLE"}'],
     "/role-empty": [200, "{}"],
+    "/body-at-limit": [200, JSON.stringify({ status: "ok", pad: "x".repeat(65536 - 24) })],
+    "/body-over-limit": [200, JSON.stringify({ status: "ok", pad: "x".repeat(65537 - 24) })],
   };
   const runtime = buildInfo(SHA);
   const anatomy = {
@@ -104,6 +106,25 @@ test("probe results match TS probeEstate() for every response class", async () =
       setTimeout(() => res.end(body), 600);
       return;
     }
+    if (req.url === "/trickle-body") {
+      res.writeHead(200);
+      res.write('{"status":"');
+      const interval = setInterval(() => res.write("x"), 100);
+      res.on("close", () => clearInterval(interval));
+      return;
+    }
+    if (req.url === "/chunked-over-limit") {
+      res.writeHead(200);
+      res.write(" ".repeat(65536));
+      res.end("{}");
+      return;
+    }
+    if (req.url === "/truncated-body") {
+      const body = JSON.stringify(runtime);
+      res.writeHead(200, { "content-length": Buffer.byteLength(body) + 10, connection: "close" });
+      res.end(body);
+      return;
+    }
     if (req.url === "/trickle") {
       // Each gap is shorter than the timeout; the whole head arrives after it.
       const body = '{"status":"ok"}';
@@ -131,43 +152,55 @@ test("probe results match TS probeEstate() for every response class", async () =
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
-  const endpoint = (path) => ({
-    id: path.startsWith("/anatomy-") ? "anatomy" : path.startsWith("/role") || path.startsWith("/nexus-") || path === "/array" ? "nexus-space" : `e${path.slice(1)}`,
+  const cases = [...Object.keys(routes), "/slow", "/slow-body", "/trickle", "/trickle-body", "/chunked-over-limit", "/truncated-body", "/hop/12", "/hop/21"].map((path) => ({
+    id: path.startsWith("/anatomy-") ? "anatomy" : path.startsWith("/role") || path.startsWith("/nexus-") || path === "/array" || path === "/truncated-body" ? "nexus-space" : `e${path.slice(1)}`,
     label: path,
     url: base + path,
-  });
-  const cases = Object.keys(routes).map(endpoint);
+  }));
   cases.push(ENDPOINTS.find((endpoint) => endpoint.id === "hatun"));
-  const timingCases = ["/slow", "/slow-body", "/trickle", "/hop/12", "/hop/21"].map(endpoint);
-  const original = [...ENDPOINTS];
+  const original = ENDPOINTS.splice(0, ENDPOINTS.length, ...cases);
   try {
-    const mask = (text) => text.replace(/"at":\d+/g, '"at":0');
     const { execFile } = await import("node:child_process");
-    const tsRows = [], pyRows = [];
-    // Contract validation must not race the 400 ms deadline fixtures when the
-    // full suite competes for CPU. Keep the short deadline only for its own batch.
-    for (const [batch, timeoutMs] of [[cases, 2800], [timingCases, 400]]) {
-      ENDPOINTS.splice(0, ENDPOINTS.length, ...batch);
-      const ts = await probeEstate(timeoutMs);
-      const py = await new Promise((resolve, reject) =>
-        execFile("python3", ["space/nexus_runtime.py", "probes", JSON.stringify(batch), String(timeoutMs / 1000)], (err, out) =>
+    const delayed = new Set(["/slow", "/slow-body", "/trickle", "/trickle-body"]);
+    const tsRows = [];
+    const pyRows = [];
+    // Ordinary contract checks need headroom on loaded CI workers. Keep short
+    // deadline assertions isolated so they test the server delay, not contention.
+    for (const [group, timeoutMs] of [
+      [cases.filter((entry) => !delayed.has(entry.label)), 4000],
+      [cases.filter((entry) => delayed.has(entry.label)), 400],
+    ]) {
+      ENDPOINTS.splice(0, ENDPOINTS.length, ...group);
+      tsRows.push(...await probeEstate(timeoutMs));
+      const out = await new Promise((resolve, reject) =>
+        execFile("python3", ["space/nexus_runtime.py", "probes", JSON.stringify(group), String(timeoutMs / 1000)], (err, out) =>
           err ? reject(err) : resolve(out),
         ),
       );
-      assert.equal(mask(py), mask(JSON.stringify(ts)));
-      tsRows.push(...ts);
-      pyRows.push(...JSON.parse(py));
+      pyRows.push(...JSON.parse(out));
+    }
+    for (let index = 0; index < tsRows.length; index++) {
+      assert.deepEqual({ ...pyRows[index], at: 0 }, { ...tsRows[index], at: 0 }, tsRows[index].label);
     }
     for (const rows of [tsRows, pyRows]) {
       const hatun = rows.find((row) => row.id === "hatun");
       assert.equal(hatun?.status, "UNAVAILABLE");
       assert.equal(hatun?.detail, "standalone retired; MCP deployment unavailable");
-      for (const path of ["/slow", "/trickle"]) {
-        assert.equal(rows.find((row) => row.label === path)?.detail, "timeout", path);
-      }
-      assert.equal(rows.find((row) => row.label === "/slow-body")?.detail, "late body");
       assert.equal(rows.find((row) => row.label === "/hop/12")?.status, "LIVE");
       assert.equal(rows.find((row) => row.label === "/hop/21")?.detail, "cors or unreachable");
+      for (const path of ["/slow-body", "/trickle-body", "/trickle"]) {
+        const row = rows.find((entry) => entry.label === path);
+        assert.equal(row.status, "UNAVAILABLE", path);
+        assert.equal(row.detail, "timeout", path);
+      }
+      for (const path of ["/body-over-limit", "/chunked-over-limit"]) {
+        const row = rows.find((entry) => entry.label === path);
+        assert.equal(row.status, "UNAVAILABLE", path);
+        assert.equal(row.detail, "response too large", path);
+      }
+      assert.equal(rows.find((entry) => entry.label === "/body-at-limit").status, "LIVE");
+      assert.equal(rows.find((entry) => entry.label === "/truncated-body").status, "UNAVAILABLE");
+      assert.equal(rows.find((entry) => entry.label === "/truncated-body").detail, "cors or unreachable");
     }
     for (const [path, [, live]] of Object.entries(anatomyCases)) {
       const expected = live ? "LIVE" : "UNAVAILABLE";
