@@ -144,7 +144,7 @@ def test_nested_block_must_be_object(payload, block) -> None:
     assert code_of(payload) == "INVALID_REQUEST"
 
 
-@pytest.mark.parametrize("bad_id", ["", "short", "has space-0001", "-leading-dash", "x" * 129, 12345678])
+@pytest.mark.parametrize("bad_id", ["", "short", "has space-0001", "-leading-dash", "x" * 129, "syn-tone-0001\n", 12345678])
 def test_invalid_recording_id(payload, bad_id) -> None:
     payload["recordingId"] = bad_id
     assert code_of(payload) == "INVALID_RECORDING_ID"
@@ -190,6 +190,12 @@ def test_sample_rate_must_be_an_integer(payload, bad) -> None:
 
 @pytest.mark.parametrize("bad", [math.nan, math.inf, -math.inf])
 def test_non_finite_sample_rejected(payload, bad) -> None:
+    payload["samples"][0][5] = bad
+    assert code_of(payload) == "NON_FINITE_NUMBER"
+
+
+@pytest.mark.parametrize("bad", [10**1000, -(10**1000)], ids=["huge-positive", "huge-negative"])
+def test_sample_outside_float_range_has_typed_rejection(payload, bad) -> None:
     payload["samples"][0][5] = bad
     assert code_of(payload) == "NON_FINITE_NUMBER"
 
@@ -286,7 +292,7 @@ def test_pinned_source_revision_match_admitted(payload, now) -> None:
     assert admit(payload, now=now, expected_source_revision=SOURCE_REVISION).admitted is True
 
 
-@pytest.mark.parametrize("rev", ["", "abc123", "G" * 40, "A" * 40, None, 7])
+@pytest.mark.parametrize("rev", ["", "abc123", "G" * 40, "A" * 40, SOURCE_REVISION + "\n", None, 7])
 def test_source_revision_must_be_full_lowercase_sha(payload, rev) -> None:
     payload["source"]["sourceRevision"] = rev
     assert code_of(payload) == "INVALID_REVISION"
@@ -332,7 +338,7 @@ def test_custody_digest_mismatch_rejected(payload) -> None:
     assert code_of(payload) == "DIGEST_MISMATCH"
 
 
-@pytest.mark.parametrize("digest", ["", "0" * 63, "Z" * 64, "A" * 64, None])
+@pytest.mark.parametrize("digest", ["", "0" * 63, "Z" * 64, "A" * 64, "0" * 64 + "\n", None])
 def test_custody_digest_must_be_lowercase_sha256(payload, digest) -> None:
     payload["custody"]["samplesSha256"] = digest
     assert code_of(payload) == "INVALID_CUSTODY"
