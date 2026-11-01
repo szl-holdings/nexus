@@ -10,6 +10,7 @@ import pytest
 import nexus_runtime as rt
 
 ROUTES = {
+    "/runtime-live": (200, rt.dumps(rt.build_info("0123456789abcdef0123456789abcdef01234567"))),
     "/ok": (200, b'{"status":"ok"}'),
     "/evidence": (200, b'{"evidenceState":"X"}'),
     "/sdk": (200, b'{"sdk":"docker"}'),
@@ -98,11 +99,10 @@ def test_probe_semantics(base, path, expected):
     assert one(base, path) == expected
 
 
-def test_nexus_space_requires_hologram_role(base):
-    assert one(base, "/role-live", "nexus-space") == ("LIVE", "hologram-not-instrument")
-    assert one(base, "/role-empty", "nexus-space") == ("UNAVAILABLE", "instrument not bound · hologram only")
-    assert one(base, "/array", "nexus-space") == ("UNAVAILABLE", "instrument not bound · hologram only")
-    assert one(base, "/null", "nexus-space") == ("LIVE", "HTTP 200")
+def test_nexus_space_requires_current_source_bound_runtime(base):
+    assert one(base, "/runtime-live", "nexus-space") == ("LIVE", "source-bound Python runtime")
+    for path in ("/role-live", "/role-empty", "/array", "/null", "/text", "/nan"):
+        assert one(base, path, "nexus-space") == ("UNAVAILABLE", "runtime source identity unavailable"), path
 
 
 def test_timeout_and_unreachable(base):
@@ -113,6 +113,7 @@ def test_timeout_and_unreachable(base):
 def test_default_endpoints_match_typescript():
     assert [e["id"] for e in rt.ENDPOINTS] == ["hatun", "anatomy", "nexus-space"]
     assert rt.ENDPOINTS[2]["url"] == "https://szlholdings-nexus.hf.space/api/build-info"
+    assert rt.ENDPOINTS[2]["label"] == "NEXUS runtime"
 
 
 def test_probes_run_concurrently(base):

@@ -52,6 +52,27 @@ test("probe results match TS probeEstate() for every response class", async () =
     "/role-live": [200, '{"role":"hologram-not-instrument","energy":"UNAVAILABLE"}'],
     "/role-empty": [200, "{}"],
   };
+  const runtime = buildInfo(SHA);
+  const nexusCases = {
+    "/nexus-live": [JSON.stringify(runtime), true],
+    "/nexus-text": ["not json", false],
+    "/nexus-null": ["null", false],
+    "/nexus-array": ["[]", false],
+    "/nexus-nan": ["NaN", false],
+    "/nexus-legacy": [routes["/role-live"][1], false],
+  };
+  for (const [key, value] of Object.entries(runtime)) {
+    const missing = { ...runtime };
+    delete missing[key];
+    // Frontend and execution hints are not source-identity predicates.
+    if (["frontend", "audio_execution", "deterministic_python_reference"].includes(key)) continue;
+    nexusCases[`/nexus-missing-${key}`] = [JSON.stringify(missing), false];
+    nexusCases[`/nexus-wrong-${key}`] = [JSON.stringify({ ...runtime, [key]: typeof value === "boolean" ? "true" : "wrong" }), false];
+  }
+  for (const revision of ["0".repeat(40), SHA.toUpperCase(), ` ${SHA}`, `${SHA}\n`, `${SHA}0`]) {
+    nexusCases[`/nexus-revision-${Object.keys(nexusCases).length}`] = [JSON.stringify({ ...runtime, source_revision: revision }), false];
+  }
+  for (const [path, [body]] of Object.entries(nexusCases)) routes[path] = [200, body];
   const server = createServer((req, res) => {
     if (req.url === "/slow") {
       setTimeout(() => res.end('{"status":"late"}'), 900);
@@ -92,14 +113,15 @@ test("probe results match TS probeEstate() for every response class", async () =
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   const cases = [...Object.keys(routes), "/slow", "/slow-body", "/trickle", "/hop/12", "/hop/21"].map((path) => ({
-    id: path.startsWith("/role") || path === "/array" ? "nexus-space" : `e${path.slice(1)}`,
+    id: path.startsWith("/role") || path.startsWith("/nexus-") || path === "/array" ? "nexus-space" : `e${path.slice(1)}`,
     label: path,
     url: base + path,
   }));
   const original = ENDPOINTS.splice(0, ENDPOINTS.length, ...cases);
   try {
     const mask = (text) => text.replace(/"at":\d+/g, '"at":0');
-    const ts = JSON.stringify(await probeEstate(400));
+    const tsRows = await probeEstate(400);
+    const ts = JSON.stringify(tsRows);
     const { execFile } = await import("node:child_process");
     const py = await new Promise((resolve, reject) =>
       execFile("python3", ["space/nexus_runtime.py", "probes", JSON.stringify(cases), "0.4"], (err, out) =>
@@ -107,6 +129,11 @@ test("probe results match TS probeEstate() for every response class", async () =
       ),
     );
     assert.equal(mask(py), mask(ts));
+    for (const [path, [, live]] of Object.entries(nexusCases)) {
+      const expected = live ? "LIVE" : "UNAVAILABLE";
+      assert.equal(tsRows.find((row) => row.label === path)?.status, expected, path);
+      assert.equal(JSON.parse(py).find((row) => row.label === path)?.status, expected, path);
+    }
   } finally {
     ENDPOINTS.splice(0, ENDPOINTS.length, ...original);
     server.close();
