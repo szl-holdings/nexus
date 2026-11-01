@@ -53,6 +53,25 @@ test("probe results match TS probeEstate() for every response class", async () =
     "/role-empty": [200, "{}"],
   };
   const runtime = buildInfo(SHA);
+  const anatomy = {
+    service: "anatomy-space", organ: "anatomy", status: "ok",
+    transport_state: "REACHABLE", authority_state: "READ_ONLY",
+    evidence_state: "SNAPSHOT", verification_state: "STRUCTURAL_ONLY",
+  };
+  const anatomyCases = {
+    "/anatomy-live": [JSON.stringify(anatomy), true],
+    "/anatomy-text": ["not json", false],
+    "/anatomy-null": ["null", false],
+    "/anatomy-array": ["[]", false],
+    "/anatomy-unrelated": ['{"status":"ok"}', false],
+  };
+  for (const key of Object.keys(anatomy)) {
+    const missing = { ...anatomy };
+    delete missing[key];
+    anatomyCases[`/anatomy-missing-${key}`] = [JSON.stringify(missing), false];
+    anatomyCases[`/anatomy-wrong-${key}`] = [JSON.stringify({ ...anatomy, [key]: "wrong" }), false];
+  }
+  for (const [path, [body]] of Object.entries(anatomyCases)) routes[path] = [200, body];
   const nexusCases = {
     "/nexus-live": [JSON.stringify(runtime), true],
     "/nexus-text": ["not json", false],
@@ -113,7 +132,7 @@ test("probe results match TS probeEstate() for every response class", async () =
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   const cases = [...Object.keys(routes), "/slow", "/slow-body", "/trickle", "/hop/12", "/hop/21"].map((path) => ({
-    id: path.startsWith("/role") || path.startsWith("/nexus-") || path === "/array" ? "nexus-space" : `e${path.slice(1)}`,
+    id: path.startsWith("/anatomy-") ? "anatomy" : path.startsWith("/role") || path.startsWith("/nexus-") || path === "/array" ? "nexus-space" : `e${path.slice(1)}`,
     label: path,
     url: base + path,
   }));
@@ -129,6 +148,15 @@ test("probe results match TS probeEstate() for every response class", async () =
       ),
     );
     assert.equal(mask(py), mask(ts));
+    for (const [path, [, live]] of Object.entries(anatomyCases)) {
+      const expected = live ? "LIVE" : "UNAVAILABLE";
+      const detail = live ? "read-only transport; snapshot evidence" : "anatomy transport contract unavailable";
+      for (const rows of [tsRows, JSON.parse(py)]) {
+        const row = rows.find((entry) => entry.label === path);
+        assert.equal(row?.status, expected, path);
+        assert.equal(row?.detail, detail, path);
+      }
+    }
     for (const [path, [, live]] of Object.entries(nexusCases)) {
       const expected = live ? "LIVE" : "UNAVAILABLE";
       assert.equal(tsRows.find((row) => row.label === path)?.status, expected, path);
@@ -137,5 +165,13 @@ test("probe results match TS probeEstate() for every response class", async () =
   } finally {
     ENDPOINTS.splice(0, ENDPOINTS.length, ...original);
     server.close();
+  }
+});
+
+test("Anatomy probes use the retained creator-profile transport contract in both runtimes", async () => {
+  const { ENDPOINTS } = await import("../src/lib/nexus/telemetry.ts");
+  const py = JSON.parse(execFileSync("python3", ["-c", "import sys,json; sys.path.insert(0,'space'); from nexus_runtime import ENDPOINTS; print(json.dumps(ENDPOINTS))"], { encoding: "utf8" }));
+  for (const endpoints of [ENDPOINTS, py]) {
+    assert.equal(endpoints.find((row) => row.id === "anatomy").url, "https://betterwithage-anatomy.hf.space/healthz");
   }
 });

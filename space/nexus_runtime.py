@@ -93,7 +93,7 @@ def runtime_health(raw_revision: object) -> dict:
 
 ENDPOINTS = [
     {"id": "hatun", "label": "Hatun MCP", "url": "https://szlholdings-hatun-mcp.hf.space/healthz"},
-    {"id": "anatomy", "label": "Anatomy", "url": "https://szlholdings-anatomy.hf.space/version"},
+    {"id": "anatomy", "label": "Anatomy", "url": "https://betterwithage-anatomy.hf.space/healthz"},
     {"id": "nexus-space", "label": "NEXUS runtime", "url": "https://szlholdings-nexus.hf.space/api/build-info"},
 ]
 
@@ -187,8 +187,13 @@ def _probe_one(endpoint: dict, timeout_s: float, now_ms: Callable[[], int]) -> d
     with response:
         status = response.status
         nexus = endpoint["id"] == "nexus-space"
-        detail = "runtime source identity unavailable" if nexus else f"HTTP {status}"
-        live = not nexus
+        anatomy = endpoint["id"] == "anatomy"
+        unavailable = (
+            "runtime source identity unavailable" if nexus else
+            "anatomy transport contract unavailable" if anatomy else f"HTTP {status}"
+        )
+        detail = unavailable
+        live = not nexus and not anatomy
         try:
             body = json.loads(response.read(), parse_constant=_reject_constant)
             if body is None:
@@ -210,14 +215,26 @@ def _probe_one(endpoint: dict, timeout_s: float, now_ms: Callable[[], int]) -> d
                     and fields.get("uniqueness") == "Conjecture 1"
                 )
                 detail = "source-bound Python runtime" if live else "runtime source identity unavailable"
+            elif anatomy:
+                # Transport for a read-only snapshot, not scientific/model qualification.
+                live = (
+                    fields.get("service") == "anatomy-space"
+                    and fields.get("organ") == "anatomy"
+                    and fields.get("status") == "ok"
+                    and fields.get("transport_state") == "REACHABLE"
+                    and fields.get("authority_state") == "READ_ONLY"
+                    and fields.get("evidence_state") == "SNAPSHOT"
+                    and fields.get("verification_state") == "STRUCTURAL_ONLY"
+                )
+                detail = "read-only transport; snapshot evidence" if live else unavailable
             elif isinstance(fields.get("status"), str):
                 detail = fields["status"]
             elif isinstance(fields.get("evidenceState"), str):
                 detail = fields["evidenceState"]
             elif isinstance(fields.get("sdk"), str):
                 detail = fields["sdk"]
-        except Exception:  # noqa: BLE001 - invalid Nexus identity must remain unavailable
-            detail = "runtime source identity unavailable" if nexus else f"HTTP {status}"
+        except Exception:  # noqa: BLE001 - invalid service contracts must remain unavailable
+            detail = unavailable
     return {**head, "status": "LIVE" if live else "UNAVAILABLE", "detail": detail, "at": at}
 
 
