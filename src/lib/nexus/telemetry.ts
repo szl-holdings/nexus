@@ -13,7 +13,7 @@ export interface Probe {
 
 export const ENDPOINTS: { id: string; label: string; url: string }[] = [
   { id: "hatun", label: "Hatun MCP", url: "https://szlholdings-hatun-mcp.hf.space/healthz" },
-  { id: "anatomy", label: "Anatomy", url: "https://szlholdings-anatomy.hf.space/version" },
+  { id: "anatomy", label: "Anatomy", url: "https://betterwithage-anatomy.hf.space/healthz" },
   { id: "nexus-space", label: "NEXUS runtime", url: "https://szlholdings-nexus.hf.space/api/build-info" },
 ];
 
@@ -64,8 +64,10 @@ async function probeOne(e: { id: string; label: string; url: string }, timeoutMs
       return { id: e.id, label: e.label, status: "UNAVAILABLE", detail: `HTTP ${res.status}`, at };
     }
     const nexus = e.id === "nexus-space";
-    let detail = nexus ? "runtime source identity unavailable" : `HTTP ${res.status}`;
-    let live = !nexus;
+    const anatomy = e.id === "anatomy";
+    const unavailable = nexus ? "runtime source identity unavailable" : anatomy ? "anatomy transport contract unavailable" : `HTTP ${res.status}`;
+    let detail = unavailable;
+    let live = !nexus && !anatomy;
     try {
       const j = (await res.json()) as Record<string, unknown>;
       if (nexus) {
@@ -81,11 +83,18 @@ async function probeOne(e: { id: string; label: string; url: string }, timeoutMs
           && j.energy === UNAVAILABLE
           && j.uniqueness === "Conjecture 1";
         detail = live ? "source-bound Python runtime" : "runtime source identity unavailable";
+      } else if (anatomy) {
+        // This is transport for a read-only snapshot, never scientific or model qualification.
+        live = j.service === "anatomy-space" && j.organ === "anatomy"
+          && j.status === "ok" && j.transport_state === "REACHABLE"
+          && j.authority_state === "READ_ONLY" && j.evidence_state === "SNAPSHOT"
+          && j.verification_state === "STRUCTURAL_ONLY";
+        detail = live ? "read-only transport; snapshot evidence" : unavailable;
       } else if (typeof j.status === "string") detail = j.status;
       else if (typeof j.evidenceState === "string") detail = j.evidenceState;
       else if (typeof j.sdk === "string") detail = String(j.sdk);
     } catch {
-      detail = nexus ? "runtime source identity unavailable" : `HTTP ${res.status}`;
+      detail = unavailable;
     }
     return { id: e.id, label: e.label, status: live ? "LIVE" : "UNAVAILABLE", detail, at };
   } catch (err) {
