@@ -12,9 +12,8 @@ the nine-decimal canonical rounding boundary or amplify along a chaotic
 trajectory. Keep the engine, source revision and runtime environment with
 reproduction evidence; use the same qualified implementation to verify an
 arbitrary run. Do not admit a different hash as equivalent or regenerate the
-published vectors to conceal a mismatch. `experiments/numeric-parity-probe.py`
-reports a reproducible IMMUNE lambda counterexample and exits nonzero when
-the current Python/Node pair disagrees.
+published vectors to conceal a mismatch. The per-input probe below checks
+exact hashes on the current local Python/Node pair.
 
 This is executable software simulation. It is not a physical analog or
 neuromorphic chip. Energy is UNAVAILABLE. Λ uniqueness is Conjecture 1 (OPEN).
@@ -95,6 +94,34 @@ cd python
 python -m nexus_dynamics.parity check   # exit 1 if contracts/nexus-parity-v2.json is stale
 python -m nexus_dynamics.parity write   # regenerate (only for an intentional, versioned change)
 ```
+
+## Check an arbitrary input across runtimes
+
+Run the same engine input JSON through both local bindings (Node >=22.6 with
+TypeScript stripping is required):
+
+```sh
+python experiments/numeric-parity-probe.py --input input.json --contract dynamics-v2 --method rk4
+python experiments/numeric-parity-probe.py --input input.json --contract immune-v1
+cat input.json | python experiments/numeric-parity-probe.py --input - --contract dynamics-v2
+python experiments/numeric-parity-probe.py  # original IMMUNE lambda counterexample candidate
+```
+
+The JSON report names the selected contract/method, normalized inputs, exact
+output hashes, Python/libc and Node/V8 versions, and SHA-256 digests of the local
+engine and probe source files, including uncommitted changes. Different source
+snapshots before and after execution fail the check. Exit **0** means
+`MATCH_THIS_CASE`: both normalized inputs and output hashes match. Exit **1** means `MISMATCH`. Exit
+**2** means `ERROR` (invalid input, unsupported method, missing/failed Node,
+timeout, or source change); matching errors are never accepted as parity.
+CLI syntax errors also exit 2 and print usage to stderr. `immune-v1` supports
+only `euler4`.
+
+Keep this report with the exact input and source checkout when investigating
+reproducibility. It is local diagnostic evidence, not a signed receipt, a
+universal parity proof, or evidence of deployed IMMUNE's revision. IMMUNE's
+separate engine must be qualified separately. A mismatch must remain a failure;
+this tool does not relax hash equality or rewrite historical vectors.
 
 ## Tests
 
