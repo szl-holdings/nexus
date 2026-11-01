@@ -11,8 +11,14 @@ export interface Probe {
   at: number;
 }
 
-export const ENDPOINTS: { id: string; label: string; url: string }[] = [
-  { id: "hatun", label: "Hatun MCP", url: "https://szlholdings-hatun-mcp.hf.space/healthz" },
+type ProbeEndpoint = { id: string; label: string } & (
+  { url: string; unavailable?: never } | { url?: never; unavailable: string }
+);
+
+export const ENDPOINTS: ProbeEndpoint[] = [
+  // hatun-mcp/docs/HATUN_SURFACE_CONTRACT.md retires the standalone HF host.
+  // The /wires product page and mesh catalog do not establish MCP readiness.
+  { id: "hatun", label: "Hatun MCP", unavailable: "standalone retired; MCP deployment unavailable" },
   { id: "anatomy", label: "Anatomy", url: "https://betterwithage-anatomy.hf.space/healthz" },
   { id: "nexus-space", label: "NEXUS runtime", url: "https://szlholdings-nexus.hf.space/api/build-info" },
 ];
@@ -22,7 +28,7 @@ export function idleProbes(): Probe[] {
     id: e.id,
     label: e.label,
     status: "UNAVAILABLE" as const,
-    detail: "not probed",
+    detail: e.unavailable ?? "not probed",
     at: 0,
   }));
 }
@@ -53,8 +59,11 @@ export async function probeEstate(timeoutMs = 2800): Promise<Probe[]> {
   return Promise.all(ENDPOINTS.map((e) => probeOne(e, timeoutMs)));
 }
 
-async function probeOne(e: { id: string; label: string; url: string }, timeoutMs: number): Promise<Probe> {
+async function probeOne(e: ProbeEndpoint, timeoutMs: number): Promise<Probe> {
   const at = Date.now();
+  if (e.unavailable !== undefined) {
+    return { id: e.id, label: e.label, status: "UNAVAILABLE", detail: e.unavailable, at };
+  }
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
