@@ -4,10 +4,11 @@
 IMMUNE (``szl-holdings/immune`` ``python/immune/nexus.py`` ``run_nexus``) hashes
 a deterministic output built from an ``euler4`` run of the engine it imported
 from nexus@617fb49. Rebuilding that payload from ``nexus_dynamics`` and matching
-IMMUNE's published ``contracts/immune-nexus-parity-v1.json`` hashes proves that
-this library (and, in ``src/lib/nexus/parity.test.ts``, the TypeScript
-instrument engine) computes exactly what the live IMMUNE runtime computes, so
-IMMUNE can vendor it instead of hand-porting.
+IMMUNE's published ``contracts/immune-nexus-parity-v1.json`` hashes establishes
+agreement for those vectors. It does not establish a live runtime revision or
+universal Python/TypeScript hash identity: platform math rounding can differ
+for other inputs. IMMUNE can vendor this library instead of hand-porting it,
+with separate source/runtime qualification.
 
 Only ``euler4`` exists in v1. IMMUNE rounds reported numbers to 12 decimals
 (``round(x, 12)``) before deriving the read-outs; that is reproduced here.

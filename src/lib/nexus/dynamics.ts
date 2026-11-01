@@ -4,6 +4,8 @@
  * The Python binding is python/nexus_dynamics (stdlib only). Both bindings must
  * produce identical hashes for every vector in contracts/nexus-parity-v2.json
  * (enforced by src/lib/nexus/parity.test.ts and python/tests/test_parity.py).
+ * Other inputs can hash differently across platform math libraries; passing
+ * these vectors is not a universal Python/JavaScript equivalence guarantee.
  *
  * Canonical hashing is IMMUNE's `nexus_hash`: every number is projected to a
  * string with exactly nine decimals, object keys are sorted, and the compact

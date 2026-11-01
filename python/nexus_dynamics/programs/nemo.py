@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import math
 
+from .._num import jsin
 from ..analog import optical_interfere, optical_reconstruct
 from ..errors import INVALID_NEMO_BANK, NON_FINITE_NUMBER, NexusDynamicsError, non_finite_output
 from ..schema import NexusState
@@ -99,7 +100,7 @@ def step(state: NexusState, dt: float, chaos: float, drive: float) -> tuple[Nexu
     mod = clamp01(drive)
     bank = pad_bank(state.bank)
     rate = jmax(0.0, jmin(1.0, state.z)) if math.isfinite(state.z) else 0.0
-    t = state.t if math.isfinite(state.t) else 0.0
+    t = float(state.t) if math.isfinite(state.t) else 0.0
     total_ms = jmax(0.25, jmin(80.0, dt * 1000))
     n = int(jmax(4.0, jmin(48.0, float(math.ceil(total_ms / 0.5)))))
     h = total_ms / n
@@ -110,7 +111,7 @@ def step(state: NexusState, dt: float, chaos: float, drive: float) -> tuple[Nexu
         iopt = [0.0] * 5
         t_ms = t * 1000
         pace_t = 170 + (1 - mod) * 260
-        i_pace = mod * (1.6 + 3.8 * (0.5 + 0.5 * math.sin((t_ms * math.pi * 2) / pace_t)))
+        i_pace = mod * (1.6 + 3.8 * (0.5 + 0.5 * jsin((t_ms * math.pi * 2) / pace_t)))
         willay_field = 0.0
         for i in range(5):
             opp = (i + 2) % 5
