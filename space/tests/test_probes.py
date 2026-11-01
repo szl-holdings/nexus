@@ -73,7 +73,7 @@ def closed_port_url():
         return f"http://127.0.0.1:{sock.getsockname()[1]}/"
 
 
-def one(base, path, endpoint_id="hatun", timeout_s=2.0):
+def one(base, path, endpoint_id="generic", timeout_s=2.0):
     url = path if path.startswith("http") else base + path
     [probe] = rt.probe_estate(timeout_s, [{"id": endpoint_id, "label": "L", "url": url}])
     assert list(probe) == ["id", "label", "status", "detail", "at"]
@@ -114,6 +114,20 @@ def test_default_endpoints_match_typescript():
     assert [e["id"] for e in rt.ENDPOINTS] == ["hatun", "anatomy", "nexus-space"]
     assert rt.ENDPOINTS[2]["url"] == "https://szlholdings-nexus.hf.space/api/build-info"
     assert rt.ENDPOINTS[2]["label"] == "NEXUS runtime"
+
+
+def test_retired_hatun_never_fetches_an_unqualified_substitute(monkeypatch):
+    def unexpected_fetch(*args):
+        pytest.fail("retired Hatun must not make a network request")
+
+    monkeypatch.setattr(rt, "_open_head", unexpected_fetch)
+    hatun = next(e for e in rt.ENDPOINTS if e["id"] == "hatun")
+    assert "url" not in hatun
+    [probe] = rt.probe_estate(endpoints=[hatun], now_ms=lambda: 123)
+    assert probe == {
+        "id": "hatun", "label": "Hatun MCP", "status": "UNAVAILABLE",
+        "detail": "standalone retired; MCP deployment unavailable", "at": 123,
+    }
 
 
 def test_probes_run_concurrently(base):

@@ -131,27 +131,48 @@ test("probe results match TS probeEstate() for every response class", async () =
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
-  const cases = [...Object.keys(routes), "/slow", "/slow-body", "/trickle", "/hop/12", "/hop/21"].map((path) => ({
+  const endpoint = (path) => ({
     id: path.startsWith("/anatomy-") ? "anatomy" : path.startsWith("/role") || path.startsWith("/nexus-") || path === "/array" ? "nexus-space" : `e${path.slice(1)}`,
     label: path,
     url: base + path,
-  }));
-  const original = ENDPOINTS.splice(0, ENDPOINTS.length, ...cases);
+  });
+  const cases = Object.keys(routes).map(endpoint);
+  cases.push(ENDPOINTS.find((endpoint) => endpoint.id === "hatun"));
+  const timingCases = ["/slow", "/slow-body", "/trickle", "/hop/12", "/hop/21"].map(endpoint);
+  const original = [...ENDPOINTS];
   try {
     const mask = (text) => text.replace(/"at":\d+/g, '"at":0');
-    const tsRows = await probeEstate(400);
-    const ts = JSON.stringify(tsRows);
     const { execFile } = await import("node:child_process");
-    const py = await new Promise((resolve, reject) =>
-      execFile("python3", ["space/nexus_runtime.py", "probes", JSON.stringify(cases), "0.4"], (err, out) =>
-        err ? reject(err) : resolve(out),
-      ),
-    );
-    assert.equal(mask(py), mask(ts));
+    const tsRows = [], pyRows = [];
+    // Contract validation must not race the 400 ms deadline fixtures when the
+    // full suite competes for CPU. Keep the short deadline only for its own batch.
+    for (const [batch, timeoutMs] of [[cases, 2800], [timingCases, 400]]) {
+      ENDPOINTS.splice(0, ENDPOINTS.length, ...batch);
+      const ts = await probeEstate(timeoutMs);
+      const py = await new Promise((resolve, reject) =>
+        execFile("python3", ["space/nexus_runtime.py", "probes", JSON.stringify(batch), String(timeoutMs / 1000)], (err, out) =>
+          err ? reject(err) : resolve(out),
+        ),
+      );
+      assert.equal(mask(py), mask(JSON.stringify(ts)));
+      tsRows.push(...ts);
+      pyRows.push(...JSON.parse(py));
+    }
+    for (const rows of [tsRows, pyRows]) {
+      const hatun = rows.find((row) => row.id === "hatun");
+      assert.equal(hatun?.status, "UNAVAILABLE");
+      assert.equal(hatun?.detail, "standalone retired; MCP deployment unavailable");
+      for (const path of ["/slow", "/trickle"]) {
+        assert.equal(rows.find((row) => row.label === path)?.detail, "timeout", path);
+      }
+      assert.equal(rows.find((row) => row.label === "/slow-body")?.detail, "late body");
+      assert.equal(rows.find((row) => row.label === "/hop/12")?.status, "LIVE");
+      assert.equal(rows.find((row) => row.label === "/hop/21")?.detail, "cors or unreachable");
+    }
     for (const [path, [, live]] of Object.entries(anatomyCases)) {
       const expected = live ? "LIVE" : "UNAVAILABLE";
       const detail = live ? "read-only transport; snapshot evidence" : "anatomy transport contract unavailable";
-      for (const rows of [tsRows, JSON.parse(py)]) {
+      for (const rows of [tsRows, pyRows]) {
         const row = rows.find((entry) => entry.label === path);
         assert.equal(row?.status, expected, path);
         assert.equal(row?.detail, detail, path);
@@ -160,7 +181,7 @@ test("probe results match TS probeEstate() for every response class", async () =
     for (const [path, [, live]] of Object.entries(nexusCases)) {
       const expected = live ? "LIVE" : "UNAVAILABLE";
       assert.equal(tsRows.find((row) => row.label === path)?.status, expected, path);
-      assert.equal(JSON.parse(py).find((row) => row.label === path)?.status, expected, path);
+      assert.equal(pyRows.find((row) => row.label === path)?.status, expected, path);
     }
   } finally {
     ENDPOINTS.splice(0, ENDPOINTS.length, ...original);
@@ -171,6 +192,7 @@ test("probe results match TS probeEstate() for every response class", async () =
 test("Anatomy probes use the retained creator-profile transport contract in both runtimes", async () => {
   const { ENDPOINTS } = await import("../src/lib/nexus/telemetry.ts");
   const py = JSON.parse(execFileSync("python3", ["-c", "import sys,json; sys.path.insert(0,'space'); from nexus_runtime import ENDPOINTS; print(json.dumps(ENDPOINTS))"], { encoding: "utf8" }));
+  assert.deepEqual(py, ENDPOINTS);
   for (const endpoints of [ENDPOINTS, py]) {
     assert.equal(endpoints.find((row) => row.id === "anatomy").url, "https://betterwithage-anatomy.hf.space/healthz");
   }

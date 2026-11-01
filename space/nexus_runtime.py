@@ -92,7 +92,9 @@ def runtime_health(raw_revision: object) -> dict:
 
 
 ENDPOINTS = [
-    {"id": "hatun", "label": "Hatun MCP", "url": "https://szlholdings-hatun-mcp.hf.space/healthz"},
+    # hatun-mcp/docs/HATUN_SURFACE_CONTRACT.md retires the standalone HF host.
+    # The /wires product page and mesh catalog do not establish MCP readiness.
+    {"id": "hatun", "label": "Hatun MCP", "unavailable": "standalone retired; MCP deployment unavailable"},
     {"id": "anatomy", "label": "Anatomy", "url": "https://betterwithage-anatomy.hf.space/healthz"},
     {"id": "nexus-space", "label": "NEXUS runtime", "url": "https://szlholdings-nexus.hf.space/api/build-info"},
 ]
@@ -176,6 +178,8 @@ def _probe_one(endpoint: dict, timeout_s: float, now_ms: Callable[[], int]) -> d
     """Mirror probeOne(): the deadline covers the response head only, like the TS abort."""
     at = now_ms()
     head = {"id": endpoint["id"], "label": endpoint["label"]}
+    if "unavailable" in endpoint:
+        return {**head, "status": "UNAVAILABLE", "detail": endpoint["unavailable"], "at": at}
     try:
         response = _open_head(endpoint["url"], timeout_s)
     except urllib.error.HTTPError as exc:
