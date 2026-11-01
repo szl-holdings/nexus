@@ -1,5 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Numeric helpers with JavaScript ``Math.max``/``Math.min`` semantics."""
+"""Numeric helpers for JavaScript's non-finite arithmetic behavior.
+
+Finite transcendental results still use Python's platform math library; these
+helpers do not promise bit-identical V8 rounding.
+"""
 from __future__ import annotations
 
 import math
@@ -17,8 +21,7 @@ def clamp01(value: float) -> float:
 def jmax(a: float, b: float) -> float:
     """``Math.max(a, b)``: NaN-propagating (Python's ``max`` silently drops a NaN
     second argument), and +0 wins over -0. Identical to ``max`` for all other
-    inputs, so finite trajectories stay bit-identical to the TypeScript binding
-    while a NaN can never be masked into a finite value."""
+    inputs. This helper cannot mask a NaN into a finite value."""
     # Guard float predicates to avoid coercing arbitrarily large ints to float.
     if (isinstance(a, float) and math.isnan(a)) or (isinstance(b, float) and math.isnan(b)):
         return math.nan
@@ -39,3 +42,16 @@ def jmin(a: float, b: float) -> float:
 def jclamp(value: float, lo: float, hi: float) -> float:
     """``Math.max(lo, Math.min(hi, value))``."""
     return jmax(lo, jmin(hi, value))
+
+
+def jsin(value: float) -> float:
+    """Like Math.sin for infinite inputs: return NaN instead of ValueError.
+
+    Finite inputs retain the platform's math.sin result, including signed zero.
+    """
+    return math.nan if math.isinf(value) else math.sin(value)
+
+
+def jcos(value: float) -> float:
+    """Like Math.cos for infinite inputs; finite results use platform math.cos."""
+    return math.nan if math.isinf(value) else math.cos(value)

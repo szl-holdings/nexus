@@ -5,7 +5,7 @@ Every method advances one instrument tick of ``dt`` (clamped to the contract
 range 0.0004..0.08) in ``SUBSTEPS = 4`` substeps of ``h = dt / 4``, so all
 methods share the same time grid:
 
-``euler4``  forward Euler, bit-for-bit the browser instrument
+``euler4``  forward Euler, arithmetic order matching the browser instrument
             (``analogStep`` in ``src/lib/nexus/math.ts``) and IMMUNE's port.
             Kept for audio parity. First order; not conservative.
 ``rk4``     classical fourth-order Runge-Kutta on the exact vector field
@@ -20,7 +20,10 @@ NEMO is a hybrid threshold/reset system and only runs its instrument scheme
 bool coordinate or bank cell, or a bank that is not a tuple or list, on every
 program) with ``INVALID_STATE`` and a NaN or infinite state value with
 ``NON_FINITE_NUMBER``. ``advance``, the core that ``step`` calls after
-those checks, does not validate the state.
+those checks, does not validate the state. Direct malformed-state error codes
+can differ from TypeScript's ``analogIntegrate``; see python/README.md.
+Cross-binding hash identity is tested on the published vectors, not guaranteed
+for arbitrary inputs across platform math libraries.
 
 A method's version string is part of every hashed output, so changing an
 algorithm must bump its version (and the parity vectors) on purpose.
@@ -146,7 +149,10 @@ def advance(
         raise NexusDynamicsError(UNSUPPORTED_METHOD, "NEMO advances only through step()")
     module = programs.get(program)
     k = module.coefficients(chaos)
-    x, y, z, t = state.x, state.y, state.z, state.t
+    # A direct NexusState may contain ints. Convert before arithmetic, as JS
+    # already uses binary64; unbounded Python int products can otherwise raise
+    # OverflowError before the NON_FINITE_OUTPUT check can run.
+    x, y, z, t = float(state.x), float(state.y), float(state.z), float(state.t)
     if method == "euler4":
         field = module.euler4_field
         for _ in range(substeps):

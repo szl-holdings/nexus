@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import math
 
+from .._num import jcos, jsin
 from ..schema import NexusState
 from ._common import Coefficients, clamp01, lorenz_rho
 
@@ -57,7 +58,7 @@ def forcing_amplitude(k: Coefficients, drive: float) -> float:
 
 
 def field(x: float, y: float, z: float, t: float, k: Coefficients, drive: float) -> tuple[float, float, float]:
-    force = k.gamma * (0.45 + drive * 0.7) * math.cos(k.omega * t)
+    force = k.gamma * (0.45 + drive * 0.7) * jcos(k.omega * t)
     return y, x - x * x * x - k.delta * y + force, 0.0
 
 
@@ -74,8 +75,8 @@ def dissipative_flow(y: float, t: float, s: float, delta: float, force: float, o
     denom = delta * delta + omega * omega
     if denom == 0:
         return y + force * s
-    p1 = delta * math.cos(omega * (t + s)) + omega * math.sin(omega * (t + s))
-    p0 = delta * math.cos(omega * t) + omega * math.sin(omega * t)
+    p1 = delta * jcos(omega * (t + s)) + omega * jsin(omega * (t + s))
+    p0 = delta * jcos(omega * t) + omega * jsin(omega * t)
     return decay * y + force / denom * (p1 - decay * p0)
 
 

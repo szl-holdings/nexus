@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import math
 
-from ._num import clamp01, jclamp, jmax, jmin
+from ._num import clamp01, jclamp, jcos, jmax, jmin, jsin
 from .schema import NexusState
 
 
@@ -22,7 +22,7 @@ def clamp_unit(value: float) -> float:
 
 def scale(program: str, state: NexusState) -> dict[str, float]:
     """Scope-space projection of a state (``scaleAnalog``)."""
-    x, y, z = state.x, state.y, state.z
+    x, y, z = float(state.x), float(state.y), float(state.z)
     if program == "harmonic":
         e = 0.5 * (y * y + x * x)
         return {"x": jclamp(x, -1.0, 1.0), "y": jclamp(y / 3, -1.0, 1.0), "z": jclamp(e * 0.5, 0.0, 1.0)}
@@ -36,7 +36,7 @@ def scale(program: str, state: NexusState) -> dict[str, float]:
         return {
             "x": jclamp(x / 2, -1.0, 1.0),
             "y": jclamp(y / 2.4, -1.0, 1.0),
-            "z": jclamp(0.5 + 0.5 * math.sin(state.t), 0.0, 1.0),
+            "z": jclamp(0.5 + 0.5 * jsin(float(state.t)), 0.0, 1.0),
         }
     if program == "lotka":
         return {
@@ -57,13 +57,13 @@ def optical_interfere(obj_amp: float, obj_phase: float, ref_amp: float, ref_phas
     """Two-beam intensity (Ao + Ar e^{i dphi})^2 as an analog inner product."""
     ao = jmax(0.0, obj_amp)
     ar = jmax(0.0, ref_amp)
-    intensity = ao * ao + ar * ar + 2 * ao * ar * math.cos(obj_phase - ref_phase)
+    intensity = ao * ao + ar * ar + 2 * ao * ar * jcos(obj_phase - ref_phase)
     return jmax(0.0, intensity) if math.isfinite(intensity) else 0.0
 
 
 def optical_reconstruct(intensity: float, dphi: float) -> float:
     """First-order diffraction as a signed analog voltage."""
-    v = intensity * math.cos(dphi)
+    v = intensity * jcos(dphi)
     if not math.isfinite(v):
         return 0.0
     return jmax(-1.0, jmin(1.0, v / 2))

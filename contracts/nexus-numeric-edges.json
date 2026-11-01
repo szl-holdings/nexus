@@ -1,0 +1,810 @@
+{
+  "schema": "szl.nexus-numeric-edges/v1",
+  "scope": "Regression vectors, not universal cross-platform parity. Expected values captured from the unchanged TypeScript engine on Node 24.22.1.",
+  "vectors": [
+    {
+      "id": "lorenz-euler4-integer-cube",
+      "kind": "step",
+      "program": "lorenz",
+      "method": "euler4",
+      "state": {
+        "x": 1e+300,
+        "y": 0,
+        "z": 0,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "error": "NON_FINITE_OUTPUT"
+      }
+    },
+    {
+      "id": "lorenz-euler4-large-time",
+      "kind": "step",
+      "program": "lorenz",
+      "method": "euler4",
+      "state": {
+        "x": 0.2,
+        "y": 0,
+        "z": 0.5,
+        "t": 1.7e+308
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "77016029974daca6e906eaacd083e88f4b3c4cf0b98720f0b1d296b4f4f76a96"
+      }
+    },
+    {
+      "id": "lorenz-euler4-ordinary-int",
+      "kind": "step",
+      "program": "lorenz",
+      "method": "euler4",
+      "state": {
+        "x": 1,
+        "y": 2,
+        "z": 3,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "add9913bb93a97984f370bff6f712c1dfc5285391895376759fb1a846c4b19ee"
+      }
+    },
+    {
+      "id": "lorenz-rk4-integer-cube",
+      "kind": "step",
+      "program": "lorenz",
+      "method": "rk4",
+      "state": {
+        "x": 1e+300,
+        "y": 0,
+        "z": 0,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "error": "NON_FINITE_OUTPUT"
+      }
+    },
+    {
+      "id": "lorenz-rk4-large-time",
+      "kind": "step",
+      "program": "lorenz",
+      "method": "rk4",
+      "state": {
+        "x": 0.2,
+        "y": 0,
+        "z": 0.5,
+        "t": 1.7e+308
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "b8ecb461906d12b986fc9b4a9d2dbc91b021f62a9f21a6d933dde30fdbd4cb3c"
+      }
+    },
+    {
+      "id": "lorenz-rk4-ordinary-int",
+      "kind": "step",
+      "program": "lorenz",
+      "method": "rk4",
+      "state": {
+        "x": 1,
+        "y": 2,
+        "z": 3,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "bf73ab3f5a0a36f8863f453ba502386b73fa9f2c26d55ab35aa5c5f650c936f4"
+      }
+    },
+    {
+      "id": "harmonic-euler4-integer-cube",
+      "kind": "step",
+      "program": "harmonic",
+      "method": "euler4",
+      "state": {
+        "x": 1e+300,
+        "y": 0,
+        "z": 0,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "8c1113ec375c010b90bfef2453e9b63a85e7af10bebd636356d83120a00ec493"
+      }
+    },
+    {
+      "id": "harmonic-euler4-large-time",
+      "kind": "step",
+      "program": "harmonic",
+      "method": "euler4",
+      "state": {
+        "x": 0.2,
+        "y": 0,
+        "z": 0.5,
+        "t": 1.7e+308
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "dd2d5265779050dbaa2745368c65dcd46e1403b0e67dd7450c337e83c4e3d3e6"
+      }
+    },
+    {
+      "id": "harmonic-euler4-ordinary-int",
+      "kind": "step",
+      "program": "harmonic",
+      "method": "euler4",
+      "state": {
+        "x": 1,
+        "y": 2,
+        "z": 3,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "08ed2c7bcac05b1c49d0dc4537e392d1130a90aee97a825556a266995c6b633c"
+      }
+    },
+    {
+      "id": "harmonic-rk4-integer-cube",
+      "kind": "step",
+      "program": "harmonic",
+      "method": "rk4",
+      "state": {
+        "x": 1e+300,
+        "y": 0,
+        "z": 0,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "7494a8f913da302177b84586b59f4cc92cc93b87be600a1e601800ec286304f8"
+      }
+    },
+    {
+      "id": "harmonic-rk4-large-time",
+      "kind": "step",
+      "program": "harmonic",
+      "method": "rk4",
+      "state": {
+        "x": 0.2,
+        "y": 0,
+        "z": 0.5,
+        "t": 1.7e+308
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "57ec1e95c222b9401af60e2947d0f9d320b2596303e30cf931ea254ca60b3b50"
+      }
+    },
+    {
+      "id": "harmonic-rk4-ordinary-int",
+      "kind": "step",
+      "program": "harmonic",
+      "method": "rk4",
+      "state": {
+        "x": 1,
+        "y": 2,
+        "z": 3,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "56f1738f012b077941bac73fe22fe46b7ec34bbd14d162923ed274cc7239b783"
+      }
+    },
+    {
+      "id": "harmonic-symplectic-integer-cube",
+      "kind": "step",
+      "program": "harmonic",
+      "method": "symplectic",
+      "state": {
+        "x": 1e+300,
+        "y": 0,
+        "z": 0,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "c68cc740b50a8c5845868548c80ca45134ef8eb5d7e0b2e171b0bf3969a96c56"
+      }
+    },
+    {
+      "id": "harmonic-symplectic-large-time",
+      "kind": "step",
+      "program": "harmonic",
+      "method": "symplectic",
+      "state": {
+        "x": 0.2,
+        "y": 0,
+        "z": 0.5,
+        "t": 1.7e+308
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "253c26dc51cac36c8ef6fdba006da46c54887a7f573e9fee16f59e51063cb28b"
+      }
+    },
+    {
+      "id": "harmonic-symplectic-ordinary-int",
+      "kind": "step",
+      "program": "harmonic",
+      "method": "symplectic",
+      "state": {
+        "x": 1,
+        "y": 2,
+        "z": 3,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "6ffd7485a7e81577ae1186795d57a392e491141de17186986d696e911c483939"
+      }
+    },
+    {
+      "id": "vanderpol-euler4-integer-cube",
+      "kind": "step",
+      "program": "vanderpol",
+      "method": "euler4",
+      "state": {
+        "x": 1e+300,
+        "y": 0,
+        "z": 0,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "error": "NON_FINITE_OUTPUT"
+      }
+    },
+    {
+      "id": "vanderpol-euler4-large-time",
+      "kind": "step",
+      "program": "vanderpol",
+      "method": "euler4",
+      "state": {
+        "x": 0.2,
+        "y": 0,
+        "z": 0.5,
+        "t": 1.7e+308
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "0c5ff66f6bce00b3347ef7aa41da1a7de9e3f9d1c718fce38561d30168e7e92b"
+      }
+    },
+    {
+      "id": "vanderpol-euler4-ordinary-int",
+      "kind": "step",
+      "program": "vanderpol",
+      "method": "euler4",
+      "state": {
+        "x": 1,
+        "y": 2,
+        "z": 3,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "89d1130b66f469840ac75be1cc7209f5bcaabd5475cc373b3987498e286147c6"
+      }
+    },
+    {
+      "id": "vanderpol-rk4-integer-cube",
+      "kind": "step",
+      "program": "vanderpol",
+      "method": "rk4",
+      "state": {
+        "x": 1e+300,
+        "y": 0,
+        "z": 0,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "error": "NON_FINITE_OUTPUT"
+      }
+    },
+    {
+      "id": "vanderpol-rk4-large-time",
+      "kind": "step",
+      "program": "vanderpol",
+      "method": "rk4",
+      "state": {
+        "x": 0.2,
+        "y": 0,
+        "z": 0.5,
+        "t": 1.7e+308
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "72248c9f6197952302fdfcb1b207496859d720a255c5b2d8889dd6842c825001"
+      }
+    },
+    {
+      "id": "vanderpol-rk4-ordinary-int",
+      "kind": "step",
+      "program": "vanderpol",
+      "method": "rk4",
+      "state": {
+        "x": 1,
+        "y": 2,
+        "z": 3,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "687bd945a1c76e81319427c4cd7ae5c8e90b1da36fd927db8dea1c8aa9c7ecf3"
+      }
+    },
+    {
+      "id": "duffing-euler4-integer-cube",
+      "kind": "step",
+      "program": "duffing",
+      "method": "euler4",
+      "state": {
+        "x": 1e+300,
+        "y": 0,
+        "z": 0,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "error": "NON_FINITE_OUTPUT"
+      }
+    },
+    {
+      "id": "duffing-euler4-large-time",
+      "kind": "step",
+      "program": "duffing",
+      "method": "euler4",
+      "state": {
+        "x": 0.2,
+        "y": 0,
+        "z": 0.5,
+        "t": 1.7e+308
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "error": "NON_FINITE_OUTPUT"
+      }
+    },
+    {
+      "id": "duffing-euler4-ordinary-int",
+      "kind": "step",
+      "program": "duffing",
+      "method": "euler4",
+      "state": {
+        "x": 1,
+        "y": 2,
+        "z": 3,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "89d45bcee685d4bc0f6f09aeb50630966a15f7377f87f3fec15fe981b3b67ef1"
+      }
+    },
+    {
+      "id": "duffing-rk4-integer-cube",
+      "kind": "step",
+      "program": "duffing",
+      "method": "rk4",
+      "state": {
+        "x": 1e+300,
+        "y": 0,
+        "z": 0,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "error": "NON_FINITE_OUTPUT"
+      }
+    },
+    {
+      "id": "duffing-rk4-large-time",
+      "kind": "step",
+      "program": "duffing",
+      "method": "rk4",
+      "state": {
+        "x": 0.2,
+        "y": 0,
+        "z": 0.5,
+        "t": 1.7e+308
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "error": "NON_FINITE_OUTPUT"
+      }
+    },
+    {
+      "id": "duffing-rk4-ordinary-int",
+      "kind": "step",
+      "program": "duffing",
+      "method": "rk4",
+      "state": {
+        "x": 1,
+        "y": 2,
+        "z": 3,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "0673a9db37c4564b15c709a361d44c24fbb241c1857d1c780f243dd03443d989"
+      }
+    },
+    {
+      "id": "duffing-symplectic-integer-cube",
+      "kind": "step",
+      "program": "duffing",
+      "method": "symplectic",
+      "state": {
+        "x": 1e+300,
+        "y": 0,
+        "z": 0,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "error": "NON_FINITE_OUTPUT"
+      }
+    },
+    {
+      "id": "duffing-symplectic-large-time",
+      "kind": "step",
+      "program": "duffing",
+      "method": "symplectic",
+      "state": {
+        "x": 0.2,
+        "y": 0,
+        "z": 0.5,
+        "t": 1.7e+308
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "error": "NON_FINITE_OUTPUT"
+      }
+    },
+    {
+      "id": "duffing-symplectic-ordinary-int",
+      "kind": "step",
+      "program": "duffing",
+      "method": "symplectic",
+      "state": {
+        "x": 1,
+        "y": 2,
+        "z": 3,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "f154aa5676d646e51901cf9f041e7bfddcf8874482bf7d2cca0b08ccc903b649"
+      }
+    },
+    {
+      "id": "lotka-euler4-integer-cube",
+      "kind": "step",
+      "program": "lotka",
+      "method": "euler4",
+      "state": {
+        "x": 1e+300,
+        "y": 0,
+        "z": 0,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "error": "NON_FINITE_OUTPUT"
+      }
+    },
+    {
+      "id": "lotka-euler4-large-time",
+      "kind": "step",
+      "program": "lotka",
+      "method": "euler4",
+      "state": {
+        "x": 0.2,
+        "y": 0,
+        "z": 0.5,
+        "t": 1.7e+308
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "aaff11edf312630de7c951679eebd392f0ffa053c2259f875c8f6e3073f19996"
+      }
+    },
+    {
+      "id": "lotka-euler4-ordinary-int",
+      "kind": "step",
+      "program": "lotka",
+      "method": "euler4",
+      "state": {
+        "x": 1,
+        "y": 2,
+        "z": 3,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "b7f9970564a817ea72c6efb73ab94d1ec40f9f2d6928b837b7992fd9b5309f5c"
+      }
+    },
+    {
+      "id": "lotka-rk4-integer-cube",
+      "kind": "step",
+      "program": "lotka",
+      "method": "rk4",
+      "state": {
+        "x": 1e+300,
+        "y": 0,
+        "z": 0,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "27ddabb82b246839cf44bbaf7ad00b103fe260956e05a499b93c25e0b0f37693"
+      }
+    },
+    {
+      "id": "lotka-rk4-large-time",
+      "kind": "step",
+      "program": "lotka",
+      "method": "rk4",
+      "state": {
+        "x": 0.2,
+        "y": 0,
+        "z": 0.5,
+        "t": 1.7e+308
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "b3d27969043671fb85f4dc202afc1aca5d819c08a9113b6974a2f078d2c8c342"
+      }
+    },
+    {
+      "id": "lotka-rk4-ordinary-int",
+      "kind": "step",
+      "program": "lotka",
+      "method": "rk4",
+      "state": {
+        "x": 1,
+        "y": 2,
+        "z": 3,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "f4282b65df6783d89acf3a6800bd61f5276dad35216ba4b95d09ae713db98a9f"
+      }
+    },
+    {
+      "id": "nemo-euler4-integer-cube",
+      "kind": "step",
+      "program": "nemo",
+      "method": "euler4",
+      "state": {
+        "x": 1e+300,
+        "y": 0,
+        "z": 0,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "22b4a84346e7f783e6d659ab683db36a16e3cbbcc0efa7642d925f01697a3c2d"
+      }
+    },
+    {
+      "id": "nemo-euler4-large-time",
+      "kind": "step",
+      "program": "nemo",
+      "method": "euler4",
+      "state": {
+        "x": 0.2,
+        "y": 0,
+        "z": 0.5,
+        "t": 1.7e+308
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "error": "NON_FINITE_OUTPUT"
+      }
+    },
+    {
+      "id": "nemo-euler4-ordinary-int",
+      "kind": "step",
+      "program": "nemo",
+      "method": "euler4",
+      "state": {
+        "x": 1,
+        "y": 2,
+        "z": 3,
+        "t": 0
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "1deb103200155ec3916d9c1dc0301866366f56b756e05facfb0e2ffe5878ad47"
+      }
+    },
+    {
+      "id": "nemo-optical-phase-overflow-bank-15",
+      "kind": "step",
+      "program": "nemo",
+      "method": "euler4",
+      "state": {
+        "x": -65,
+        "y": -70,
+        "z": 0.06,
+        "t": 0,
+        "bank": [
+          1.7e+308,
+          -62,
+          -1.7e+308,
+          -58,
+          -67,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "cfe75f49725e66598494e53cf472e4345ea03304a9337202ed7eff60a3d70e3e"
+      }
+    },
+    {
+      "id": "nemo-optical-phase-overflow-bank-20",
+      "kind": "step",
+      "program": "nemo",
+      "method": "euler4",
+      "state": {
+        "x": -65,
+        "y": -70,
+        "z": 0.06,
+        "t": 0,
+        "bank": [
+          1.7e+308,
+          -62,
+          -1.7e+308,
+          -58,
+          -67,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "dt": 0.01,
+      "chaos": 0.5,
+      "drive": 0.5,
+      "expected": {
+        "outputHash": "cfe75f49725e66598494e53cf472e4345ea03304a9337202ed7eff60a3d70e3e"
+      }
+    },
+    {
+      "id": "optical-phase-subtraction-overflow",
+      "kind": "interfere",
+      "args": [
+        1,
+        1.7e+308,
+        1,
+        -1.7e+308
+      ],
+      "expected": {
+        "outputHash": "b51ab7ae4e069599c206f3e30ca029bfc866cee02308ba415435c19ef22b2581"
+      }
+    },
+    {
+      "id": "harmonic-large-integer-readout",
+      "kind": "scale",
+      "program": "harmonic",
+      "state": {
+        "x": 1e+300,
+        "y": 0,
+        "z": 0,
+        "t": 0
+      },
+      "expected": {
+        "outputHash": "dd668b572857a02db50047e845ba5032764746e200ce5f1400b977be0ba8da4a"
+      }
+    }
+  ]
+}

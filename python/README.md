@@ -5,6 +5,17 @@ IMMUNE Channel B can vendor it unchanged. The TypeScript binding is
 `src/lib/nexus/math.ts` + `src/lib/nexus/dynamics.ts`. Both bindings produce
 identical hashes for every vector in `contracts/nexus-parity-v2.json`.
 
+That is a tested-vector guarantee, not universal cross-platform hash identity.
+Python's platform math library and JavaScript engines can round `sin`, `cos`,
+`exp`, `log`, `atan2` and `hypot` differently. A last-bit difference can cross
+the nine-decimal canonical rounding boundary or amplify along a chaotic
+trajectory. Keep the engine, source revision and runtime environment with
+reproduction evidence; use the same qualified implementation to verify an
+arbitrary run. Do not admit a different hash as equivalent or regenerate the
+published vectors to conceal a mismatch. `experiments/numeric-parity-probe.py`
+reports a reproducible IMMUNE lambda counterexample and exits nonzero when
+the current Python/Node pair disagrees.
+
 This is executable software simulation. It is not a physical analog or
 neuromorphic chip. Energy is UNAVAILABLE. Λ uniqueness is Conjecture 1 (OPEN).
 
@@ -22,8 +33,9 @@ of `h = dt / 4`.
 | lotka | `lotka/2` (F-05) | yes | yes | no |
 | nemo | `nemo/1` | instrument scheme only | no | no |
 
-- `euler4` (`euler4/1`) is bit-for-bit the browser instrument's `analogStep`
-  and IMMUNE's port. It is first order and not conservative: harmonic energy
+- `euler4` (`euler4/1`) follows the browser instrument's `analogStep`
+  arithmetic order and IMMUNE's port, with parity checked on the published
+  vectors. It is first order and not conservative: harmonic energy
   grows 54.568× in 60 s at ω = 4. For Lorenz it can diverge when dt > 0.04.
 - `rk4` (`rk4/1`) is classical Runge-Kutta on the exact vector field. Lotka runs
   without the instrument's 0.02 floor.
@@ -40,6 +52,21 @@ of `h = dt / 4`.
 - `clamp01` is `Math.min(1, Math.max(0, c))` as in `math.ts`, so a NaN chaos
   stays NaN in `coefficients()` and `advance()` fails closed on it with
   `NON_FINITE_OUTPUT`. Finite results are unchanged.
+- `step()` converts validated integer coordinates to binary64 before
+  arithmetic. Overflow inside trigonometry produces NaN as in JavaScript,
+  allowing the existing `NON_FINITE_OUTPUT` checks and optical fallbacks to
+  run. Finite trigonometric results still use the platform math library.
+- Direct malformed-state APIs differ: Python `step()` raises `INVALID_STATE`
+  for a non-`NexusState`, non-number coordinate or bank cell, or a bank that
+  is not a tuple or list, on every program. TypeScript `analogIntegrate`
+  raises `NON_FINITE_NUMBER` for a non-number coordinate, checks NEMO bank
+  shape before its cells, ignores banks on other programs, and throws
+  `TypeError` for a null state. A missing NEMO bank is seeded on both sides.
+  Use `NexusRunInput.from_dict` / `normalizeDynamicsInput` for the JSON
+  contract boundary.
+- A directly constructed `NexusRunInput` revalidates but does not normalize
+  stored values. An integer such as `2**53 + 1` is rejected with
+  `INVALID_REQUEST`; `from_dict` stores its rounded binary64 value instead.
 
 ## API
 

@@ -375,8 +375,10 @@ function strictNemoBank(raw?: number[]): number[] {
 
 /**
  * One strict tick: validates inputs and never reseeds. Throws AnalogEngineError
- * (NON_FINITE_OUTPUT on NaN/Infinity, UNSUPPORTED_METHOD, ...). Hash-identical
- * to python/nexus_dynamics integrators.step().
+ * (NON_FINITE_OUTPUT on NaN/Infinity, UNSUPPORTED_METHOD, ...). Python parity
+ * is checked on the published vectors; arbitrary hashes can differ with
+ * platform math rounding. Direct malformed-state errors also differ: see
+ * python/README.md.
  */
 export function analogIntegrate(
   program: AnalogProgram,
