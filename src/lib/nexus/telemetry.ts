@@ -59,6 +59,38 @@ export async function probeEstate(timeoutMs = 2800): Promise<Probe[]> {
   return Promise.all(ENDPOINTS.map((e) => probeOne(e, timeoutMs)));
 }
 
+const MAX_PROBE_BYTES = 64 * 1024;
+
+class ProbeTooLarge extends Error {}
+
+async function readProbeBody(res: Response): Promise<string> {
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_PROBE_BYTES) {
+        void reader.cancel().catch(() => {});
+        throw new ProbeTooLarge();
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
 async function probeOne(e: ProbeEndpoint, timeoutMs: number): Promise<Probe> {
   const at = Date.now();
   if (e.unavailable !== undefined) {
@@ -68,17 +100,19 @@ async function probeOne(e: ProbeEndpoint, timeoutMs: number): Promise<Probe> {
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(e.url, { signal: ctrl.signal });
-    clearTimeout(t);
     if (!res.ok) {
+      ctrl.abort(); // Do not consume an error response body.
       return { id: e.id, label: e.label, status: "UNAVAILABLE", detail: `HTTP ${res.status}`, at };
     }
+    // Keep the same deadline active through the body, including chunked responses.
+    const body = await readProbeBody(res);
     const nexus = e.id === "nexus-space";
     const anatomy = e.id === "anatomy";
     const unavailable = nexus ? "runtime source identity unavailable" : anatomy ? "anatomy transport contract unavailable" : `HTTP ${res.status}`;
     let detail = unavailable;
     let live = !nexus && !anatomy;
     try {
-      const j = (await res.json()) as Record<string, unknown>;
+      const j = JSON.parse(body) as Record<string, unknown>;
       if (nexus) {
         const revision = typeof j.source_revision === "string" ? j.source_revision : "";
         live = j.schema === "szl.nexus-source-binding/v2"
@@ -107,14 +141,16 @@ async function probeOne(e: ProbeEndpoint, timeoutMs: number): Promise<Probe> {
     }
     return { id: e.id, label: e.label, status: live ? "LIVE" : "UNAVAILABLE", detail, at };
   } catch (err) {
-    clearTimeout(t);
     const reason = err instanceof Error ? err.name : "error";
     return {
       id: e.id,
       label: e.label,
       status: "UNAVAILABLE",
-      detail: reason === "AbortError" ? "timeout" : "cors or unreachable",
+      detail: err instanceof ProbeTooLarge ? "response too large"
+        : ctrl.signal.aborted || reason === "AbortError" ? "timeout" : "cors or unreachable",
       at,
     };
+  } finally {
+    clearTimeout(t);
   }
 }
