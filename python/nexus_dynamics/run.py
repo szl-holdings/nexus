@@ -9,8 +9,9 @@ ticks, REP -> reseed every ``repeatEvery`` ticks with nudge
 ``deterministic_output`` is the v2 parity payload hashed by
 ``contracts/nexus-parity-v2.json``: program model version, integrator version,
 mode, steps, the full final state and a strided trail (at most 257 points), plus
-the invariant booleans. It carries no source revision, so the hashes change only
-when the mathematics (or a declared model/integrator version) changes.
+the invariant booleans. It carries no source revision. Hashes bind the canonical
+output; platform math rounding can also affect them for inputs beyond the
+published parity vectors, even at the same model/integrator version.
 """
 from __future__ import annotations
 
