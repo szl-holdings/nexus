@@ -121,7 +121,10 @@ def finite_number(name: str, value: Any) -> float:
     """A JSON number (never a bool or a numeric string) that is finite."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise AcousticImportError(NON_FINITE_NUMBER, f"{name} must be a JSON number")
-    number = float(value)
+    try:
+        number = float(value)
+    except OverflowError as exc:
+        raise AcousticImportError(NON_FINITE_NUMBER, f"{name} must be finite") from exc
     if not math.isfinite(number):
         raise AcousticImportError(NON_FINITE_NUMBER, f"{name} must be finite")
     return number
@@ -158,7 +161,7 @@ def _text(value: Any, code: str, name: str, *, allow_empty: bool = False) -> str
 
 
 def _timestamp(name: str, value: Any, now: datetime) -> datetime:
-    if not isinstance(value, str) or not _TIMESTAMP_RE.match(value):
+    if not isinstance(value, str) or not _TIMESTAMP_RE.fullmatch(value):
         raise AcousticImportError(INVALID_TIMESTAMP, f"{name} must be UTC 'YYYY-MM-DDTHH:MM:SSZ'")
     try:
         stamp = datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
@@ -199,7 +202,7 @@ def _parse_source(value: Any, expected_source_revision: str | None) -> tuple[str
         )
     _text(source["generator"], UNSUPPORTED_SOURCE, "source.generator")
     revision = source["sourceRevision"]
-    if not isinstance(revision, str) or not _REVISION_RE.match(revision):
+    if not isinstance(revision, str) or not _REVISION_RE.fullmatch(revision):
         raise AcousticImportError(INVALID_REVISION, "source.sourceRevision must be a 40-char lowercase git sha")
     if expected_source_revision is not None and revision != expected_source_revision:
         raise AcousticImportError(REVISION_MISMATCH, "source.sourceRevision does not match the pinned revision")
@@ -259,7 +262,7 @@ def _parse_custody(value: Any, samples: tuple[tuple[float, ...], ...], now: date
             )
         previous = at
     stated = custody["samplesSha256"]
-    if not isinstance(stated, str) or not _SHA256_RE.match(stated):
+    if not isinstance(stated, str) or not _SHA256_RE.fullmatch(stated):
         raise AcousticImportError(INVALID_CUSTODY, "custody.samplesSha256 must be 64 lowercase hex")
     if samples_sha256(samples) != stated:
         raise AcousticImportError(DIGEST_MISMATCH, "samples do not match the custodian's digest")
@@ -378,7 +381,7 @@ def admit(payload: Any, *, now: datetime, expected_source_revision: str | None =
     if payload["contractRevision"] != CONTRACT_REVISION:
         raise AcousticImportError(VERSION_MISMATCH, f"contractRevision must be {CONTRACT_REVISION!r}")
     recording_id = payload["recordingId"]
-    if not isinstance(recording_id, str) or not _RECORDING_ID_RE.match(recording_id):
+    if not isinstance(recording_id, str) or not _RECORDING_ID_RE.fullmatch(recording_id):
         raise AcousticImportError(INVALID_RECORDING_ID, f"recordingId must match {RECORDING_ID_PATTERN}")
     kind, revision = _parse_source(payload["source"], expected_source_revision)
     _parse_units(payload["units"])
