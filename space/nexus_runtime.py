@@ -94,7 +94,7 @@ def runtime_health(raw_revision: object) -> dict:
 ENDPOINTS = [
     {"id": "hatun", "label": "Hatun MCP", "url": "https://szlholdings-hatun-mcp.hf.space/healthz"},
     {"id": "anatomy", "label": "Anatomy", "url": "https://szlholdings-anatomy.hf.space/version"},
-    {"id": "nexus-space", "label": "NEXUS hologram", "url": "https://szlholdings-nexus.hf.space/api/build-info"},
+    {"id": "nexus-space", "label": "NEXUS runtime", "url": "https://szlholdings-nexus.hf.space/api/build-info"},
 ]
 
 FETCH_REDIRECT_LIMIT = 20
@@ -186,26 +186,38 @@ def _probe_one(endpoint: dict, timeout_s: float, now_ms: Callable[[], int]) -> d
         return {**head, "status": "UNAVAILABLE", "detail": detail, "at": at}
     with response:
         status = response.status
-        detail = f"HTTP {status}"
-        live = True
+        nexus = endpoint["id"] == "nexus-space"
+        detail = "runtime source identity unavailable" if nexus else f"HTTP {status}"
+        live = not nexus
         try:
             body = json.loads(response.read(), parse_constant=_reject_constant)
             if body is None:
                 raise _NotJson("null")  # TS reads a property of null and lands in its catch
             fields = body if isinstance(body, dict) else {}
-            if endpoint["id"] == "nexus-space":
-                role = fields.get("role") if isinstance(fields.get("role"), str) else ""
-                energy = fields.get("energy") if isinstance(fields.get("energy"), str) else ""
-                live = role == "hologram-not-instrument" and energy == "UNAVAILABLE"
-                detail = "hologram-not-instrument" if live else "instrument not bound · hologram only"
+            if nexus:
+                revision = fields.get("source_revision")
+                live = (
+                    fields.get("schema") == "szl.nexus-source-binding/v2"
+                    and fields.get("source_repository") == SOURCE_REPOSITORY
+                    and fields.get("hf_repository") == HF_REPOSITORY
+                    and fields.get("deployment_authority") == DEPLOYMENT_AUTHORITY
+                    and fields.get("source_bound") is True
+                    and isinstance(revision, str)
+                    and revision != UNAVAILABLE
+                    and normalize_source_revision(revision) == revision
+                    and fields.get("runtime") == RUNTIME
+                    and fields.get("energy") == UNAVAILABLE
+                    and fields.get("uniqueness") == "Conjecture 1"
+                )
+                detail = "source-bound Python runtime" if live else "runtime source identity unavailable"
             elif isinstance(fields.get("status"), str):
                 detail = fields["status"]
             elif isinstance(fields.get("evidenceState"), str):
                 detail = fields["evidenceState"]
             elif isinstance(fields.get("sdk"), str):
                 detail = fields["sdk"]
-        except Exception:  # noqa: BLE001 - mirrors the TS catch: keep LIVE, report the status
-            detail = f"HTTP {status}"
+        except Exception:  # noqa: BLE001 - invalid Nexus identity must remain unavailable
+            detail = "runtime source identity unavailable" if nexus else f"HTTP {status}"
     return {**head, "status": "LIVE" if live else "UNAVAILABLE", "detail": detail, "at": at}
 
 
