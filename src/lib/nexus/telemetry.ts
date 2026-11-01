@@ -12,7 +12,7 @@ export interface Probe {
 }
 
 export const ENDPOINTS: { id: string; label: string; url: string }[] = [
-  { id: "hatun", label: "Hatun MCP", url: "https://szlholdings-hatun-mcp.hf.space/healthz" },
+  { id: "hatun", label: "Hatun gateway", url: "https://a-11-oy.com/api/hatun/evidence" },
   { id: "anatomy", label: "Anatomy", url: "https://betterwithage-anatomy.hf.space/healthz" },
   { id: "nexus-space", label: "NEXUS runtime", url: "https://szlholdings-nexus.hf.space/api/build-info" },
 ];
@@ -65,9 +65,10 @@ async function probeOne(e: { id: string; label: string; url: string }, timeoutMs
     }
     const nexus = e.id === "nexus-space";
     const anatomy = e.id === "anatomy";
-    const unavailable = nexus ? "runtime source identity unavailable" : anatomy ? "anatomy transport contract unavailable" : `HTTP ${res.status}`;
+    const hatun = e.id === "hatun";
+    const unavailable = nexus ? "runtime source identity unavailable" : anatomy ? "anatomy transport contract unavailable" : hatun ? "hatun gateway contract unavailable" : `HTTP ${res.status}`;
     let detail = unavailable;
-    let live = !nexus && !anatomy;
+    let live = !nexus && !anatomy && !hatun;
     try {
       const j = (await res.json()) as Record<string, unknown>;
       if (nexus) {
@@ -90,6 +91,15 @@ async function probeOne(e: { id: string; label: string; url: string }, timeoutMs
           && j.authority_state === "READ_ONLY" && j.evidence_state === "SNAPSHOT"
           && j.verification_state === "STRUCTURAL_ONLY";
         detail = live ? "read-only transport; snapshot evidence" : unavailable;
+      } else if (hatun) {
+        // GET declares gateway/tool availability; it never proves signing or execution.
+        const runtime = j.runtime as Record<string, unknown> | null;
+        const catalog = j.tool_catalog as Record<string, unknown> | null;
+        live = j.schema === "szl.hatun.evidence.v1" && j.namespace === "a11oy"
+          && j.read_only === true && j.get_mints_receipt === false
+          && runtime?.status === "AVAILABLE" && runtime?.mcp_endpoint === "/mcp/"
+          && catalog?.status === "RUNTIME_DECLARED";
+        detail = live ? "read-only gateway; tools declared; execution unverified" : unavailable;
       } else if (typeof j.status === "string") detail = j.status;
       else if (typeof j.evidenceState === "string") detail = j.evidenceState;
       else if (typeof j.sdk === "string") detail = String(j.sdk);

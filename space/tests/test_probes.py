@@ -9,7 +9,17 @@ import pytest
 
 import nexus_runtime as rt
 
+HATUN = {
+    "schema": "szl.hatun.evidence.v1", "namespace": "a11oy",
+    "read_only": True, "get_mints_receipt": False,
+    "runtime": {"status": "AVAILABLE", "mcp_endpoint": "/mcp/"},
+    "tool_catalog": {"status": "RUNTIME_DECLARED"},
+    "signer": {"status": "UNKNOWN", "label": None},
+    "receipt_chain": {"status": "UNKNOWN", "observed_receipts": 0},
+}
+
 ROUTES = {
+    "/hatun-live": (200, rt.dumps(HATUN)),
     "/runtime-live": (200, rt.dumps(rt.build_info("0123456789abcdef0123456789abcdef01234567"))),
     "/ok": (200, b'{"status":"ok"}'),
     "/evidence": (200, b'{"evidenceState":"X"}'),
@@ -73,7 +83,7 @@ def closed_port_url():
         return f"http://127.0.0.1:{sock.getsockname()[1]}/"
 
 
-def one(base, path, endpoint_id="hatun", timeout_s=2.0):
+def one(base, path, endpoint_id="generic", timeout_s=2.0):
     url = path if path.startswith("http") else base + path
     [probe] = rt.probe_estate(timeout_s, [{"id": endpoint_id, "label": "L", "url": url}])
     assert list(probe) == ["id", "label", "status", "detail", "at"]
@@ -105,6 +115,37 @@ def test_nexus_space_requires_current_source_bound_runtime(base):
         assert one(base, path, "nexus-space") == ("UNAVAILABLE", "runtime source identity unavailable"), path
 
 
+def test_hatun_requires_read_only_gateway_contract_without_promoting_execution(base, monkeypatch):
+    assert one(base, "/hatun-live", "hatun") == (
+        "LIVE", "read-only gateway; tools declared; execution unverified",
+    )
+    for path in ("/ok", "/role-empty", "/array", "/null", "/text", "/nan"):
+        assert one(base, path, "hatun") == ("UNAVAILABLE", "hatun gateway contract unavailable"), path
+
+    invalid = []
+    for key in ("schema", "namespace", "read_only", "get_mints_receipt", "runtime", "tool_catalog"):
+        missing = dict(HATUN)
+        del missing[key]
+        invalid.append(missing)
+    for key in ("read_only", "get_mints_receipt"):
+        # Python must not accept strings or integers as boolean declarations.
+        for wrong in (str(HATUN[key]).lower(), not HATUN[key], int(HATUN[key])):
+            invalid.append({**HATUN, key: wrong})
+    for parent, keys in {"runtime": ("status", "mcp_endpoint"), "tool_catalog": ("status",)}.items():
+        for malformed in (None, [], "AVAILABLE", True, 1):
+            invalid.append({**HATUN, parent: malformed})
+        for key in keys:
+            missing = dict(HATUN[parent])
+            del missing[key]
+            invalid.append({**HATUN, parent: missing})
+            invalid.append({**HATUN, parent: {**HATUN[parent], key: "wrong"}})
+    for body in invalid:
+        monkeypatch.setitem(ROUTES, "/hatun-invalid", (200, rt.dumps(body)))
+        assert one(base, "/hatun-invalid", "hatun") == (
+            "UNAVAILABLE", "hatun gateway contract unavailable",
+        ), body
+
+
 def test_timeout_and_unreachable(base):
     assert one(base, "/slow", timeout_s=0.2) == ("UNAVAILABLE", "timeout")
     assert one(base, closed_port_url()) == ("UNAVAILABLE", "cors or unreachable")
@@ -112,6 +153,8 @@ def test_timeout_and_unreachable(base):
 
 def test_default_endpoints_match_typescript():
     assert [e["id"] for e in rt.ENDPOINTS] == ["hatun", "anatomy", "nexus-space"]
+    assert rt.ENDPOINTS[0]["url"] == "https://a-11-oy.com/api/hatun/evidence"
+    assert rt.ENDPOINTS[0]["label"] == "Hatun gateway"
     assert rt.ENDPOINTS[2]["url"] == "https://szlholdings-nexus.hf.space/api/build-info"
     assert rt.ENDPOINTS[2]["label"] == "NEXUS runtime"
 

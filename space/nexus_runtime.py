@@ -92,7 +92,7 @@ def runtime_health(raw_revision: object) -> dict:
 
 
 ENDPOINTS = [
-    {"id": "hatun", "label": "Hatun MCP", "url": "https://szlholdings-hatun-mcp.hf.space/healthz"},
+    {"id": "hatun", "label": "Hatun gateway", "url": "https://a-11-oy.com/api/hatun/evidence"},
     {"id": "anatomy", "label": "Anatomy", "url": "https://betterwithage-anatomy.hf.space/healthz"},
     {"id": "nexus-space", "label": "NEXUS runtime", "url": "https://szlholdings-nexus.hf.space/api/build-info"},
 ]
@@ -188,12 +188,14 @@ def _probe_one(endpoint: dict, timeout_s: float, now_ms: Callable[[], int]) -> d
         status = response.status
         nexus = endpoint["id"] == "nexus-space"
         anatomy = endpoint["id"] == "anatomy"
+        hatun = endpoint["id"] == "hatun"
         unavailable = (
             "runtime source identity unavailable" if nexus else
-            "anatomy transport contract unavailable" if anatomy else f"HTTP {status}"
+            "anatomy transport contract unavailable" if anatomy else
+            "hatun gateway contract unavailable" if hatun else f"HTTP {status}"
         )
         detail = unavailable
-        live = not nexus and not anatomy
+        live = not nexus and not anatomy and not hatun
         try:
             body = json.loads(response.read(), parse_constant=_reject_constant)
             if body is None:
@@ -227,6 +229,22 @@ def _probe_one(endpoint: dict, timeout_s: float, now_ms: Callable[[], int]) -> d
                     and fields.get("verification_state") == "STRUCTURAL_ONLY"
                 )
                 detail = "read-only transport; snapshot evidence" if live else unavailable
+            elif hatun:
+                # GET declares gateway/tools, never signing or execution proof.
+                runtime = fields.get("runtime")
+                catalog = fields.get("tool_catalog")
+                live = (
+                    fields.get("schema") == "szl.hatun.evidence.v1"
+                    and fields.get("namespace") == "a11oy"
+                    and fields.get("read_only") is True
+                    and fields.get("get_mints_receipt") is False
+                    and isinstance(runtime, dict)
+                    and runtime.get("status") == "AVAILABLE"
+                    and runtime.get("mcp_endpoint") == "/mcp/"
+                    and isinstance(catalog, dict)
+                    and catalog.get("status") == "RUNTIME_DECLARED"
+                )
+                detail = "read-only gateway; tools declared; execution unverified" if live else unavailable
             elif isinstance(fields.get("status"), str):
                 detail = fields["status"]
             elif isinstance(fields.get("evidenceState"), str):

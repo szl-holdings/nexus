@@ -53,6 +53,49 @@ test("probe results match TS probeEstate() for every response class", async () =
     "/role-empty": [200, "{}"],
   };
   const runtime = buildInfo(SHA);
+  // A read-only gateway declaration does not verify tool execution or signing.
+  const hatun = {
+    schema: "szl.hatun.evidence.v1", namespace: "a11oy",
+    read_only: true, get_mints_receipt: false,
+    runtime: { status: "AVAILABLE", mcp_endpoint: "/mcp/" },
+    tool_catalog: { status: "RUNTIME_DECLARED" },
+    signer: { status: "UNKNOWN", label: null },
+    receipt_chain: { status: "UNKNOWN", observed_receipts: 0 },
+  };
+  const hatunCases = {
+    "/hatun-live-unknown-evidence": [JSON.stringify(hatun), true],
+    "/hatun-html": ["<!doctype html><title>Hatun Gateway</title>", false],
+    "/hatun-null": ["null", false],
+    "/hatun-array": ["[]", false],
+    "/hatun-number": ["1", false],
+    "/hatun-boolean": ["true", false],
+    "/hatun-string": ['"AVAILABLE"', false],
+    "/hatun-unrelated": ['{"status":"ok"}', false],
+  };
+  for (const key of ["schema", "namespace", "read_only", "get_mints_receipt", "runtime", "tool_catalog"]) {
+    const missing = { ...hatun };
+    delete missing[key];
+    hatunCases[`/hatun-missing-${key}`] = [JSON.stringify(missing), false];
+    // String booleans must not pass strict read-only/no-mint checks.
+    const wrong = typeof hatun[key] === "boolean" ? String(hatun[key]) : "wrong";
+    hatunCases[`/hatun-wrong-${key}`] = [JSON.stringify({ ...hatun, [key]: wrong }), false];
+  }
+  for (const [parent, keys] of Object.entries({ runtime: ["status", "mcp_endpoint"], tool_catalog: ["status"] })) {
+    for (const key of keys) {
+      const missing = { ...hatun[parent] };
+      delete missing[key];
+      hatunCases[`/hatun-missing-${parent}-${key}`] = [JSON.stringify({ ...hatun, [parent]: missing }), false];
+      hatunCases[`/hatun-wrong-${parent}-${key}`] = [JSON.stringify({ ...hatun, [parent]: { ...hatun[parent], [key]: "wrong" } }), false];
+    }
+    for (const malformed of [null, [], true, 1]) {
+      hatunCases[`/hatun-malformed-${parent}-${JSON.stringify(malformed)}`] = [JSON.stringify({ ...hatun, [parent]: malformed }), false];
+    }
+  }
+  for (const key of ["read_only", "get_mints_receipt"]) {
+    hatunCases[`/hatun-inverted-${key}`] = [JSON.stringify({ ...hatun, [key]: !hatun[key] }), false];
+    hatunCases[`/hatun-numeric-${key}`] = [JSON.stringify({ ...hatun, [key]: Number(hatun[key]) }), false];
+  }
+  for (const [path, [body]] of Object.entries(hatunCases)) routes[path] = [200, body];
   const anatomy = {
     service: "anatomy-space", organ: "anatomy", status: "ok",
     transport_state: "REACHABLE", authority_state: "READ_ONLY",
@@ -132,7 +175,7 @@ test("probe results match TS probeEstate() for every response class", async () =
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   const cases = [...Object.keys(routes), "/slow", "/slow-body", "/trickle", "/hop/12", "/hop/21"].map((path) => ({
-    id: path.startsWith("/anatomy-") ? "anatomy" : path.startsWith("/role") || path.startsWith("/nexus-") || path === "/array" ? "nexus-space" : `e${path.slice(1)}`,
+    id: path.startsWith("/hatun-") ? "hatun" : path.startsWith("/anatomy-") ? "anatomy" : path.startsWith("/role") || path.startsWith("/nexus-") || path === "/array" ? "nexus-space" : `e${path.slice(1)}`,
     label: path,
     url: base + path,
   }));
@@ -148,6 +191,15 @@ test("probe results match TS probeEstate() for every response class", async () =
       ),
     );
     assert.equal(mask(py), mask(ts));
+    for (const [path, [, live]] of Object.entries(hatunCases)) {
+      const expected = live ? "LIVE" : "UNAVAILABLE";
+      const detail = live ? "read-only gateway; tools declared; execution unverified" : "hatun gateway contract unavailable";
+      for (const rows of [tsRows, JSON.parse(py)]) {
+        const row = rows.find((entry) => entry.label === path);
+        assert.equal(row?.status, expected, path);
+        assert.equal(row?.detail, detail, path);
+      }
+    }
     for (const [path, [, live]] of Object.entries(anatomyCases)) {
       const expected = live ? "LIVE" : "UNAVAILABLE";
       const detail = live ? "read-only transport; snapshot evidence" : "anatomy transport contract unavailable";
@@ -165,6 +217,16 @@ test("probe results match TS probeEstate() for every response class", async () =
   } finally {
     ENDPOINTS.splice(0, ENDPOINTS.length, ...original);
     server.close();
+  }
+});
+
+test("Hatun probes use the canonical product's read-only gateway contract in both runtimes", async () => {
+  const { ENDPOINTS } = await import("../src/lib/nexus/telemetry.ts");
+  const py = JSON.parse(execFileSync("python3", ["-c", "import sys,json; sys.path.insert(0,'space'); from nexus_runtime import ENDPOINTS; print(json.dumps(ENDPOINTS))"], { encoding: "utf8" }));
+  for (const endpoints of [ENDPOINTS, py]) {
+    const hatun = endpoints.find((row) => row.id === "hatun");
+    assert.equal(hatun.url, "https://a-11-oy.com/api/hatun/evidence");
+    assert.equal(hatun.label, "Hatun gateway");
   }
 });
 
