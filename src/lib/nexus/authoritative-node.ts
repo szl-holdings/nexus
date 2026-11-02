@@ -12,7 +12,7 @@ import {
   immuneV1Output,
   normalizeDynamicsInput,
 } from "./dynamics.ts";
-import type { AnalogMethod } from "./math.ts";
+import { AnalogEngineError, type AnalogMethod } from "./math.ts";
 
 export const AUTHORITY_PROFILE_SCHEMA = "szl.nexus-authority-profile/v1";
 export const AUTHORITY_REQUEST_SCHEMA = "szl.nexus-authoritative-request/v1";
@@ -447,13 +447,26 @@ async function startAuthority(): Promise<{
       } else fail("INVALID_ROUTE", "Only GET /profile and POST /run are supported");
     } catch (error) {
       const code =
-        error instanceof Error && "code" in error && typeof error.code === "string"
+        error instanceof AuthorityError || error instanceof AnalogEngineError
           ? error.code
-          : "EXECUTION_ERROR";
+          : error instanceof SyntaxError
+            ? "INVALID_REQUEST"
+            : "EXECUTION_ERROR";
+      // Only typed codes cross HTTP. Exception messages may contain filesystem
+      // paths, stack details, or malformed request fragments.
+      const descriptions: Record<string, string> = {
+        AUTHORITY_MISMATCH: "Authority profile changed; explicit re-admission is required",
+        SOURCE_CHANGED: "Authority source changed; restart and explicitly re-admit",
+        INVALID_REQUEST: "Invalid authoritative request",
+        EXECUTION_ERROR: "Authority execution failed",
+      };
       if (!res.destroyed)
         send(422, {
           schema: AUTHORITY_ERROR_SCHEMA,
-          error: { code, message: error instanceof Error ? error.message : String(error) },
+          error: {
+            code,
+            message: descriptions[code] ?? "Authority rejected the request; see the error code",
+          },
         });
     } finally {
       clearTimeout(timer);

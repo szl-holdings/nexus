@@ -142,6 +142,12 @@ def test_source_mutation_invalidates_running_authority(node, tmp_path):
         with pytest.raises(AuthorityError) as error:
             run(ready)
         assert error.value.code == "SOURCE_CHANGED"
+        (tmp_path / "contracts/nexus-authoritative-execution-v1.json").unlink()
+        with pytest.raises(AuthorityError) as error:
+            run(ready)
+        assert error.value.code == "EXECUTION_ERROR"
+        assert str(error.value) == "Authority execution failed"
+        assert str(tmp_path) not in str(error.value)
 
 
 @pytest.mark.parametrize("endpoint", ["https://example.com", "http://localhost:80", "http://127.0.0.1:99/run", "http://user@127.0.0.1:99"])
@@ -189,6 +195,7 @@ def fake_authority(mode):
                 else:
                     self.wfile.write(b"not JSON")
             except OSError:
+                # Deadline/size-limit tests intentionally disconnect this fake peer.
                 pass
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)

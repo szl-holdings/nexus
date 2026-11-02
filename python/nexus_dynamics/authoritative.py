@@ -158,6 +158,8 @@ def _exchange(endpoint: str, path: str, payload: dict | None, timeout: float) ->
             try:
                 active_socket[0].shutdown(socket.SHUT_RDWR)
             except OSError:
+                # The peer or normal cleanup may already have closed the socket.
+                # The deadline event remains set, so this is still a timeout.
                 pass
             active_socket[0].close()
 
