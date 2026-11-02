@@ -66,16 +66,82 @@ const HATUN_INITIALIZE = {
 };
 
 class ProbeTooLarge extends Error {}
+class InvalidMCPResponse extends Error {}
 
-async function readProbeBody(res: Response): Promise<string> {
+/** Incremental SSE framing. Count bytes only through the decisive event. */
+class MCPEventStream {
+  private size = 0;
+  private line: number[] = [];
+  private data: string[] = [];
+  private event = "";
+  private skipLF = false;
+  private firstLine = true;
+  private decoder = new TextDecoder("utf-8", { ignoreBOM: true });
+
+  feed(chunk: Uint8Array): string | null {
+    for (const byte of chunk) {
+      if (++this.size > MAX_PROBE_BYTES) throw new ProbeTooLarge();
+      if (this.skipLF) {
+        this.skipLF = false;
+        if (byte === 10) continue;
+      }
+      if (byte !== 10 && byte !== 13) {
+        this.line.push(byte);
+        continue;
+      }
+      this.skipLF = byte === 13;
+      let line = this.decoder.decode(new Uint8Array(this.line));
+      this.line = [];
+      if (this.firstLine && line.startsWith("\uFEFF")) line = line.slice(1);
+      this.firstLine = false;
+      if (line === "") {
+        const data = this.data;
+        const event = this.event;
+        this.data = [];
+        this.event = "";
+        if (event === "error") throw new InvalidMCPResponse();
+        if (!data.length || (event && event !== "message")) continue;
+        const payload = data.join("\n");
+        let message: Record<string, unknown>;
+        try { message = JSON.parse(payload); } catch { throw new InvalidMCPResponse(); }
+        if (!message || typeof message !== "object" || Array.isArray(message)
+          || message.jsonrpc !== "2.0" || "error" in message) throw new InvalidMCPResponse();
+        if (message.id === HATUN_INITIALIZE.id) return payload;
+        // Notifications and other request/response IDs cannot satisfy this probe.
+        if (("id" in message && typeof message.id !== "string" && typeof message.id !== "number")
+          || ("result" in message ? !("id" in message) : typeof message.method !== "string")) throw new InvalidMCPResponse();
+      } else if (!line.startsWith(":")) {
+        const colon = line.indexOf(":");
+        const field = colon < 0 ? line : line.slice(0, colon);
+        let value = colon < 0 ? "" : line.slice(colon + 1);
+        if (value.startsWith(" ")) value = value.slice(1);
+        if (field === "data") this.data.push(value);
+        else if (field === "event") this.event = value;
+      }
+    }
+    return null;
+  }
+}
+
+async function readProbeBody(res: Response, mcp = false): Promise<string> {
   if (!res.body) return "";
   const reader = res.body.getReader();
+  const sse = mcp && res.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() === "text/event-stream"
+    ? new MCPEventStream() : null;
   const chunks: Uint8Array[] = [];
   let size = 0;
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      if (sse) {
+        const message = sse.feed(value);
+        if (message !== null) {
+          void reader.cancel().catch(() => {});
+          return message;
+        }
+        continue;
+      }
       size += value.byteLength;
       if (size > MAX_PROBE_BYTES) {
         void reader.cancel().catch(() => {});
@@ -83,6 +149,10 @@ async function readProbeBody(res: Response): Promise<string> {
       }
       chunks.push(value);
     }
+    if (sse) throw new InvalidMCPResponse(); // EOF never dispatches an unfinished event.
+  } catch (error) {
+    void reader.cancel().catch(() => {});
+    throw error;
   } finally {
     reader.releaseLock();
   }
@@ -117,7 +187,7 @@ async function probeOne(e: ProbeEndpoint, timeoutMs: number): Promise<Probe> {
       return { id: e.id, label: e.label, status: "UNAVAILABLE", detail: `HTTP ${res.status}`, at };
     }
     // Keep the same deadline active through the body, including chunked responses.
-    const body = await readProbeBody(res);
+    const body = await readProbeBody(res, hatun);
     const nexus = e.id === "nexus-space";
     const anatomy = e.id === "anatomy";
     const unavailable = nexus ? "runtime source identity unavailable" : anatomy ? "anatomy transport contract unavailable"
@@ -154,7 +224,8 @@ async function probeOne(e: ProbeEndpoint, timeoutMs: number): Promise<Probe> {
         live = j.jsonrpc === "2.0" && j.id === HATUN_INITIALIZE.id && !("error" in j)
           && result?.protocolVersion === "2024-11-05"
           && server?.name === "szl-a11oy-mcp" && server?.version === "1.1.0"
-          && tools?.listChanged === false;
+          && !!tools && typeof tools === "object" && !Array.isArray(tools)
+          && (!("listChanged" in tools) || typeof tools.listChanged === "boolean");
         detail = live ? "A11oy MCP transport; signing unverified" : unavailable;
       } else if (typeof j.status === "string") detail = j.status;
       else if (typeof j.evidenceState === "string") detail = j.evidenceState;
@@ -170,6 +241,7 @@ async function probeOne(e: ProbeEndpoint, timeoutMs: number): Promise<Probe> {
       label: e.label,
       status: "UNAVAILABLE",
       detail: err instanceof ProbeTooLarge ? "response too large"
+        : err instanceof InvalidMCPResponse ? "A11oy MCP handshake unavailable"
         : ctrl.signal.aborted || reason === "AbortError" ? "timeout" : "cors or unreachable",
       at,
     };

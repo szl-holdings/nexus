@@ -46,3 +46,23 @@ it("Hatun uses the declared A11oy MCP product transport, not the retired standal
     ENDPOINTS.splice(0, ENDPOINTS.length, ...original);
   }
 });
+
+it("accepts a complete MCP SSE event one byte at a time and cancels the open stream", async (t) => {
+  const reply = { jsonrpc: "2.0", id: "nexus-probe", result: {
+    protocolVersion: "2024-11-05", serverInfo: { name: "szl-a11oy-mcp", version: "1.1.0" },
+    capabilities: { tools: {} },
+  } };
+  let cancelled = false;
+  const bytes = new TextEncoder().encode(`\uFEFF: λ🫀\r\nevent: message\r\ndata: ${JSON.stringify(reply)}\r\n\r\n`);
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) { for (const byte of bytes) controller.enqueue(new Uint8Array([byte])); },
+    cancel() { cancelled = true; },
+  });
+  t.mock.method(globalThis, "fetch", async () => new Response(stream, { headers: { "Content-Type": "text/event-stream" } }));
+  const original = ENDPOINTS.splice(0, ENDPOINTS.length, { id: "hatun", label: "test", url: "https://example.org/mcp/" });
+  try {
+    const [probe] = await probeEstate();
+    assert.equal(probe.status, "LIVE");
+    assert.equal(cancelled, true);
+  } finally { ENDPOINTS.splice(0, ENDPOINTS.length, ...original); }
+});
