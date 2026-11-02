@@ -39,10 +39,17 @@ def node():
     return executable
 
 
+def authority_env():
+    # setup-python sets LD_LIBRARY_PATH for Python itself; a plain Node child
+    # must not inherit loader/preload configuration from its test host.
+    blocked = {"NODE_OPTIONS", "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH"}
+    return {key: value for key, value in os.environ.items() if key not in blocked}
+
+
 @contextmanager
 def serve(node, root=ROOT):
     process = subprocess.Popen([node, "--experimental-strip-types", str(root / "src/lib/nexus/authoritative-node.ts"), "serve"],
-                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=authority_env())
     try:
         ready = process.stdout.readline()
         assert ready, process.stderr.read()
@@ -221,7 +228,18 @@ def test_selected_methods_execute_and_unsupported_pair_fails(authority):
 
 def test_custom_launch_options_are_rejected(node):
     result = subprocess.run([node, "--experimental-strip-types", "--expose-gc", str(ROOT / "src/lib/nexus/authoritative-node.ts"), "serve"],
-                            text=True, capture_output=True, timeout=10)
+                            text=True, capture_output=True, timeout=10, env=authority_env())
     assert result.returncode == 2
     assert result.stdout == ""
     assert "plain Node launch" in result.stderr
+
+
+def test_host_loader_override_is_scrubbed_only_for_test_child(node, monkeypatch):
+    monkeypatch.setenv("LD_LIBRARY_PATH", str(ROOT))
+    with serve(node) as ready:
+        assert run(ready)["outputHash"]
+    # Production policy still rejects the inherited override when not scrubbed.
+    rejected = subprocess.run([node, "--experimental-strip-types", str(ROOT / "src/lib/nexus/authoritative-node.ts"), "serve"],
+                              text=True, capture_output=True, timeout=10)
+    assert rejected.returncode == 2
+    assert "plain Node launch" in rejected.stderr

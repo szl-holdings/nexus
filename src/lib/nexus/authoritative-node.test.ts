@@ -36,10 +36,19 @@ const DUFFING = {
   repeatEvery: 32,
 };
 async function launchAuthority() {
+  const env = { ...process.env };
+  for (const key of [
+    "NODE_OPTIONS",
+    "LD_PRELOAD",
+    "LD_LIBRARY_PATH",
+    "DYLD_INSERT_LIBRARIES",
+    "DYLD_LIBRARY_PATH",
+  ])
+    delete env[key];
   const child = spawn(
     process.execPath,
     ["--experimental-strip-types", `${ROOT}/src/lib/nexus/authoritative-node.ts`, "serve"],
-    { cwd: ROOT },
+    { cwd: ROOT, env },
   );
   const ready = await new Promise<{
     endpoint: string;
@@ -95,7 +104,9 @@ after(async () => {
 
 function python(script: string, input: unknown): Promise<any> {
   return new Promise((resolve, reject) => {
-    const child = spawn("python3", ["-c", script], {
+    const executable = process.platform === "win32" ? "py" : "python3";
+    const args = process.platform === "win32" ? ["-3", "-c", script] : ["-c", script];
+    const child = spawn(executable, args, {
       cwd: ROOT,
       env: { ...process.env, PYTHONPATH: `${ROOT}/python` },
     });
@@ -104,7 +115,10 @@ function python(script: string, input: unknown): Promise<any> {
     const timer = setTimeout(() => child.kill(), 30_000);
     child.stdout.on("data", (chunk) => out.push(chunk));
     child.stderr.on("data", (chunk) => err.push(chunk));
-    child.once("error", reject);
+    child.once("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
     child.once("exit", (code) => {
       clearTimeout(timer);
       if (code !== 0) reject(new Error(Buffer.concat(err).toString()));
