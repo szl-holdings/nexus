@@ -107,6 +107,7 @@ async function probeOne(e: ProbeEndpoint, timeoutMs: number): Promise<Probe> {
     const res = await fetch(e.url, {
       signal: ctrl.signal,
       ...(hatun ? {
+        redirect: "error",
         method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
         body: JSON.stringify(HATUN_INITIALIZE),
       } : {}),

@@ -109,11 +109,14 @@ HATUN_INITIALIZE = {
 
 
 class _FetchRedirects(urllib.request.HTTPRedirectHandler):
-    """Follow redirects like fetch: 20 at most, then a network error, not a status."""
+    """Follow GET redirects like fetch; reject redirects of the exact MCP POST."""
 
     max_repeats = max_redirections = FETCH_REDIRECT_LIMIT + 1  # the count below fails first
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if req.get_method() == "POST":
+            fp.close()
+            raise urllib.error.URLError("MCP redirect rejected")
         followed = getattr(req, "fetch_redirects", 0)
         if followed == FETCH_REDIRECT_LIMIT:
             fp.close()

@@ -12,6 +12,8 @@ or receipt signing. It requires a matching request ID, JSON-RPC 2.0, protocol
 capability. Error replies, unrelated JSON, malformed responses, timeouts and
 oversized bodies remain unavailable. The shared probe deadline and 64 KiB bound
 cover the entire HTTP response.
+The MCP POST rejects redirects in both runtimes, including 307/308; only the
+declared canonical endpoint can satisfy this handshake.
 
 `LIVE — A11oy MCP transport; signing unverified` means this handshake succeeded.
 It does not qualify the separate Python Hatun package, its tools, authentication,

@@ -84,6 +84,7 @@ test("probe results match TS probeEstate() for every response class", async () =
   }
   for (const [path, [body]] of Object.entries(hatunCases)) routes[path] = [200, body];
   const hatunRequests = [];
+  const hatunRedirects = [301, 302, 303, 307, 308].map((code) => `/hatun-redirect-${code}`);
   const runtime = buildInfo(SHA);
   const anatomy = {
     service: "anatomy-space", organ: "anatomy", status: "ok",
@@ -129,6 +130,10 @@ test("probe results match TS probeEstate() for every response class", async () =
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
       hatunRequests.push({ method: req.method, type: req.headers["content-type"], body: JSON.parse(Buffer.concat(chunks).toString()) });
+    }
+    if (hatunRedirects.includes(req.url)) {
+      res.writeHead(Number(req.url.split("-").at(-1)), { location: "/hatun-live", "content-length": 0 }).end();
+      return;
     }
     if (req.url === "/slow") {
       setTimeout(() => res.end('{"status":"late"}'), 900);
@@ -187,7 +192,7 @@ test("probe results match TS probeEstate() for every response class", async () =
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
-  const cases = [...Object.keys(routes), "/slow", "/slow-body", "/trickle", "/trickle-body", "/chunked-over-limit", "/truncated-body", "/hop/12", "/hop/21"].map((path) => ({
+  const cases = [...Object.keys(routes), ...hatunRedirects, "/slow", "/slow-body", "/trickle", "/trickle-body", "/chunked-over-limit", "/truncated-body", "/hop/12", "/hop/21"].map((path) => ({
     id: path.startsWith("/hatun-") ? "hatun" : path.startsWith("/anatomy-") ? "anatomy" : path.startsWith("/role") || path.startsWith("/nexus-") || path === "/array" || path === "/truncated-body" ? "nexus-space" : `e${path.slice(1)}`,
     label: path,
     url: base + path,
@@ -233,7 +238,14 @@ test("probe results match TS probeEstate() for every response class", async () =
       assert.equal(rows.find((entry) => entry.label === "/truncated-body").status, "UNAVAILABLE");
       assert.equal(rows.find((entry) => entry.label === "/truncated-body").detail, "cors or unreachable");
     }
-    assert.equal(hatunRequests.length, Object.keys(hatunCases).length * 2);
+    for (const rows of [tsRows, pyRows]) {
+      for (const path of hatunRedirects) {
+        const row = rows.find((entry) => entry.label === path);
+        assert.equal(row.status, "UNAVAILABLE", path);
+        assert.equal(row.detail, "cors or unreachable", path);
+      }
+    }
+    assert.equal(hatunRequests.length, (Object.keys(hatunCases).length + hatunRedirects.length) * 2);
     for (const request of hatunRequests) {
       assert.equal(request.method, "POST");
       assert.equal(request.type, "application/json");
