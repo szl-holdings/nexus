@@ -1,0 +1,25 @@
+{
+  "schema": "szl.nexus-authoritative-execution-contract/v1",
+  "requestSchema": "szl.nexus-authoritative-request/v1",
+  "resultSchema": "szl.nexus-authoritative-execution/v1",
+  "profileSchema": "szl.nexus-authority-profile/v1",
+  "execution": "DELEGATED_SINGLE_NODE_PROCESS",
+  "outputContracts": { "immune-v1": ["euler4"], "dynamics-v2": ["euler4", "rk4", "symplectic"] },
+  "admission": "Every execution requires the complete expected profile. It includes an opaque per-process authority ID, algorithm contract, source SHA-256 digests, Node executable SHA-256, and Node/V8/platform/architecture/launch identity. A restart or mismatch requires explicit re-admission; clients never refresh profiles or fall back to native execution automatically.",
+  "integrity": "inputHash binds the exact normalized request including the expected profile; resultHash binds every result field except resultHash using the exact structural encoding below. outputHash alone retains the selected legacy output's unchanged nine-decimal canonical SHA-256. Both clients verify all three hashes. Hashes are not signatures or remote attestation.",
+  "exactStructuralEncoding": "SHA-256 over compact UTF-8 JSON of recursively tagged values: null->[\"null\"], bool->[\"bool\",value], string->[\"string\",value], number->[\"number\",16 lowercase hex digits of big-endian IEEE-754 binary64], array->[\"array\",projected elements], object->[\"object\",[key,projected value] pairs sorted by UTF-8 key bytes]. Signed zero folds to positive zero for JSON transport; nonfinite numbers are rejected.",
+  "scope": "Both clients delegate to the same admitted Node process. This is not independent Python/JavaScript numerical parity, proof across separately provisioned environments, or a portable math kernel. Runtime metadata does not describe the complete dynamic-library or CPU execution closure.",
+  "transport": {
+    "bind": "127.0.0.1",
+    "protocol": "HTTP",
+    "profile": "GET /profile",
+    "execute": "POST /run",
+    "requestBytesMax": 65536,
+    "responseBytesMax": 1048576,
+    "deadlineMs": 30000
+  },
+  "compatibility": "Existing native APIs, engine/model versions, v1/v2 outputs and historical vectors are unchanged. Authority service and Node client require the source checkout and Node >=22.6 with type stripping. The stdlib Python client can be installed independently and connects to an explicitly supplied loopback endpoint.",
+  "physicalHardware": false,
+  "energy": "UNAVAILABLE",
+  "uniqueness": "Conjecture 1 OPEN"
+}

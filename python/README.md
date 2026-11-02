@@ -123,6 +123,88 @@ universal parity proof, or evidence of deployed IMMUNE's revision. IMMUNE's
 separate engine must be qualified separately. A mismatch must remain a failure;
 this tool does not relax hash equality or rewrite historical vectors.
 
+## Opt in to one shared execution authority
+
+For Python and Node callers that need the **same result**, the new
+`szl.nexus-authoritative-execution/v1` contract delegates both clients to one
+explicitly admitted, long-lived Node process. Both clients receive and verify
+that process's output. It does not make the existing native
+Python/JavaScript engines independently identical.
+
+From the repository root, start the authority in one terminal and keep it
+running:
+
+```sh
+node --experimental-strip-types src/lib/nexus/authoritative-node.ts serve > authority.json
+```
+
+The service binds only `127.0.0.1` on an available port. Once startup succeeds,
+`authority.json` contains one JSON record with its endpoint and complete
+profile. Save it as UTF-8 without a BOM; Windows PowerShell 5 redirection may
+otherwise use UTF-16. Inspect and retain that record as your explicit admission of this
+process. The profile contains a fresh process ID, the algorithm contract,
+source SHA-256 digests, and Node/V8/platform/architecture/launch metadata.
+Startup rejects preload, loader and custom V8 flags. Use Node >=22.6 in a plain
+source checkout; no npm packages or provider credentials are needed.
+
+In another terminal, install the stdlib Python client in your chosen Python
+environment (`python -m pip install ./python` from the checkout). Save an engine
+input as `input.json`, for example:
+
+```json
+{"program":"harmonic","mode":"IC","steps":0,"dt":0.01,"chaos":0.5,"drive":0.5,"seed":0.2,"repeatEvery":32,"axes":[0.1622758695]}
+```
+
+Then execute against the saved, admitted process:
+
+```sh
+python -m nexus_dynamics.authoritative --authority-file authority.json --input input.json --contract immune-v1
+python -m nexus_dynamics.authoritative --authority-file authority.json --input input.json --contract dynamics-v2 --method rk4
+```
+
+The installed client also works outside the checkout, using absolute paths for
+those two JSON files. It needs no Node executable, TS assets, subprocess,
+third-party package, or proxy in the client environment. The authority and its
+Node client module require the checkout. The CLI emits the verified result on
+success (exit 0) or a structured error (exit 2; syntax errors print usage).
+
+The Node client uses that same saved profile and process:
+
+```ts
+import { readFileSync } from "node:fs";
+import { runAuthoritative } from "./src/lib/nexus/authoritative-node.ts";
+const admitted = JSON.parse(readFileSync("authority.json", "utf8"));
+const input = JSON.parse(readFileSync("input.json", "utf8"));
+const result = await runAuthoritative(admitted.endpoint, admitted.profile, input, "immune-v1");
+```
+
+Every run requires the complete expected profile. Clients never rediscover it
+implicitly or fall back to native execution. A restart changes the process ID:
+old requests fail with `AUTHORITY_MISMATCH` even when source and runtime metadata
+look identical. Explicitly inspect and admit the new startup record before
+resuming. Stop the authority with Ctrl+C (or SIGTERM); requests then fail closed.
+It is not registered as a system service and does not update the Python-only
+Hugging Face Space or IMMUNE's separately deployed engine.
+
+Both clients verify the selected legacy `outputHash` using its unchanged
+nine-decimal canonical projection. The new `inputHash` and `resultHash` use an
+exact binary64 structural encoding, folding signed zero for JSON transport, so
+a difference below nine decimal places cannot substitute a different request
+or returned value. The complete encoding and scope are specified in
+`contracts/nexus-authoritative-execution-v1.json`. Existing outputs, native APIs,
+engine/model versions and historical vectors are preserved.
+
+This is delegated software execution, not independent numerical parity, a
+portable math kernel, a signature, or remote attestation. Runtime metadata does
+not describe the complete dynamic-library or CPU execution environment; no
+claim is made for separately provisioned processes or machines. Different
+observed source snapshots invalidate the running authority. Clients admit only
+explicit loopback endpoints, reject redirects, bound message sizes, and apply a
+total transport deadline. The service rejects browser origins. Start the service
+through the standalone CLI in a stable checkout; source digests are observed
+file snapshots, not attestation of the module loader or an embedding process.
+Energy remains UNAVAILABLE and Conjecture 1 remains OPEN.
+
 ## Tests
 
 ```sh
