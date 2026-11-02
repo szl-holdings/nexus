@@ -125,17 +125,21 @@ def test_default_endpoints_match_typescript():
     assert rt.ENDPOINTS[2]["label"] == "NEXUS runtime"
 
 
-def test_retired_hatun_never_fetches_an_unqualified_substitute(monkeypatch):
-    def unexpected_fetch(*args):
-        pytest.fail("retired Hatun must not make a network request")
+def test_hatun_uses_declared_product_transport(monkeypatch):
+    def request_contract(request, timeout, *, mcp):
+        import json
+        assert mcp is True
+        assert request.full_url == "https://szlholdings-a11oy.hf.space/mcp/"
+        assert request.get_method() == "POST"
+        assert json.loads(request.data) == rt.HATUN_INITIALIZE
+        return 200, b'{"status":"ok"}'
 
-    monkeypatch.setattr(rt, "_read_response", unexpected_fetch)
+    monkeypatch.setattr(rt, "_read_response", request_contract)
     hatun = next(e for e in rt.ENDPOINTS if e["id"] == "hatun")
-    assert "url" not in hatun
     [probe] = rt.probe_estate(endpoints=[hatun], now_ms=lambda: 123)
     assert probe == {
-        "id": "hatun", "label": "Hatun MCP", "status": "UNAVAILABLE",
-        "detail": "standalone retired; MCP deployment unavailable", "at": 123,
+        "id": "hatun", "label": "Hatun product gateway", "status": "UNAVAILABLE",
+        "detail": "A11oy MCP handshake unavailable", "at": 123,
     }
 
 
@@ -246,3 +250,24 @@ def test_timed_out_body_attempt_closes_response(base, monkeypatch):
     monkeypatch.setattr(rt, "_OPENER", Opener())
     assert one(base, "/ok", timeout_s=0.1) == ("UNAVAILABLE", "timeout")
     assert closed.wait(0.5)
+
+
+def test_sse_parser_accepts_fragmented_utf8_and_crlf_before_eof():
+    reply = {"jsonrpc": "2.0", "id": "nexus-probe", "result": {}}
+    wire = b"\xef\xbb\xbf: " + "λ🫀".encode() + b"\r\nevent: message\r\ndata: " + rt.dumps(reply) + b"\r\n\r\n"
+    parser = rt._MCPEventStream()
+    result = None
+    for byte in wire:
+        parsed = parser.feed(bytes([byte]))
+        if parsed is not None:
+            result = parsed
+            break
+    assert result == rt.dumps(reply)
+
+
+def test_sse_byte_limit_counts_comments_but_stops_at_matching_event():
+    good = b'data: {"jsonrpc":"2.0","id":"nexus-probe","result":{}}\n\n'
+    padding = b":" + b"x" * (rt.MAX_PROBE_BYTES - len(good) - 3) + b"\n\n"
+    assert rt._MCPEventStream().feed(padding + good + b"x" * 70000) is not None
+    with pytest.raises(rt._ProbeTooLarge):
+        rt._MCPEventStream().feed(b":" + b"x" * rt.MAX_PROBE_BYTES + b"\n\n" + good)

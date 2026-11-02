@@ -92,23 +92,31 @@ def runtime_health(raw_revision: object) -> dict:
 
 
 ENDPOINTS = [
-    # hatun-mcp/docs/HATUN_SURFACE_CONTRACT.md retires the standalone HF host.
-    # The /wires product page and mesh catalog do not establish MCP readiness.
-    {"id": "hatun", "label": "Hatun MCP", "unavailable": "standalone retired; MCP deployment unavailable"},
+    # A11oy's /wires + /hatun-mcp surfaces declare this product MCP transport.
+    # Distinct from the retired standalone Python Hatun deployment.
+    {"id": "hatun", "label": "Hatun product gateway", "url": "https://szlholdings-a11oy.hf.space/mcp/"},
     {"id": "anatomy", "label": "Anatomy", "url": "https://betterwithage-anatomy.hf.space/healthz"},
     {"id": "nexus-space", "label": "NEXUS runtime", "url": "https://szlholdings-nexus.hf.space/api/build-info"},
 ]
 
 FETCH_REDIRECT_LIMIT = 20
 MAX_PROBE_BYTES = 64 * 1024
+HATUN_INITIALIZE = {
+    "jsonrpc": "2.0", "id": "nexus-probe", "method": "initialize",
+    "params": {"protocolVersion": "2024-11-05", "capabilities": {},
+               "clientInfo": {"name": "nexus-probe", "version": "1"}},
+}
 
 
 class _FetchRedirects(urllib.request.HTTPRedirectHandler):
-    """Follow redirects like fetch: 20 at most, then a network error, not a status."""
+    """Follow GET redirects like fetch; reject redirects of the exact MCP POST."""
 
     max_repeats = max_redirections = FETCH_REDIRECT_LIMIT + 1  # the count below fails first
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if req.get_method() == "POST":
+            fp.close()
+            raise urllib.error.URLError("MCP redirect rejected")
         followed = getattr(req, "fetch_redirects", 0)
         if followed == FETCH_REDIRECT_LIMIT:
             fp.close()
@@ -140,7 +148,72 @@ class _ProbeTooLarge(ValueError):
     pass
 
 
-def _read_response(url: str, timeout_s: float):
+class _InvalidMCPResponse(ValueError):
+    pass
+
+
+class _MCPEventStream:
+    """Incremental SSE framing with a byte budget through the decisive event."""
+
+    def __init__(self):
+        self.size = 0
+        self.line = bytearray()
+        self.data: list[str] = []
+        self.event = ""
+        self.skip_lf = False
+        self.first_line = True
+
+    def feed(self, chunk: bytes) -> bytes | None:
+        for byte in chunk:
+            self.size += 1
+            if self.size > MAX_PROBE_BYTES:
+                raise _ProbeTooLarge()
+            if self.skip_lf:
+                self.skip_lf = False
+                if byte == 10:
+                    continue
+            if byte not in (10, 13):
+                self.line.append(byte)
+                continue
+            self.skip_lf = byte == 13
+            line = self.line.decode("utf-8", errors="replace")
+            self.line.clear()
+            if self.first_line and line.startswith("\ufeff"):
+                line = line[1:]
+            self.first_line = False
+            if not line:
+                data, event = self.data, self.event
+                self.data, self.event = [], ""
+                if event == "error":
+                    raise _InvalidMCPResponse()
+                if not data or event not in ("", "message"):
+                    continue
+                payload = "\n".join(data)
+                try:
+                    message = json.loads(payload, parse_constant=_reject_constant)
+                except ValueError:
+                    raise _InvalidMCPResponse() from None
+                if (not isinstance(message, dict) or message.get("jsonrpc") != "2.0"
+                        or "error" in message):
+                    raise _InvalidMCPResponse()
+                if message.get("id") == HATUN_INITIALIZE["id"]:
+                    return payload.encode("utf-8")
+                if (("id" in message and (isinstance(message["id"], bool)
+                        or not isinstance(message["id"], (str, int, float))))
+                        or ("id" not in message if "result" in message else not isinstance(message.get("method"), str))):
+                    raise _InvalidMCPResponse()
+            elif not line.startswith(":"):
+                field, _, value = line.partition(":")
+                if value.startswith(" "):
+                    value = value[1:]
+                if field == "data":
+                    self.data.append(value)
+                elif field == "event":
+                    self.event = value
+        return None
+
+
+def _read_response(url: str | urllib.request.Request, timeout_s: float, *, mcp: bool = False):
     """Bound the entire response by wall-clock time and actual body bytes.
 
     The daemon also covers DNS and header stalls outside socket timeouts. Its
@@ -153,17 +226,29 @@ def _read_response(url: str, timeout_s: float):
     def attempt() -> None:
         try:
             with _OPENER.open(url, timeout=timeout_s) as response:
+                sse = _MCPEventStream() if mcp and response.headers.get(
+                    "Content-Type", ""
+                ).split(";", 1)[0].strip().lower() == "text/event-stream" else None
                 body = bytearray()
                 while True:
                     if time.monotonic() >= deadline:
                         raise TimeoutError("response missed the deadline")
-                    chunk = response.read1(min(4096, MAX_PROBE_BYTES + 1 - len(body)))
+                    consumed = sse.size if sse else len(body)
+                    chunk = response.read1(min(4096, MAX_PROBE_BYTES + 1 - consumed))
                     if not chunk:
+                        if sse:
+                            raise _InvalidMCPResponse()  # EOF does not dispatch an unfinished event.
                         # read1(), unlike read(), permits premature EOF. A valid
                         # JSON prefix must not qualify an incomplete response.
                         if response.length is not None and response.length > 0:
                             raise ConnectionError("incomplete response body")
                         break
+                    if sse:
+                        message = sse.feed(chunk)
+                        if message is not None:
+                            body = bytearray(message)
+                            break
+                        continue
                     body.extend(chunk)
                     if len(body) > MAX_PROBE_BYTES:
                         raise _ProbeTooLarge()
@@ -189,23 +274,30 @@ def _probe_one(endpoint: dict, timeout_s: float, now_ms: Callable[[], int]) -> d
     head = {"id": endpoint["id"], "label": endpoint["label"]}
     if "unavailable" in endpoint:
         return {**head, "status": "UNAVAILABLE", "detail": endpoint["unavailable"], "at": at}
+    hatun = endpoint["id"] == "hatun"
     try:
-        status, raw_body = _read_response(endpoint["url"], timeout_s)
+        request = urllib.request.Request(
+            endpoint["url"], data=dumps(HATUN_INITIALIZE), method="POST",
+            headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream"},
+        ) if hatun else endpoint["url"]
+        status, raw_body = _read_response(request, timeout_s, mcp=hatun)
     except urllib.error.HTTPError as exc:
         exc.close()
         return {**head, "status": "UNAVAILABLE", "detail": f"HTTP {exc.code}", "at": at}
     except Exception as exc:  # noqa: BLE001 - every other failure is unreachable
         detail = ("response too large" if isinstance(exc, _ProbeTooLarge) else
+                  "A11oy MCP handshake unavailable" if isinstance(exc, _InvalidMCPResponse) else
                   "timeout" if _is_timeout(exc) else "cors or unreachable")
         return {**head, "status": "UNAVAILABLE", "detail": detail, "at": at}
     nexus = endpoint["id"] == "nexus-space"
     anatomy = endpoint["id"] == "anatomy"
     unavailable = (
         "runtime source identity unavailable" if nexus else
-        "anatomy transport contract unavailable" if anatomy else f"HTTP {status}"
+        "anatomy transport contract unavailable" if anatomy else
+        "A11oy MCP handshake unavailable" if hatun else f"HTTP {status}"
     )
     detail = unavailable
-    live = not nexus and not anatomy
+    live = not nexus and not anatomy and not hatun
     try:
         body = json.loads(raw_body, parse_constant=_reject_constant)
         if body is None:
@@ -239,6 +331,22 @@ def _probe_one(endpoint: dict, timeout_s: float, now_ms: Callable[[], int]) -> d
                 and fields.get("verification_state") == "STRUCTURAL_ONLY"
             )
             detail = "read-only transport; snapshot evidence" if live else unavailable
+        elif hatun:
+            result = fields.get("result")
+            result = result if isinstance(result, dict) else {}
+            server = result.get("serverInfo")
+            server = server if isinstance(server, dict) else {}
+            capabilities = result.get("capabilities")
+            capabilities = capabilities if isinstance(capabilities, dict) else {}
+            tools = capabilities.get("tools")
+            live = (
+                fields.get("jsonrpc") == "2.0" and fields.get("id") == HATUN_INITIALIZE["id"]
+                and "error" not in fields and result.get("protocolVersion") == "2024-11-05"
+                and server.get("name") == "szl-a11oy-mcp" and server.get("version") == "1.1.0"
+                and isinstance(tools, dict)
+                and ("listChanged" not in tools or isinstance(tools["listChanged"], bool))
+            )
+            detail = "A11oy MCP transport; signing unverified" if live else unavailable
         elif isinstance(fields.get("status"), str):
             detail = fields["status"]
         elif isinstance(fields.get("evidenceState"), str):

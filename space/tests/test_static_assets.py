@@ -131,3 +131,34 @@ def test_stale_cached_result_never_claims_readiness(bundle):
     assert report["ready"] is False
     assert report["state"] == "STALE"
     assert report["verification_age_seconds"] == 91
+
+
+@pytest.mark.parametrize("declared_size", [0, 1])
+def test_undersized_manifest_entry_is_rejected_before_hashing(bundle, monkeypatch, declared_size):
+    manifest = json.loads((bundle / assets.MANIFEST).read_text())
+    manifest["files"].sort(key=lambda row: row["path"] == "assets/chunk.js")
+    for row in manifest["files"]:
+        if row["path"] == "assets/chunk.js":
+            row["size"] = declared_size
+    budget = sum(row["size"] for row in manifest["files"])
+    monkeypatch.setattr(assets, "MAX_TOTAL_BYTES", budget)
+    (bundle / assets.MANIFEST).write_text(json.dumps(manifest))
+    original_sha256 = hashlib.sha256
+    hashed_bytes = []
+
+    class CountingHash:
+        def __init__(self, *args, **kwargs):
+            self.inner = original_sha256(*args, **kwargs)
+
+        def update(self, chunk):
+            hashed_bytes.append(len(chunk))
+            self.inner.update(chunk)
+
+        def hexdigest(self):
+            return self.inner.hexdigest()
+
+    monkeypatch.setattr(assets.hashlib, "sha256", CountingHash)
+    report = assets.inspect_static_bundle(bundle)
+    assert report["ready"] is False
+    assert sum(hashed_bytes) <= budget
+    assert report["reason"] == "BUNDLE_LIMIT_EXCEEDED"

@@ -133,7 +133,7 @@ def inspect_static_bundle(root: Path) -> dict:
             path = root / name
             if not path.resolve().is_relative_to(root):
                 raise BundleError("STATIC_PATH_ESCAPE")
-            size, digest = _read(path, MAX_FILE_BYTES, digest=True)
+            size, digest = _read(path, item["size"], digest=True)
             if (size, digest) != (item["size"], item["sha256"]):
                 raise BundleError("STATIC_FILE_DIGEST_MISMATCH")
             result["files_checked"] += 1
