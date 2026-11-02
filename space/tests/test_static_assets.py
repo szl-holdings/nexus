@@ -84,7 +84,12 @@ def test_invalid_entries_fail_closed(bundle, change):
 def test_symlink_cannot_substitute_a_manifested_asset(bundle):
     path = bundle / "assets/chunk.js"
     path.unlink()
-    path.symlink_to(bundle / "assets/app.js")
+    try:
+        path.symlink_to(bundle / "assets/app.js")
+    except OSError as exc:
+        if getattr(exc, "winerror", None) == 1314:
+            pytest.skip("Windows symlink creation requires Developer Mode or elevation")
+        raise
     assert assets.inspect_static_bundle(bundle)["reason"] == "SYMLINK_IN_STATIC_BUNDLE"
 
 
