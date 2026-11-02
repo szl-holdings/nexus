@@ -19,6 +19,7 @@ from urllib.parse import unquote, urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import nexus_runtime as rt  # noqa: E402
+from static_assets import StaticBundleVerifier  # noqa: E402
 
 API_JSON_HEADERS = {
     "content-type": "application/json; charset=utf-8",
@@ -62,7 +63,12 @@ class NexusHandler(BaseHTTPRequestHandler):
         if path == "/api/build-info":
             return 200, dict(API_JSON_HEADERS), rt.dumps(rt.build_info(self._revision()))
         if path in ("/health", "/healthz"):
-            return 200, dict(API_JSON_HEADERS), rt.dumps(rt.runtime_health(self._revision()))
+            health = rt.runtime_health(self._revision())
+            health["static_bundle"] = self.server.static_verifier.snapshot()
+            health["ready"] = health["source_bound"] and health["static_bundle"]["ready"]
+            health["ok"] = health["ready"]
+            health["status"] = "ok" if health["ready"] else "degraded"
+            return (200 if health["ready"] else 503), dict(API_JSON_HEADERS), rt.dumps(health)
         if canonical == "/api/probes":
             return 200, {"content-type": "application/json"}, rt.dumps(rt.probe_estate())
         return self._static(path)
@@ -107,11 +113,21 @@ def _content_type(path: Path) -> str:
     return f"{kind}; charset=utf-8" if kind.startswith("text/") else kind
 
 
+class NexusHTTPServer(ThreadingHTTPServer):
+    def server_close(self):
+        if hasattr(self, "static_verifier"):
+            self.static_verifier.stop()
+        super().server_close()
+
+
 def make_server(host: str, port: int, static_dir: Path, source_file: Path) -> ThreadingHTTPServer:
-    server = ThreadingHTTPServer((host, port), NexusHandler)
+    verifier = StaticBundleVerifier(Path(static_dir).resolve())
+    server = NexusHTTPServer((host, port), NexusHandler)
     server.daemon_threads = True
     server.static_dir = Path(static_dir).resolve()
     server.source_file = Path(source_file)
+    server.static_verifier = verifier
+    verifier.start()
     return server
 
 
@@ -123,7 +139,10 @@ def main() -> int:
         Path(os.environ.get("SOURCE_GITHUB_SHA_FILE", "/app/SOURCE_GITHUB_SHA")),
     )
     print(f"nexus runtime listening on {server.server_address[0]}:{server.server_address[1]}", flush=True)
-    server.serve_forever()
+    try:
+        server.serve_forever()
+    finally:
+        server.server_close()
     return 0
 
 

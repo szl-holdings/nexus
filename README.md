@@ -146,3 +146,12 @@ npm run dev
 ```
 
 The source-bound container uses `space/Dockerfile`; `/healthz` and `/api/build-info` disclose readiness and the exact publisher-injected Git revision without authorizing external effects.
+
+The Python container's `/healthz` returns 503 unless its source revision is bound
+and its complete prerendered file set matches the build-generated SHA-256
+manifest. One background verifier refreshes the local bundle check every 30
+seconds; a cached result older than 90 seconds fails closed. Health requests
+read the cached result and do not scan or hash the filesystem. The response
+reports the verification age and `LOCAL_STATIC_BYTES` scope. This establishes
+local artifact availability and integrity only: browser rendering, Web Audio
+acceptance, provider revision and publication remain separate checks.

@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """space/app_server.py: static workstation plus the runtime API, matching Nitro."""
+import hashlib
+import json
 import socket
 import threading
 import time
@@ -17,6 +19,10 @@ ASSET = b"console.log(1)"
 OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
+class Site(str):
+    pass
+
+
 @pytest.fixture()
 def site(tmp_path, monkeypatch):
     static = tmp_path / "static"
@@ -24,14 +30,24 @@ def site(tmp_path, monkeypatch):
     (static / "index.html").write_bytes(INDEX)
     (static / "assets" / "app-abc123.js").write_bytes(ASSET)
     (static / "favicon.svg").write_bytes(b"<svg/>")
+    files = [
+        {"path": path.relative_to(static).as_posix(), "size": path.stat().st_size,
+         "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+        for path in sorted(static.rglob("*")) if path.is_file()
+    ]
+    (static / "nexus-static-manifest.json").write_text(
+        json.dumps({"schema": "szl.nexus-static-manifest/v1", "files": files}))
     (tmp_path / "secret.txt").write_text("outside")
     source = tmp_path / "SOURCE_GITHUB_SHA"
     source.write_text(SHA + "\n")
     monkeypatch.setattr(rt, "probe_estate", lambda *a, **k: [{"id": "x", "label": "X", "status": "LIVE", "detail": "ok", "at": 1}])
     server = app_server.make_server("127.0.0.1", 0, static, source)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{server.server_address[1]}"
+    address = Site(f"http://127.0.0.1:{server.server_address[1]}")
+    address.server = server
+    yield address
     server.shutdown()
+    server.server_close()
 
 
 def fetch(url, method="GET"):
@@ -63,7 +79,13 @@ def test_build_info_and_health_match_runtime(site):
     ):
         status, headers, body = fetch(site + path)
         assert status == 200, path
-        assert body == rt.dumps(payload), path
+        actual = json.loads(body)
+        if path.startswith("/health"):
+            bundle = actual.pop("static_bundle")
+            assert bundle["ready"] is True
+            assert bundle["scope"] == "LOCAL_STATIC_BYTES"
+            assert bundle["browser_execution"] == "NOT_EVALUATED"
+        assert actual == payload, path
         for key, value in API_HEADERS.items():
             assert headers[key] == value, (path, key)
 
@@ -139,7 +161,7 @@ def test_head_is_get_without_body(site):
     status, headers, body = fetch(site + "/healthz", "HEAD")
     assert (status, body) == (200, b"")
     assert headers["content-type"] == API_HEADERS["content-type"]
-    assert int(headers["content-length"]) == len(rt.dumps(rt.runtime_health(SHA + "\n")))
+    assert int(headers["content-length"]) > len(rt.dumps(rt.runtime_health(SHA + "\n")))
 
 
 def test_nosniff_on_every_response(site):
@@ -154,3 +176,52 @@ def test_slow_probes_do_not_block_health(site, monkeypatch):
     started = time.monotonic()
     assert fetch(site + "/healthz")[0] == 200
     assert time.monotonic() - started < 0.3
+
+
+def test_source_revision_cannot_make_missing_workstation_ready(site, tmp_path):
+    (tmp_path / "static" / "index.html").unlink()
+    site.server.static_verifier.refresh()
+    status, _, body = fetch(site + "/healthz")
+    payload = json.loads(body)
+    assert status == 503
+    assert payload["source_bound"] is True
+    assert payload["ready"] is False
+
+
+def test_source_revision_cannot_make_corrupt_asset_ready(site, tmp_path):
+    (tmp_path / "static" / "assets" / "app-abc123.js").write_bytes(b"corrupt asset")
+    site.server.static_verifier.refresh()
+    status, _, body = fetch(site + "/healthz")
+    payload = json.loads(body)
+    assert status == 503
+    assert payload["source_bound"] is True
+    assert payload["ready"] is False
+
+
+def test_missing_manifest_is_not_ready_and_build_identity_stays_separate(site, tmp_path):
+    (tmp_path / "static" / "nexus-static-manifest.json").unlink()
+    site.server.static_verifier.refresh()
+    status, _, body = fetch(site + "/healthz")
+    assert status == 503
+    assert json.loads(body)["static_bundle"]["ready"] is False
+    status, _, body = fetch(site + "/api/build-info")
+    assert status == 200
+    assert json.loads(body)["source_revision"] == SHA
+
+
+def test_health_requests_only_read_cached_bundle_result(site, monkeypatch):
+    import static_assets
+    monkeypatch.setattr(static_assets, "inspect_static_bundle",
+                        lambda *_: pytest.fail("health request rescanned static tree"))
+    for _ in range(10):
+        assert fetch(site + "/healthz")[0] == 200
+
+
+def test_expired_bundle_proof_fails_readiness(site):
+    verifier = site.server.static_verifier
+    verifier._clock = lambda: verifier._checked_at + 91
+    status, _, body = fetch(site + "/healthz")
+    assert status == 503
+    payload = json.loads(body)
+    assert payload["ready"] is False
+    assert payload["static_bundle"]["reason"] == "STATIC_VERIFICATION_EXPIRED"
