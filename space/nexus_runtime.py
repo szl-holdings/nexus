@@ -92,15 +92,20 @@ def runtime_health(raw_revision: object) -> dict:
 
 
 ENDPOINTS = [
-    # hatun-mcp/docs/HATUN_SURFACE_CONTRACT.md retires the standalone HF host.
-    # The /wires product page and mesh catalog do not establish MCP readiness.
-    {"id": "hatun", "label": "Hatun MCP", "unavailable": "standalone retired; MCP deployment unavailable"},
+    # A11oy's /wires + /hatun-mcp surfaces declare this product MCP transport.
+    # Distinct from the retired standalone Python Hatun deployment.
+    {"id": "hatun", "label": "Hatun product gateway", "url": "https://szlholdings-a11oy.hf.space/mcp/"},
     {"id": "anatomy", "label": "Anatomy", "url": "https://betterwithage-anatomy.hf.space/healthz"},
     {"id": "nexus-space", "label": "NEXUS runtime", "url": "https://szlholdings-nexus.hf.space/api/build-info"},
 ]
 
 FETCH_REDIRECT_LIMIT = 20
 MAX_PROBE_BYTES = 64 * 1024
+HATUN_INITIALIZE = {
+    "jsonrpc": "2.0", "id": "nexus-probe", "method": "initialize",
+    "params": {"protocolVersion": "2024-11-05", "capabilities": {},
+               "clientInfo": {"name": "nexus-probe", "version": "1"}},
+}
 
 
 class _FetchRedirects(urllib.request.HTTPRedirectHandler):
@@ -140,7 +145,7 @@ class _ProbeTooLarge(ValueError):
     pass
 
 
-def _read_response(url: str, timeout_s: float):
+def _read_response(url: str | urllib.request.Request, timeout_s: float):
     """Bound the entire response by wall-clock time and actual body bytes.
 
     The daemon also covers DNS and header stalls outside socket timeouts. Its
@@ -189,8 +194,13 @@ def _probe_one(endpoint: dict, timeout_s: float, now_ms: Callable[[], int]) -> d
     head = {"id": endpoint["id"], "label": endpoint["label"]}
     if "unavailable" in endpoint:
         return {**head, "status": "UNAVAILABLE", "detail": endpoint["unavailable"], "at": at}
+    hatun = endpoint["id"] == "hatun"
     try:
-        status, raw_body = _read_response(endpoint["url"], timeout_s)
+        request = urllib.request.Request(
+            endpoint["url"], data=dumps(HATUN_INITIALIZE), method="POST",
+            headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream"},
+        ) if hatun else endpoint["url"]
+        status, raw_body = _read_response(request, timeout_s)
     except urllib.error.HTTPError as exc:
         exc.close()
         return {**head, "status": "UNAVAILABLE", "detail": f"HTTP {exc.code}", "at": at}
@@ -202,10 +212,11 @@ def _probe_one(endpoint: dict, timeout_s: float, now_ms: Callable[[], int]) -> d
     anatomy = endpoint["id"] == "anatomy"
     unavailable = (
         "runtime source identity unavailable" if nexus else
-        "anatomy transport contract unavailable" if anatomy else f"HTTP {status}"
+        "anatomy transport contract unavailable" if anatomy else
+        "A11oy MCP handshake unavailable" if hatun else f"HTTP {status}"
     )
     detail = unavailable
-    live = not nexus and not anatomy
+    live = not nexus and not anatomy and not hatun
     try:
         body = json.loads(raw_body, parse_constant=_reject_constant)
         if body is None:
@@ -239,6 +250,22 @@ def _probe_one(endpoint: dict, timeout_s: float, now_ms: Callable[[], int]) -> d
                 and fields.get("verification_state") == "STRUCTURAL_ONLY"
             )
             detail = "read-only transport; snapshot evidence" if live else unavailable
+        elif hatun:
+            result = fields.get("result")
+            result = result if isinstance(result, dict) else {}
+            server = result.get("serverInfo")
+            server = server if isinstance(server, dict) else {}
+            capabilities = result.get("capabilities")
+            capabilities = capabilities if isinstance(capabilities, dict) else {}
+            tools = capabilities.get("tools")
+            tools = tools if isinstance(tools, dict) else {}
+            live = (
+                fields.get("jsonrpc") == "2.0" and fields.get("id") == HATUN_INITIALIZE["id"]
+                and "error" not in fields and result.get("protocolVersion") == "2024-11-05"
+                and server.get("name") == "szl-a11oy-mcp" and server.get("version") == "1.1.0"
+                and tools.get("listChanged") is False
+            )
+            detail = "A11oy MCP transport; signing unverified" if live else unavailable
         elif isinstance(fields.get("status"), str):
             detail = fields["status"]
         elif isinstance(fields.get("evidenceState"), str):

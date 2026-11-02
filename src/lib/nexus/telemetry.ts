@@ -16,9 +16,9 @@ type ProbeEndpoint = { id: string; label: string } & (
 );
 
 export const ENDPOINTS: ProbeEndpoint[] = [
-  // hatun-mcp/docs/HATUN_SURFACE_CONTRACT.md retires the standalone HF host.
-  // The /wires product page and mesh catalog do not establish MCP readiness.
-  { id: "hatun", label: "Hatun MCP", unavailable: "standalone retired; MCP deployment unavailable" },
+  // A11oy's /wires + /hatun-mcp product surfaces declare this MCP transport.
+  // This is szl-a11oy-mcp, not the retired standalone Python Hatun deployment.
+  { id: "hatun", label: "Hatun product gateway", url: "https://szlholdings-a11oy.hf.space/mcp/" },
   { id: "anatomy", label: "Anatomy", url: "https://betterwithage-anatomy.hf.space/healthz" },
   { id: "nexus-space", label: "NEXUS runtime", url: "https://szlholdings-nexus.hf.space/api/build-info" },
 ];
@@ -60,6 +60,10 @@ export async function probeEstate(timeoutMs = 2800): Promise<Probe[]> {
 }
 
 const MAX_PROBE_BYTES = 64 * 1024;
+const HATUN_INITIALIZE = {
+  jsonrpc: "2.0", id: "nexus-probe", method: "initialize",
+  params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "nexus-probe", version: "1" } },
+};
 
 class ProbeTooLarge extends Error {}
 
@@ -99,7 +103,14 @@ async function probeOne(e: ProbeEndpoint, timeoutMs: number): Promise<Probe> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(e.url, { signal: ctrl.signal });
+    const hatun = e.id === "hatun";
+    const res = await fetch(e.url, {
+      signal: ctrl.signal,
+      ...(hatun ? {
+        method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+        body: JSON.stringify(HATUN_INITIALIZE),
+      } : {}),
+    });
     if (!res.ok) {
       ctrl.abort(); // Do not consume an error response body.
       return { id: e.id, label: e.label, status: "UNAVAILABLE", detail: `HTTP ${res.status}`, at };
@@ -108,9 +119,10 @@ async function probeOne(e: ProbeEndpoint, timeoutMs: number): Promise<Probe> {
     const body = await readProbeBody(res);
     const nexus = e.id === "nexus-space";
     const anatomy = e.id === "anatomy";
-    const unavailable = nexus ? "runtime source identity unavailable" : anatomy ? "anatomy transport contract unavailable" : `HTTP ${res.status}`;
+    const unavailable = nexus ? "runtime source identity unavailable" : anatomy ? "anatomy transport contract unavailable"
+      : hatun ? "A11oy MCP handshake unavailable" : `HTTP ${res.status}`;
     let detail = unavailable;
-    let live = !nexus && !anatomy;
+    let live = !nexus && !anatomy && !hatun;
     try {
       const j = JSON.parse(body) as Record<string, unknown>;
       if (nexus) {
@@ -133,6 +145,16 @@ async function probeOne(e: ProbeEndpoint, timeoutMs: number): Promise<Probe> {
           && j.authority_state === "READ_ONLY" && j.evidence_state === "SNAPSHOT"
           && j.verification_state === "STRUCTURAL_ONLY";
         detail = live ? "read-only transport; snapshot evidence" : unavailable;
+      } else if (hatun) {
+        const result = j.result as Record<string, unknown> | undefined;
+        const server = result?.serverInfo as Record<string, unknown> | undefined;
+        const capabilities = result?.capabilities as Record<string, unknown> | undefined;
+        const tools = capabilities?.tools as Record<string, unknown> | undefined;
+        live = j.jsonrpc === "2.0" && j.id === HATUN_INITIALIZE.id && !("error" in j)
+          && result?.protocolVersion === "2024-11-05"
+          && server?.name === "szl-a11oy-mcp" && server?.version === "1.1.0"
+          && tools?.listChanged === false;
+        detail = live ? "A11oy MCP transport; signing unverified" : unavailable;
       } else if (typeof j.status === "string") detail = j.status;
       else if (typeof j.evidenceState === "string") detail = j.evidenceState;
       else if (typeof j.sdk === "string") detail = String(j.sdk);

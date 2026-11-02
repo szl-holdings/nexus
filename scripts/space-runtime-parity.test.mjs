@@ -54,6 +54,36 @@ test("probe results match TS probeEstate() for every response class", async () =
     "/body-at-limit": [200, JSON.stringify({ status: "ok", pad: "x".repeat(65536 - 24) })],
     "/body-over-limit": [200, JSON.stringify({ status: "ok", pad: "x".repeat(65537 - 24) })],
   };
+  const hatun = {
+    jsonrpc: "2.0", id: "nexus-probe", result: {
+      protocolVersion: "2024-11-05", serverInfo: { name: "szl-a11oy-mcp", version: "1.1.0" },
+      capabilities: { tools: { listChanged: false } },
+    },
+  };
+  const hatunCases = {
+    "/hatun-live": [JSON.stringify(hatun), true],
+    "/hatun-error": [JSON.stringify({ ...hatun, error: { code: -32600 } }), false],
+    "/hatun-unrelated": ['{"status":"ok"}', false],
+    "/hatun-text": ["not json", false],
+    "/hatun-null": ["null", false],
+    "/hatun-array": ["[]", false],
+  };
+  for (const path of [
+    ["jsonrpc"], ["id"], ["result"], ["result", "protocolVersion"],
+    ["result", "serverInfo"], ["result", "serverInfo", "name"], ["result", "serverInfo", "version"],
+    ["result", "capabilities"], ["result", "capabilities", "tools"], ["result", "capabilities", "tools", "listChanged"],
+  ]) {
+    for (const kind of ["missing", "wrong"]) {
+      const body = structuredClone(hatun);
+      let cursor = body;
+      for (const key of path.slice(0, -1)) cursor = cursor[key];
+      if (kind === "missing") delete cursor[path.at(-1)];
+      else cursor[path.at(-1)] = "wrong";
+      hatunCases[`/hatun-${kind}-${path.join("-")}`] = [JSON.stringify(body), false];
+    }
+  }
+  for (const [path, [body]] of Object.entries(hatunCases)) routes[path] = [200, body];
+  const hatunRequests = [];
   const runtime = buildInfo(SHA);
   const anatomy = {
     service: "anatomy-space", organ: "anatomy", status: "ok",
@@ -94,7 +124,12 @@ test("probe results match TS probeEstate() for every response class", async () =
     nexusCases[`/nexus-revision-${Object.keys(nexusCases).length}`] = [JSON.stringify({ ...runtime, source_revision: revision }), false];
   }
   for (const [path, [body]] of Object.entries(nexusCases)) routes[path] = [200, body];
-  const server = createServer((req, res) => {
+  const server = createServer(async (req, res) => {
+    if (req.url.startsWith("/hatun-")) {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      hatunRequests.push({ method: req.method, type: req.headers["content-type"], body: JSON.parse(Buffer.concat(chunks).toString()) });
+    }
     if (req.url === "/slow") {
       setTimeout(() => res.end('{"status":"late"}'), 900);
       return;
@@ -153,11 +188,10 @@ test("probe results match TS probeEstate() for every response class", async () =
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   const cases = [...Object.keys(routes), "/slow", "/slow-body", "/trickle", "/trickle-body", "/chunked-over-limit", "/truncated-body", "/hop/12", "/hop/21"].map((path) => ({
-    id: path.startsWith("/anatomy-") ? "anatomy" : path.startsWith("/role") || path.startsWith("/nexus-") || path === "/array" || path === "/truncated-body" ? "nexus-space" : `e${path.slice(1)}`,
+    id: path.startsWith("/hatun-") ? "hatun" : path.startsWith("/anatomy-") ? "anatomy" : path.startsWith("/role") || path.startsWith("/nexus-") || path === "/array" || path === "/truncated-body" ? "nexus-space" : `e${path.slice(1)}`,
     label: path,
     url: base + path,
   }));
-  cases.push(ENDPOINTS.find((endpoint) => endpoint.id === "hatun"));
   const original = ENDPOINTS.splice(0, ENDPOINTS.length, ...cases);
   try {
     const { execFile } = await import("node:child_process");
@@ -183,9 +217,6 @@ test("probe results match TS probeEstate() for every response class", async () =
       assert.deepEqual({ ...pyRows[index], at: 0 }, { ...tsRows[index], at: 0 }, tsRows[index].label);
     }
     for (const rows of [tsRows, pyRows]) {
-      const hatun = rows.find((row) => row.id === "hatun");
-      assert.equal(hatun?.status, "UNAVAILABLE");
-      assert.equal(hatun?.detail, "standalone retired; MCP deployment unavailable");
       assert.equal(rows.find((row) => row.label === "/hop/12")?.status, "LIVE");
       assert.equal(rows.find((row) => row.label === "/hop/21")?.detail, "cors or unreachable");
       for (const path of ["/slow-body", "/trickle-body", "/trickle"]) {
@@ -201,6 +232,22 @@ test("probe results match TS probeEstate() for every response class", async () =
       assert.equal(rows.find((entry) => entry.label === "/body-at-limit").status, "LIVE");
       assert.equal(rows.find((entry) => entry.label === "/truncated-body").status, "UNAVAILABLE");
       assert.equal(rows.find((entry) => entry.label === "/truncated-body").detail, "cors or unreachable");
+    }
+    assert.equal(hatunRequests.length, Object.keys(hatunCases).length * 2);
+    for (const request of hatunRequests) {
+      assert.equal(request.method, "POST");
+      assert.equal(request.type, "application/json");
+      assert.deepEqual(request.body, {
+        jsonrpc: "2.0", id: "nexus-probe", method: "initialize",
+        params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "nexus-probe", version: "1" } },
+      });
+    }
+    for (const [path, [, live]] of Object.entries(hatunCases)) {
+      for (const rows of [tsRows, pyRows]) {
+        const row = rows.find((entry) => entry.label === path);
+        assert.equal(row.status, live ? "LIVE" : "UNAVAILABLE", path);
+        assert.equal(row.detail, live ? "A11oy MCP transport; signing unverified" : "A11oy MCP handshake unavailable", path);
+      }
     }
     for (const [path, [, live]] of Object.entries(anatomyCases)) {
       const expected = live ? "LIVE" : "UNAVAILABLE";
@@ -227,6 +274,7 @@ test("Anatomy probes use the retained creator-profile transport contract in both
   const py = JSON.parse(execFileSync("python3", ["-c", "import sys,json; sys.path.insert(0,'space'); from nexus_runtime import ENDPOINTS; print(json.dumps(ENDPOINTS))"], { encoding: "utf8" }));
   assert.deepEqual(py, ENDPOINTS);
   for (const endpoints of [ENDPOINTS, py]) {
+    assert.equal(endpoints.find((row) => row.id === "hatun").url, "https://szlholdings-a11oy.hf.space/mcp/");
     assert.equal(endpoints.find((row) => row.id === "anatomy").url, "https://betterwithage-anatomy.hf.space/healthz");
   }
 });

@@ -125,17 +125,20 @@ def test_default_endpoints_match_typescript():
     assert rt.ENDPOINTS[2]["label"] == "NEXUS runtime"
 
 
-def test_retired_hatun_never_fetches_an_unqualified_substitute(monkeypatch):
-    def unexpected_fetch(*args):
-        pytest.fail("retired Hatun must not make a network request")
+def test_hatun_uses_declared_product_transport(monkeypatch):
+    def request_contract(request, timeout):
+        import json
+        assert request.full_url == "https://szlholdings-a11oy.hf.space/mcp/"
+        assert request.get_method() == "POST"
+        assert json.loads(request.data) == rt.HATUN_INITIALIZE
+        return 200, b'{"status":"ok"}'
 
-    monkeypatch.setattr(rt, "_read_response", unexpected_fetch)
+    monkeypatch.setattr(rt, "_read_response", request_contract)
     hatun = next(e for e in rt.ENDPOINTS if e["id"] == "hatun")
-    assert "url" not in hatun
     [probe] = rt.probe_estate(endpoints=[hatun], now_ms=lambda: 123)
     assert probe == {
-        "id": "hatun", "label": "Hatun MCP", "status": "UNAVAILABLE",
-        "detail": "standalone retired; MCP deployment unavailable", "at": 123,
+        "id": "hatun", "label": "Hatun product gateway", "status": "UNAVAILABLE",
+        "detail": "A11oy MCP handshake unavailable", "at": 123,
     }
 
 

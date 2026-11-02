@@ -29,18 +29,19 @@ describe("parseProbes", () => {
   });
 });
 
-it("retired Hatun stays unavailable without fetching a retired host or substitute", async (t) => {
+it("Hatun uses the declared A11oy MCP product transport, not the retired standalone host", async (t) => {
   const hatun = ENDPOINTS.find((e) => e.id === "hatun")!;
-  assert.equal(hatun.url, undefined);
-  assert.equal(hatun.unavailable, "standalone retired; MCP deployment unavailable");
-  assert.equal(idleProbes().find((p) => p.id === "hatun")?.detail, hatun.unavailable);
+  assert.equal(hatun.url, "https://szlholdings-a11oy.hf.space/mcp/");
+  assert.equal(hatun.label, "Hatun product gateway");
+  assert.equal(idleProbes().find((p) => p.id === "hatun")?.detail, "not probed");
   const fetch = t.mock.method(globalThis, "fetch", async () => new Response('{"status":"ok"}'));
   const original = ENDPOINTS.splice(0, ENDPOINTS.length, hatun);
   try {
     const [probe] = await probeEstate();
     assert.equal(probe.status, "UNAVAILABLE");
-    assert.equal(probe.detail, hatun.unavailable);
-    assert.equal(fetch.mock.callCount(), 0);
+    assert.equal(probe.detail, "A11oy MCP handshake unavailable");
+    assert.equal(fetch.mock.callCount(), 1);
+    assert.equal(fetch.mock.calls[0].arguments[0], hatun.url);
   } finally {
     ENDPOINTS.splice(0, ENDPOINTS.length, ...original);
   }
