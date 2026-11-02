@@ -35,6 +35,7 @@ RUN useradd --system --no-create-home --shell /usr/sbin/nologin nexus
 
 COPY --from=builder --chown=nexus:nexus /src/.output/public /app/static
 COPY --chown=nexus:nexus space/app_server.py space/nexus_runtime.py /app/
+COPY --chown=nexus:nexus space/static_assets.py /app/
 COPY --chown=nexus:nexus SOURCE_GITHUB_SHA /app/SOURCE_GITHUB_SHA
 COPY --chown=nexus:nexus LICENSE /app/LICENSE
 
