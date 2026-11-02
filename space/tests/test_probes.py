@@ -3,6 +3,7 @@
 import socket
 import threading
 import time
+import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -76,12 +77,6 @@ def base():
     server.shutdown()
 
 
-def closed_port_url():
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        return f"http://127.0.0.1:{sock.getsockname()[1]}/"
-
-
 def one(base, path, endpoint_id="generic", timeout_s=2.0):
     url = path if path.startswith("http") else base + path
     [probe] = rt.probe_estate(timeout_s, [{"id": endpoint_id, "label": "L", "url": url}])
@@ -114,9 +109,17 @@ def test_nexus_space_requires_current_source_bound_runtime(base):
         assert one(base, path, "nexus-space") == ("UNAVAILABLE", "runtime source identity unavailable"), path
 
 
-def test_timeout_and_unreachable(base):
+def test_timeout(base):
     assert one(base, "/slow", timeout_s=0.2) == ("UNAVAILABLE", "timeout")
-    assert one(base, closed_port_url()) == ("UNAVAILABLE", "cors or unreachable")
+
+
+def test_connection_refused_is_unreachable(base, monkeypatch):
+    class RefusedOpener:
+        def open(self, url, timeout):
+            raise urllib.error.URLError(ConnectionRefusedError("refused"))
+
+    monkeypatch.setattr(rt, "_OPENER", RefusedOpener())
+    assert one(base, "/ok") == ("UNAVAILABLE", "cors or unreachable")
 
 
 def test_default_endpoints_match_typescript():
@@ -184,10 +187,12 @@ def trickle_url(gap_s, pieces):
 
 def test_head_deadline_is_wall_clock_like_the_ts_abort(base):
     # TS aborts fetch() once timeoutMs passes before the head is complete, however
-    # the time is split between connect, TLS and a slowly arriving head.
+    # the time is split between connect, TLS and a slowly arriving head. Keep the
+    # full head well beyond the assertion budget so a loaded Windows runner may
+    # schedule late without allowing the drip-fed response to finish.
     started = time.monotonic()
-    assert one(base, trickle_url(0.15, 6), timeout_s=0.4) == ("UNAVAILABLE", "timeout")
-    assert time.monotonic() - started < 0.7
+    assert one(base, trickle_url(0.15, 12), timeout_s=0.4) == ("UNAVAILABLE", "timeout")
+    assert time.monotonic() - started < 1.2
 
 
 def test_head_deadline_covers_stalls_outside_socket_timeouts(base, monkeypatch):

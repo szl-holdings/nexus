@@ -49,7 +49,9 @@ def test_runtime_label():
 def test_missing_file_reads_unavailable(tmp_path):
     assert rt.read_source_revision(tmp_path / "absent") == "UNAVAILABLE"
     path = tmp_path / "SOURCE_GITHUB_SHA"
-    path.write_text(SHA + "\n", encoding="utf-8")
+    # Exercise the exact bytes Node's readFileSync would observe. Path.write_text
+    # translates ``\n`` to ``\r\n`` on Windows unless newline is specified.
+    path.write_bytes((SHA + "\n").encode("utf-8"))
     assert rt.read_source_revision(path) == SHA + "\n"
 
 
