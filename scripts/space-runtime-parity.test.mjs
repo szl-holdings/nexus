@@ -54,6 +54,47 @@ test("probe results match TS probeEstate() for every response class", async () =
     "/body-at-limit": [200, JSON.stringify({ status: "ok", pad: "x".repeat(65536 - 24) })],
     "/body-over-limit": [200, JSON.stringify({ status: "ok", pad: "x".repeat(65537 - 24) })],
   };
+  const hatun = {
+    jsonrpc: "2.0", id: "nexus-probe", result: {
+      protocolVersion: "2024-11-05", serverInfo: { name: "szl-a11oy-mcp", version: "1.1.0" },
+      capabilities: { tools: { listChanged: false } },
+    },
+  };
+  const hatunCases = {
+    "/hatun-live": [JSON.stringify(hatun), true],
+    "/hatun-error": [JSON.stringify({ ...hatun, error: { code: -32600 } }), false],
+    "/hatun-unrelated": ['{"status":"ok"}', false],
+    "/hatun-text": ["not json", false],
+    "/hatun-null": ["null", false],
+    "/hatun-array": ["[]", false],
+  };
+  for (const [name, tools, live] of [
+    ["empty-tools", {}, true], ["list-changed-true", { listChanged: true }, true],
+    ["null-tools", null, false], ["array-tools", [], false],
+    ["null-list-changed", { listChanged: null }, false], ["numeric-list-changed", { listChanged: 0 }, false],
+  ]) {
+    const body = structuredClone(hatun);
+    body.result.capabilities.tools = tools;
+    hatunCases[`/hatun-${name}`] = [JSON.stringify(body), live];
+  }
+  for (const path of [
+    ["jsonrpc"], ["id"], ["result"], ["result", "protocolVersion"],
+    ["result", "serverInfo"], ["result", "serverInfo", "name"], ["result", "serverInfo", "version"],
+    ["result", "capabilities"], ["result", "capabilities", "tools"], ["result", "capabilities", "tools", "listChanged"],
+  ]) {
+    for (const kind of ["missing", "wrong"]) {
+      const body = structuredClone(hatun);
+      let cursor = body;
+      for (const key of path.slice(0, -1)) cursor = cursor[key];
+      if (kind === "missing") delete cursor[path.at(-1)];
+      else cursor[path.at(-1)] = "wrong";
+      const live = kind === "missing" && path.at(-1) === "listChanged";
+      hatunCases[`/hatun-${kind}-${path.join("-")}`] = [JSON.stringify(body), live];
+    }
+  }
+  for (const [path, [body]] of Object.entries(hatunCases)) routes[path] = [200, body];
+  const hatunRequests = [];
+  const hatunRedirects = [301, 302, 303, 307, 308].map((code) => `/hatun-redirect-${code}`);
   const runtime = buildInfo(SHA);
   const anatomy = {
     service: "anatomy-space", organ: "anatomy", status: "ok",
@@ -94,7 +135,16 @@ test("probe results match TS probeEstate() for every response class", async () =
     nexusCases[`/nexus-revision-${Object.keys(nexusCases).length}`] = [JSON.stringify({ ...runtime, source_revision: revision }), false];
   }
   for (const [path, [body]] of Object.entries(nexusCases)) routes[path] = [200, body];
-  const server = createServer((req, res) => {
+  const server = createServer(async (req, res) => {
+    if (req.url.startsWith("/hatun-")) {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      hatunRequests.push({ method: req.method, type: req.headers["content-type"], body: JSON.parse(Buffer.concat(chunks).toString()) });
+    }
+    if (hatunRedirects.includes(req.url)) {
+      res.writeHead(Number(req.url.split("-").at(-1)), { location: "/hatun-live", "content-length": 0 }).end();
+      return;
+    }
     if (req.url === "/slow") {
       setTimeout(() => res.end('{"status":"late"}'), 900);
       return;
@@ -152,12 +202,11 @@ test("probe results match TS probeEstate() for every response class", async () =
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
-  const cases = [...Object.keys(routes), "/slow", "/slow-body", "/trickle", "/trickle-body", "/chunked-over-limit", "/truncated-body", "/hop/12", "/hop/21"].map((path) => ({
-    id: path.startsWith("/anatomy-") ? "anatomy" : path.startsWith("/role") || path.startsWith("/nexus-") || path === "/array" || path === "/truncated-body" ? "nexus-space" : `e${path.slice(1)}`,
+  const cases = [...Object.keys(routes), ...hatunRedirects, "/slow", "/slow-body", "/trickle", "/trickle-body", "/chunked-over-limit", "/truncated-body", "/hop/12", "/hop/21"].map((path) => ({
+    id: path.startsWith("/hatun-") ? "hatun" : path.startsWith("/anatomy-") ? "anatomy" : path.startsWith("/role") || path.startsWith("/nexus-") || path === "/array" || path === "/truncated-body" ? "nexus-space" : `e${path.slice(1)}`,
     label: path,
     url: base + path,
   }));
-  cases.push(ENDPOINTS.find((endpoint) => endpoint.id === "hatun"));
   const original = ENDPOINTS.splice(0, ENDPOINTS.length, ...cases);
   try {
     const { execFile } = await import("node:child_process");
@@ -183,9 +232,6 @@ test("probe results match TS probeEstate() for every response class", async () =
       assert.deepEqual({ ...pyRows[index], at: 0 }, { ...tsRows[index], at: 0 }, tsRows[index].label);
     }
     for (const rows of [tsRows, pyRows]) {
-      const hatun = rows.find((row) => row.id === "hatun");
-      assert.equal(hatun?.status, "UNAVAILABLE");
-      assert.equal(hatun?.detail, "standalone retired; MCP deployment unavailable");
       assert.equal(rows.find((row) => row.label === "/hop/12")?.status, "LIVE");
       assert.equal(rows.find((row) => row.label === "/hop/21")?.detail, "cors or unreachable");
       for (const path of ["/slow-body", "/trickle-body", "/trickle"]) {
@@ -201,6 +247,29 @@ test("probe results match TS probeEstate() for every response class", async () =
       assert.equal(rows.find((entry) => entry.label === "/body-at-limit").status, "LIVE");
       assert.equal(rows.find((entry) => entry.label === "/truncated-body").status, "UNAVAILABLE");
       assert.equal(rows.find((entry) => entry.label === "/truncated-body").detail, "cors or unreachable");
+    }
+    for (const rows of [tsRows, pyRows]) {
+      for (const path of hatunRedirects) {
+        const row = rows.find((entry) => entry.label === path);
+        assert.equal(row.status, "UNAVAILABLE", path);
+        assert.equal(row.detail, "cors or unreachable", path);
+      }
+    }
+    assert.equal(hatunRequests.length, (Object.keys(hatunCases).length + hatunRedirects.length) * 2);
+    for (const request of hatunRequests) {
+      assert.equal(request.method, "POST");
+      assert.equal(request.type, "application/json");
+      assert.deepEqual(request.body, {
+        jsonrpc: "2.0", id: "nexus-probe", method: "initialize",
+        params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "nexus-probe", version: "1" } },
+      });
+    }
+    for (const [path, [, live]] of Object.entries(hatunCases)) {
+      for (const rows of [tsRows, pyRows]) {
+        const row = rows.find((entry) => entry.label === path);
+        assert.equal(row.status, live ? "LIVE" : "UNAVAILABLE", path);
+        assert.equal(row.detail, live ? "A11oy MCP transport; signing unverified" : "A11oy MCP handshake unavailable", path);
+      }
     }
     for (const [path, [, live]] of Object.entries(anatomyCases)) {
       const expected = live ? "LIVE" : "UNAVAILABLE";
@@ -227,6 +296,98 @@ test("Anatomy probes use the retained creator-profile transport contract in both
   const py = JSON.parse(execFileSync("python3", ["-c", "import sys,json; sys.path.insert(0,'space'); from nexus_runtime import ENDPOINTS; print(json.dumps(ENDPOINTS))"], { encoding: "utf8" }));
   assert.deepEqual(py, ENDPOINTS);
   for (const endpoints of [ENDPOINTS, py]) {
+    assert.equal(endpoints.find((row) => row.id === "hatun").url, "https://szlholdings-a11oy.hf.space/mcp/");
     assert.equal(endpoints.find((row) => row.id === "anatomy").url, "https://betterwithage-anatomy.hf.space/healthz");
+  }
+});
+
+test("MCP SSE initialization is incremental, bounded and identical in both runtimes", async () => {
+  const { createServer } = await import("node:http");
+  const { execFile } = await import("node:child_process");
+  const { ENDPOINTS, probeEstate } = await import("../src/lib/nexus/telemetry.ts");
+  const reply = {
+    jsonrpc: "2.0", id: "nexus-probe", result: {
+      protocolVersion: "2024-11-05", serverInfo: { name: "szl-a11oy-mcp", version: "1.1.0" },
+      capabilities: { tools: {} },
+    },
+  };
+  const event = (value) => `data: ${JSON.stringify(value)}\n\n`;
+  const good = event(reply);
+  const multiline = "\uFEFF: λ🫀 keepalive\r\nid: ignored\r\nevent: message\r\n"
+    + JSON.stringify(reply, null, 2).split("\n").map((line) => `data: ${line}\r\n`).join("") + "\r\n";
+  const atLimit = ":" + "x".repeat(65536 - Buffer.byteLength(good) - 3) + "\n\n" + good;
+  assert.equal(Buffer.byteLength(atLimit), 65536);
+  const fixtures = {
+    "/open": { body: good, hold: true, detail: "live" },
+    "/crlf-multiline": { body: multiline, hold: true, split: true, detail: "live" },
+    "/bare-cr": { body: good.replaceAll("\n", "\r"), hold: true, detail: "live" },
+    "/wrong-id-then-match": { body: event({ ...reply, id: "unrelated" })
+      + event({ jsonrpc: "2.0", method: "notifications/progress", params: {} }) + good, hold: true, detail: "live" },
+    "/wrong-id-only": { body: event({ ...reply, id: "unrelated" }), detail: "invalid" },
+    "/malformed": { body: "data: not JSON\n\n" + good, hold: true, detail: "invalid" },
+    "/error": { body: event({ jsonrpc: "2.0", id: "nexus-probe", error: { code: -32600 } }) + good, hold: true, detail: "invalid" },
+    "/named-error": { body: "event: error\n" + good, hold: true, detail: "invalid" },
+    "/other-event-only": { body: "event: unrelated\n" + good, detail: "invalid" },
+    "/array": { body: event([reply]) + good, detail: "invalid" },
+    "/unfinished": { body: good.slice(0, -1), detail: "invalid" },
+    "/at-limit": { body: atLimit, hold: true, detail: "live" },
+    "/over-limit": { body: ":" + "x".repeat(65536) + "\n\n" + good, detail: "response too large" },
+    // Bytes after a complete matching event do not make network chunk sizes observable.
+    "/match-before-large-tail": { body: good + "x".repeat(70000), hold: true, detail: "live" },
+    "/timeout": { body: ": still waiting\n\n", hold: true, repeat: true, detail: "timeout" },
+    "/wrong-id-timeout": { body: event({ ...reply, id: "unrelated" }), hold: true, repeat: true, detail: "timeout" },
+  };
+  const closed = new Map();
+  const server = createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    assert.equal(req.method, "POST");
+    assert.equal(req.headers.accept, "application/json, text/event-stream");
+    assert.equal(JSON.parse(Buffer.concat(chunks)).id, "nexus-probe");
+    const fixture = fixtures[req.url];
+    res.writeHead(200, { "Content-Type": "text/event-stream; charset=utf-8" });
+    res.flushHeaders();
+    const timers = [];
+    res.on("close", () => {
+      for (const timer of timers) { clearTimeout(timer); clearInterval(timer); }
+      closed.set(req.url, (closed.get(req.url) || 0) + 1);
+    });
+    if (fixture.split) {
+      // Split both a UTF-8 code point and CRLF across separate writes.
+      const bytes = Buffer.from(fixture.body);
+      res.write(bytes.subarray(0, 6));
+      timers.push(setTimeout(() => res.write(bytes.subarray(6, bytes.indexOf(13) + 1)), 15));
+      timers.push(setTimeout(() => res.write(bytes.subarray(bytes.indexOf(13) + 1)), 30));
+    } else res.write(fixture.body);
+    if (fixture.repeat) timers.push(setInterval(() => res.write(": ping\n\n"), 25));
+    if (!fixture.hold) res.end();
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const original = ENDPOINTS.splice(0);
+  try {
+    for (const [path, fixture] of Object.entries(fixtures)) {
+      const endpoints = [{ id: "hatun", label: path, url: `http://127.0.0.1:${server.address().port}${path}` }];
+      const timeoutMs = fixture.detail === "timeout" ? 250 : 2000;
+      ENDPOINTS.splice(0, ENDPOINTS.length, ...endpoints);
+      const start = Date.now();
+      const [ts] = await probeEstate(timeoutMs);
+      const raw = await new Promise((resolve, reject) => execFile("python3", [
+        "space/nexus_runtime.py", "probes", JSON.stringify(endpoints), String(timeoutMs / 1000),
+      ], (err, out) => err ? reject(err) : resolve(out)));
+      const [py] = JSON.parse(raw);
+      assert.deepEqual({ ...py, at: 0 }, { ...ts, at: 0 }, path);
+      assert.equal(ts.status, fixture.detail === "live" ? "LIVE" : "UNAVAILABLE", path);
+      assert.equal(ts.detail, fixture.detail === "live" ? "A11oy MCP transport; signing unverified"
+        : fixture.detail === "invalid" ? "A11oy MCP handshake unavailable" : fixture.detail, path);
+      if (fixture.detail === "live") assert.ok(Date.now() - start < 1800, `${path} must finish while SSE stays open`);
+    }
+    // Subsequent requests give the server event loop time to observe early cancellation.
+    assert.equal(closed.get("/open"), 2);
+    assert.equal(closed.get("/crlf-multiline"), 2);
+    assert.equal(closed.get("/malformed"), 2);
+  } finally {
+    ENDPOINTS.splice(0, ENDPOINTS.length, ...original);
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
   }
 });
