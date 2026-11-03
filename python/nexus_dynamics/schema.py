@@ -214,6 +214,10 @@ class NexusRunInput:
         validated = NexusRunInput._validate(self.to_dict(), allow_envelope=False)
         if validated != self.to_dict():
             raise NexusDynamicsError(INVALID_REQUEST, "input is not in canonical contract form")
+        # steps=5.0 equals the validated 5 and passes above; hold the int, as from_dict
+        # does, so run() can range() over it (math.ts has no int type and runs it).
+        object.__setattr__(self, "steps", validated["steps"])
+        object.__setattr__(self, "repeat_every", validated["repeatEvery"])
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
