@@ -16,7 +16,7 @@ const APPROVED_PINS = {
   "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1", // v7.0.1
   "actions/setup-node": "949feb2413d6458794dcd2491c4babbbce0c15c1", // v7.1.0
   "actions/setup-python": "6d4fd22b20465ccc0f7354476588e8df7c9ca0e0", // v7.1.0
-  "step-security/harden-runner": "dc2769abcc0fcfbadfc1df54081c1608579ef6b2", // v2.22.2
+  "step-security/harden-runner": "46b06cea07f9e64621fdf066ba77ac6915163d43", // v2.22.3
 };
 
 function onBlock() {
@@ -48,13 +48,33 @@ test("CI is read-only", () => {
   assert.doesNotMatch(CI, /persist-credentials: true/);
 });
 
-test("every action is pinned to its reviewed immutable release commit", () => {
-  const uses = [...CI.matchAll(/^\s*uses:\s*(\S+)/gm)].map((match) => match[1]);
+function assertReviewedActionPins(workflow) {
+  const uses = [...workflow.matchAll(/^\s*uses:\s*(\S+)/gm)].map((match) => match[1]);
   assert.ok(uses.length >= 6);
   for (const value of uses) {
     const [action, ref] = value.split("@");
     assert.ok(action in APPROVED_PINS, `unapproved action: ${value}`);
     assert.equal(ref, APPROVED_PINS[action], `wrong pin for ${action}`);
+  }
+}
+
+test("every action is pinned to its reviewed immutable release commit", () => {
+  assertReviewedActionPins(CI);
+});
+
+test("action pin review rejects mutable, stale and unapproved replacements", () => {
+  const action = "step-security/harden-runner";
+  const current = `${action}@${APPROVED_PINS[action]}`;
+  assert.ok(CI.includes(current), "the mutation must replace an existing action");
+  for (const replacement of [
+    `${action}@v2.22.3`,
+    `${action}@dc2769abcc0fcfbadfc1df54081c1608579ef6b2`,
+    `${action}@${"0".repeat(40)}`,
+    `unreviewed/runner@${APPROVED_PINS[action]}`,
+  ]) {
+    const changed = CI.replace(current, replacement);
+    assert.notEqual(changed, CI);
+    assert.throws(() => assertReviewedActionPins(changed), /wrong pin|unapproved action/);
   }
 });
 
