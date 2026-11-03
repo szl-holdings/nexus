@@ -61,8 +61,10 @@ from .errors import (
 CONTRACT_STATUS = "PROPOSAL_UNRATIFIED"
 SCHEMA = "szl.nexus-immune.acoustic-import/v0-proposal"
 CONTRACT_REVISION = "PROPOSAL-UNRATIFIED-2026-10-28"
-DECISION_SCHEMA = "szl.nexus-immune.acoustic-import-decision/v0-proposal"
-DECISION_HASH_KIND = "sha256-canonical-json-unsigned"
+# Input v0 remains supported unchanged. New decisions are explicitly v1:
+# v0 hashes omitted generator and chain entries and must never be relabeled v1.
+DECISION_SCHEMA = "szl.nexus-immune.acoustic-import-decision/v1-proposal"
+DECISION_HASH_KIND = "sha256-canonical-json-provenance-v1-unsigned"
 EVIDENCE_LABEL = "FIXTURE_ONLY"
 CALIBRATION_STATE = "MISSING"
 
@@ -145,6 +147,8 @@ def integer_in_range(name: str, value: Any, minimum: int, maximum: int) -> int:
 def _object(name: str, value: Any, fields: tuple[str, ...], missing_code: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise AcousticImportError(INVALID_REQUEST, f"{name} must be an object")
+    if any(not isinstance(key, str) for key in value):
+        raise AcousticImportError(INVALID_REQUEST, f"{name} keys must be strings")
     extras = sorted(set(value) - set(fields))
     if extras:
         raise AcousticImportError(UNSUPPORTED_FIELD, f"unsupported {name} fields: {extras}")
@@ -157,6 +161,10 @@ def _object(name: str, value: Any, fields: tuple[str, ...], missing_code: str) -
 def _text(value: Any, code: str, name: str, *, allow_empty: bool = False) -> str:
     if not isinstance(value, str) or len(value) > TEXT_MAX_LENGTH or (not allow_empty and not value):
         raise AcousticImportError(code, f"{name} must be a {'' if allow_empty else 'non-empty '}string")
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise AcousticImportError(code, f"{name} must be valid Unicode") from exc
     return value
 
 
@@ -182,8 +190,39 @@ def samples_sha256(samples: tuple[tuple[float, ...], ...]) -> str:
 
 
 def canonical_hash(payload: Mapping[str, Any]) -> str:
-    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    """Strict JSON, sorted object keys, preserved array order/Unicode, UTF-8.
+
+    This is the Python JSON encoding named by the decision hash kind, not RFC
+    8785/JCS or authentication. No key coercion or Unicode normalization.
+    """
+    def check(value: Any) -> None:
+        if isinstance(value, dict):
+            if any(not isinstance(key, str) for key in value):
+                raise AcousticImportError(INVALID_REQUEST, "canonical JSON keys must be strings")
+            for key, item in value.items():
+                check(key)
+                check(item)
+        elif isinstance(value, list):
+            for item in value:
+                check(item)
+        elif isinstance(value, str):
+            try:
+                value.encode("utf-8")
+            except UnicodeEncodeError as exc:
+                raise AcousticImportError(INVALID_REQUEST, "canonical JSON requires valid Unicode") from exc
+        elif value is None or isinstance(value, (bool, int)):
+            return
+        elif isinstance(value, float) and math.isfinite(value):
+            return
+        else:
+            raise AcousticImportError(INVALID_REQUEST, "canonical JSON requires finite JSON values")
+
+    check(payload)
+    try:
+        raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    except (ValueError, TypeError, UnicodeEncodeError) as exc:
+        raise AcousticImportError(INVALID_REQUEST, "cannot encode canonical JSON") from exc
 
 
 # --------------------------------------------------------------------------
@@ -191,7 +230,7 @@ def canonical_hash(payload: Mapping[str, Any]) -> str:
 # --------------------------------------------------------------------------
 
 
-def _parse_source(value: Any, expected_source_revision: str | None) -> tuple[str, str]:
+def _parse_source(value: Any, expected_source_revision: str | None) -> tuple[str, str, str]:
     source = _object("source", value, SOURCE_FIELDS, MISSING_FIELD)
     kind = source["kind"]
     if not isinstance(kind, str) or kind not in SUPPORTED_SOURCE_KINDS:
@@ -200,13 +239,13 @@ def _parse_source(value: Any, expected_source_revision: str | None) -> tuple[str
             f"source.kind {kind!r} is not supported; only {list(SUPPORTED_SOURCE_KINDS)} until recordings, "
             "calibration, rights and procedure exist",
         )
-    _text(source["generator"], UNSUPPORTED_SOURCE, "source.generator")
+    generator = _text(source["generator"], UNSUPPORTED_SOURCE, "source.generator")
     revision = source["sourceRevision"]
     if not isinstance(revision, str) or not _REVISION_RE.fullmatch(revision):
         raise AcousticImportError(INVALID_REVISION, "source.sourceRevision must be a 40-char lowercase git sha")
     if expected_source_revision is not None and revision != expected_source_revision:
         raise AcousticImportError(REVISION_MISMATCH, "source.sourceRevision does not match the pinned revision")
-    return kind, revision
+    return kind, generator, revision
 
 
 def _parse_units(value: Any) -> None:
@@ -243,7 +282,9 @@ def _parse_samples(value: Any, channels: int) -> tuple[tuple[float, ...], ...]:
     return tuple(out)
 
 
-def _parse_custody(value: Any, samples: tuple[tuple[float, ...], ...], now: datetime) -> tuple[str, str, int, str]:
+def _parse_custody(
+    value: Any, samples: tuple[tuple[float, ...], ...], now: datetime,
+) -> tuple[str, str, tuple[tuple[str, str, str], ...], str]:
     custody = _object("custody", value, CUSTODY_FIELDS, INVALID_CUSTODY)
     custodian = _text(custody["custodian"], INVALID_CUSTODY, "custody.custodian")
     acquired = _timestamp("custody.acquiredAt", custody["acquiredAt"], now)
@@ -251,22 +292,24 @@ def _parse_custody(value: Any, samples: tuple[tuple[float, ...], ...], now: date
     if not isinstance(chain, list) or not chain:
         raise AcousticImportError(INVALID_CUSTODY, "custody.chain must be a non-empty list")
     previous = acquired
+    accepted_chain = []
     for index, raw in enumerate(chain):
         entry = _object(f"custody.chain[{index}]", raw, CHAIN_FIELDS, INVALID_CUSTODY)
-        _text(entry["actor"], INVALID_CUSTODY, f"custody.chain[{index}].actor")
-        _text(entry["action"], INVALID_CUSTODY, f"custody.chain[{index}].action")
+        actor = _text(entry["actor"], INVALID_CUSTODY, f"custody.chain[{index}].actor")
+        action = _text(entry["action"], INVALID_CUSTODY, f"custody.chain[{index}].action")
         at = _timestamp(f"custody.chain[{index}].at", entry["at"], now)
         if at < previous:
             raise AcousticImportError(
                 INVALID_CUSTODY, f"custody.chain[{index}] precedes acquisition or the previous entry"
             )
         previous = at
+        accepted_chain.append((actor, action, entry["at"]))
     stated = custody["samplesSha256"]
     if not isinstance(stated, str) or not _SHA256_RE.fullmatch(stated):
         raise AcousticImportError(INVALID_CUSTODY, "custody.samplesSha256 must be 64 lowercase hex")
     if samples_sha256(samples) != stated:
         raise AcousticImportError(DIGEST_MISMATCH, "samples do not match the custodian's digest")
-    return custodian, custody["acquiredAt"], len(chain), stated
+    return custodian, custody["acquiredAt"], tuple(accepted_chain), stated
 
 
 def _parse_rights(value: Any) -> tuple[str, str, str]:
@@ -300,10 +343,12 @@ class ImportDecision:
     admitted: bool
     reasons: tuple[str, ...]
     source_kind: str
+    source_generator: str
     source_revision: str
     custodian: str
     acquired_at: str
     chain_length: int
+    custody_chain: tuple[tuple[str, str, str], ...]
     samples_sha256: str
     rights_status: str
     rights_holder: str
@@ -341,11 +386,19 @@ class ImportDecision:
             "evidenceLabel": self.evidence_label,
             "physicalAnalysisEligible": self.physical_analysis_eligible,
             "calibration": self.calibration,
-            "source": {"kind": self.source_kind, "sourceRevision": self.source_revision},
+            "source": {
+                "kind": self.source_kind,
+                "generator": self.source_generator,
+                "sourceRevision": self.source_revision,
+            },
             "custody": {
                 "custodian": self.custodian,
                 "acquiredAt": self.acquired_at,
                 "chainLength": self.chain_length,
+                "chain": [
+                    {"actor": actor, "action": action, "at": at}
+                    for actor, action, at in self.custody_chain
+                ],
                 "samplesSha256": self.samples_sha256,
                 "digestVerified": True,
             },
@@ -383,12 +436,12 @@ def admit(payload: Any, *, now: datetime, expected_source_revision: str | None =
     recording_id = payload["recordingId"]
     if not isinstance(recording_id, str) or not _RECORDING_ID_RE.fullmatch(recording_id):
         raise AcousticImportError(INVALID_RECORDING_ID, f"recordingId must match {RECORDING_ID_PATTERN}")
-    kind, revision = _parse_source(payload["source"], expected_source_revision)
+    kind, generator, revision = _parse_source(payload["source"], expected_source_revision)
     _parse_units(payload["units"])
     rate = integer_in_range("sampleRateHz", payload["sampleRateHz"], SAMPLE_RATE_MIN, SAMPLE_RATE_MAX)
     channels = integer_in_range("channels", payload["channels"], CHANNELS_MIN, CHANNELS_MAX)
     samples = _parse_samples(payload["samples"], channels)
-    custodian, acquired_at, chain_length, digest = _parse_custody(payload["custody"], samples, now)
+    custodian, acquired_at, custody_chain, digest = _parse_custody(payload["custody"], samples, now)
     status, holder, basis = _parse_rights(payload["rights"])
     reasons = _refusal_reasons(status, basis)
     decision = ImportDecision(
@@ -396,10 +449,12 @@ def admit(payload: Any, *, now: datetime, expected_source_revision: str | None =
         admitted=not reasons,
         reasons=reasons,
         source_kind=kind,
+        source_generator=generator,
         source_revision=revision,
         custodian=custodian,
         acquired_at=acquired_at,
-        chain_length=chain_length,
+        chain_length=len(custody_chain),
+        custody_chain=custody_chain,
         samples_sha256=digest,
         rights_status=status,
         rights_holder=holder,

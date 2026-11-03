@@ -14,7 +14,8 @@ What it does:
 - refuses physical units, because calibration is MISSING;
 - rejects malformed, non-finite, out-of-range and future-dated input, and
   schema, revision or pinned-source mismatches;
-- checks the custody digest chain;
+- checks that the samples match the supplied custody digest and that supplied
+  custody timestamps are ordered (neither check authenticates the custodian);
 - records rights `UNKNOWN` or `RESTRICTED` (or no stated basis) but never admits it;
 - marks every admitted record `FIXTURE_ONLY` with `physicalAnalysisEligible: false`.
 
@@ -24,6 +25,25 @@ Space image (the Dockerfiles use explicit `COPY` sources).
 Evidence boundary: the tests use generated sine tables only. A pass is
 `FIXTURE_ONLY` evidence about admission logic. It is not a recording, a
 calibration, apparatus proof or a scientific claim.
+
+Decision hash version boundary: the existing `v0-proposal` input schema and
+input contract revision are unchanged. Newly emitted decisions use
+`szl.nexus-immune.acoustic-import-decision/v1-proposal` and hash kind
+`sha256-canonical-json-provenance-v1-unsigned`. The unsigned hash now commits
+the accepted generator and every custody entry (actor, action, timestamp),
+in addition to the previously recorded metadata and sample digest. It commits
+what was supplied, **not its truth, identity, rights or authentication**.
+Historical v0 decisions/hashes remain v0 and must not be relabeled or verified
+as v1; re-importing the same input emits a distinct v1 decision, not a migration
+of any historical receipt.
+
+Canonicalization is Python `json.dumps` with sorted string keys, compact
+separators, `ensure_ascii=False`, `allow_nan=False`, encoded as UTF-8. Array
+order and Unicode code points are preserved; keys are not coerced, text is
+not normalized, and non-JSON values, non-finite values and unpaired surrogates
+are rejected. This is not a claim of RFC 8785/JCS or cross-language
+canonicalization. Calibration remains `MISSING`, physical eligibility remains
+false, and every admitted decision remains `FIXTURE_ONLY`.
 
 Run the tests:
 
