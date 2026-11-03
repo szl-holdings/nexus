@@ -53,6 +53,7 @@ def test_record_carries_custody_units_and_rights(payload, now) -> None:
         "custodian": "lane:nexus-chad",
         "acquiredAt": "2026-10-28T03:50:00Z",
         "chainLength": 2,
+        "chain": payload["custody"]["chain"],
         "samplesSha256": samples_digest(payload["samples"]),
         "digestVerified": True,
     }
@@ -62,7 +63,9 @@ def test_record_carries_custody_units_and_rights(payload, now) -> None:
         "holder": "SZL Holdings (synthetic fixture)",
         "basis": "arithmetically generated sine table; no third-party material",
     }
-    assert out["source"] == {"kind": "synthetic", "sourceRevision": SOURCE_REVISION}
+    assert out["source"] == {
+        "kind": "synthetic", "generator": "conftest.sine_channel", "sourceRevision": SOURCE_REVISION,
+    }
     assert (out["sampleRateHz"], out["channels"], out["frames"]) == (8000, 1, 64)
     assert out["durationS"] == 64 / 8000
 
@@ -107,7 +110,7 @@ def test_decision_is_deterministic_and_hash_bound(payload, now) -> None:
 
 def test_decision_hash_is_not_presented_as_a_signature(payload, now) -> None:
     out = admit(payload, now=now).to_dict()
-    assert out["decisionHashKind"] == "sha256-canonical-json-unsigned"
+    assert out["decisionHashKind"] == "sha256-canonical-json-provenance-v1-unsigned"
     assert "signature" not in out
 
 
