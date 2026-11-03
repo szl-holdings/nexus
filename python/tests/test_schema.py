@@ -178,3 +178,19 @@ def test_finite_number_returns_the_float_it_checked() -> None:
     with pytest.raises(NexusDynamicsError) as caught:
         S.finite_number("dt", to_inf(0.01))
     assert caught.value.code == "NON_FINITE_NUMBER"
+
+
+def test_direct_run_input_with_integral_float_counts_runs_like_from_dict() -> None:
+    """steps=5.0 and repeat_every=2.0 equal the validated ints, so a directly constructed input
+    accepts them; it must hold the ints, as from_dict does, or run() fails on range(5.0).
+    math.ts has no int type and runs the same request (dynamicsOutput / immuneV1Output hashes
+    computed under node 22 from src/lib/nexus/dynamics.ts)."""
+    from nexus_dynamics import immune_v1
+    from nexus_dynamics.run import output_hash
+
+    common = {"program": "lorenz", "mode": "OP", "dt": 0.01, "chaos": 0.5, "drive": 0.5, "seed": 0.25}
+    direct = NexusRunInput(**common, steps=5.0, repeat_every=2.0)
+    assert type(direct.steps) is int and type(direct.repeat_every) is int
+    assert direct == NexusRunInput.from_dict({**common, "steps": 5, "repeatEvery": 2})
+    assert output_hash(direct) == "105b372a5e693f7b52a8a4b38165cebd1eeaa5add29fe31bde77f664c31bae27"
+    assert immune_v1.output_hash(direct) == "80313dd0693b48b89d3b854015b18a7acc826620261a407ebf32e6a92f3a5825"
