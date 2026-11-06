@@ -1,0 +1,101 @@
+# Copyright 2026 SZL Holdings — SPDX-License-Identifier: Apache-2.0
+name: forbidden-domain
+
+# Release-blocking estate gate named in CONTRIBUTING.md (rule 3). Same rule as
+# szl-platform alignment/templates/workflows/forbidden-domain.yml: a line that
+# matches (?<!-)a11oy\.com is a violation unless the same line is a guard
+# context (never|forbidden|not in|assertNotIn|does not appear|is not a
+# surface|blocklist). Canonical surfaces are a-11-oy.com (product) and
+# a11oy.net (proof).
+#
+# This copy runs the runner's Python over `git ls-files` and fails closed: it
+# proves its matcher on a planted line first, and a scan that finds no files
+# or cannot read one is an error. The template's `rg ... || true` reports OK
+# when ripgrep is missing, as on the ubuntu-26.04 image (szl-holdings/immune
+# run 41969932254 logged "rg: command not found" and then "OK").
+# scripts/forbidden-domain-workflow.test.mjs runs this script on fixtures.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  merge_group: {}
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: forbidden-domain-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    name: Scan tracked files for the forbidden lookalike domain
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Scan
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I - <<'PY'
+          import os
+          import re
+          import subprocess
+          import sys
+
+          DOMAIN = re.compile(r"(?<!-)a11oy\.com")
+          GUARD = re.compile(
+              r"never|forbidden|not in|assertNotIn|does not appear|is not a surface|blocklist",
+              re.IGNORECASE,
+          )
+
+
+          def violates(line):
+              return DOMAIN.search(line) is not None and GUARD.search(line) is None
+
+
+          # Prove the matcher before trusting a clean result.
+          planted = "see https://" + "a11oy" + ".com/docs"
+          allowed = ("never link " + planted, "https://szl-" + "a11oy" + ".com", "https://a-11-oy.com")
+          if not violates(planted) or any(violates(line) for line in allowed):
+              sys.exit("forbidden-domain: matcher self-check failed; nothing was scanned")
+
+          listing = subprocess.run(["git", "ls-files", "-z"], check=True, capture_output=True).stdout
+          paths = [p.decode("utf-8", "surrogateescape") for p in listing.split(b"\0") if p]
+          if not paths:
+              sys.exit("forbidden-domain: git ls-files listed no files; nothing was scanned")
+
+          scanned = 0
+          found = []
+          for path in paths:
+              if os.path.islink(path):
+                  continue  # like ripgrep's default, links are not followed
+              with open(path, "rb") as handle:
+                  data = handle.read()
+              if b"\0" in data:
+                  continue  # binary file, as ripgrep skips it
+              scanned += 1
+              for number, line in enumerate(data.decode("utf-8", "replace").splitlines(), 1):
+                  if violates(line):
+                      found.append(f"{path}:{number}:{line.strip()}")
+          if scanned == 0:
+              sys.exit("forbidden-domain: no tracked text files; nothing was scanned")
+          if found:
+              print("::error::Forbidden domain references found (release-blocking CRITICAL).")
+              print("::error::Replace with a-11-oy.com or remove; guard contexts must say so on the same line.")
+              print("\n".join(found))
+              sys.exit(1)
+          print(f"OK: scanned {scanned} tracked text files; no forbidden domain references outside guard contexts.")
+          PY
