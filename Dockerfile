@@ -1,10 +1,14 @@
 # Leftover vite-dev image. NOT the Hugging Face Space image.
 # Space image is space/Dockerfile (prerendered static build served by Python, port 7860).
-# Canonical publisher: szl-holdings/yarqa deploy-nexus.yml.
+# Provider publication is central (AGENTS.md): szl-holdings/.github publish-nexus-space.yml.
 # Do not point reusable-hf-deploy at this file.
 # Explicit COPY sources: the org deployer forbids bare `COPY .`.
-# Base image: estate HF factory pin (public.ecr.aws), matching yarqa.
-FROM public.ecr.aws/docker/library/node:26-bookworm-slim@sha256:28147155d47dc31abe0a46e0d12b59b2fb3d0a2dcc5dc65fce76a074180b16fe
+# Base image: the Docker official node image through mirror.gcr.io, pinned to the
+# same content-addressed index digest this file used to pull from public.ecr.aws,
+# so the image bytes are unchanged. ECR Public answers Dependabot's anonymous tag
+# listing with HTTP 429, which failed the weekly docker update job; Dependabot
+# reads mirror.gcr.io pins without credentials (scripts/dependabot-docker.test.mjs).
+FROM mirror.gcr.io/library/node:26-bookworm-slim@sha256:28147155d47dc31abe0a46e0d12b59b2fb3d0a2dcc5dc65fce76a074180b16fe
 
 ARG HF_CACHE_BUST=mkiii-4
 

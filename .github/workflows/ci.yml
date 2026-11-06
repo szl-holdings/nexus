@@ -30,8 +30,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 22: the Docker image line (Dockerfile, @types/node ^22). 24: current LTS.
-        node: ["22", "24"]
+        # 22 and 24: the older maintained LTS lines. 26: the line both Docker
+        # images build on (space/Dockerfile builder, Dockerfile) and @types/node.
+        node: ["22", "24", "26"]
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
@@ -80,9 +81,15 @@ jobs:
         run: npm run build
 
   python:
-    name: Python (compile, selftest, pytest)
+    name: Python ${{ matrix.python }} (compile, selftest, pytest)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11: the oldest line the hash-locked test graph covers. 3.12: the
+        # Space runtime (space/Dockerfile python:3.12-slim). 3.13: current.
+        python: ["3.11", "3.12", "3.13"]
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
@@ -105,7 +112,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python }}
 
       - name: Compile every tracked Python file
         shell: bash

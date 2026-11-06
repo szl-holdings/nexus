@@ -138,7 +138,7 @@ Then play the keys, patch ANLG into VCF, watch HOLO, and throw Chaos.
 - **P** cycle scope Y-T / X-Y / FFT / HOLO; Tab remains standard keyboard navigation
 - **F** Frontier · Shift-F disengage · F again reseeds the loop
 - Voice: **IC / OP / HALT / REP**
-- Scenes F1–F22 on the header (shift-click stores)
+- Eight scenes on the header, labelled with the locked-8 ids F1 F4 F7 F11 F12 F18 F19 F22 (click loads, shift-click stores)
 - **Esc** panic (all notes off)
 - **?** shortcuts
 
@@ -167,3 +167,30 @@ read the cached result and do not scan or hash the filesystem. The response
 reports the verification age and `LOCAL_STATIC_BYTES` scope. This establishes
 local artifact availability and integrity only: browser rendering, Web Audio
 acceptance, provider revision and publication remain separate checks.
+
+## Verify
+
+The source gates CI runs (`.github/workflows/ci.yml`), from a clean checkout
+(Node 22, 24 or 26; Python 3.11, 3.12 or 3.13):
+
+```bash
+npm ci
+npm audit --audit-level=high
+npm run typecheck
+npm run lint
+npm test        # every *.test.{mjs,js,ts,mts} under scripts/ and src/; quarantined scaffold tests are listed with their reason
+npm run build
+
+python -m venv .venv
+.venv/bin/python -m pip install --require-hashes -r python/requirements-dev.txt   # Windows: .venv\Scripts\python
+.venv/bin/python server.py --selftest
+.venv/bin/python source_bound_server.py --selftest
+.venv/bin/python -m pytest -q   # python/, space/, experiments/ and root tests
+```
+
+CI's `space` job also builds `space/Dockerfile` and reads back `/healthz`, `/`
+and `/api/build-info` from the running container. The engine-level checks
+(parity vectors, cross-runtime probe, shared execution authority) are in
+[`python/README.md`](python/README.md). All of these are source checks: they do
+not show which revision the organization Space, the origin preview or IMMUNE is
+serving.

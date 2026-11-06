@@ -144,8 +144,14 @@ profile. Save it as UTF-8 without a BOM; Windows PowerShell 5 redirection may
 otherwise use UTF-16. Inspect and retain that record as your explicit admission of this
 process. The profile contains a fresh process ID, the algorithm contract,
 source SHA-256 digests, and Node/V8/platform/architecture/launch metadata.
-Startup rejects preload, loader and custom V8 flags. Use Node >=22.6 in a plain
-source checkout; no npm packages or provider credentials are needed.
+Startup rejects preload, loader and custom V8 flags. It also refuses to start
+when `NODE_OPTIONS`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `DYLD_INSERT_LIBRARIES` or
+`DYLD_LIBRARY_PATH` is set: it exits with status 2, prints "Authority requires a
+plain Node launch without preload, loader or custom V8 options" on stderr and
+leaves `authority.json` empty. Some proxies and IDEs set `NODE_OPTIONS`; start
+the authority with it unset (for example `env -u NODE_OPTIONS node ...`). Use
+Node >=22.6 in a plain source checkout; no npm packages or provider credentials
+are needed.
 
 In another terminal, install the stdlib Python client in your chosen Python
 environment (`python -m pip install ./python` from the checkout). Save an engine

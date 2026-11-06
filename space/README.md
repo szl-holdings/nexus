@@ -10,6 +10,16 @@ license: apache-2.0
 short_description: Holographic analog computer: 6 programs, optical
 ---
 
+> **Legacy card.** This page describes the stdlib Python hologram that
+> `space/server.py` and `space/index.html` still carry (`space/server.py` is
+> kept byte-identical to the root `server.py`). It is not the card or the image
+> of the canonical Space. `space/Dockerfile` now builds the full Web Audio
+> workstation: a `node:26` builder runs `npm ci` and `npm run build:static`, and
+> a `python:3.12-slim` runtime serves the prerendered files through
+> `space/app_server.py` (see the root [`README.md`](../README.md) and
+> [`AGENTS.md`](../AGENTS.md)). The notes below about Hub `npm ci`, ECR Public
+> and `mirror.gcr.io` are kept as history.
+
 # NEXUS hologram
 
 Holographic analog computer. Six programs. Optical core. Analog neuromorphic. Five organs. Phosphor CRT.

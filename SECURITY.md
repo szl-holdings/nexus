@@ -21,11 +21,11 @@ You will receive an acknowledgement within 72 hours and a triage decision
 | Version                   | Supported    |
 | ------------------------- | ------------ |
 | default branch (`main`)   | yes          |
-| latest tagged release     | yes          |
 | anything older            | best-effort  |
 
-<!-- Adjust this table to the repo's actual release cadence. UNKNOWN is
-     never claimed as supported. -->
+This repository has no tagged releases; `main` is the only supported line.
+Add a release row here when the first release is tagged. UNKNOWN is never
+claimed as supported.
 
 ## Receipt verification
 

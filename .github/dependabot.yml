@@ -53,8 +53,13 @@ updates:
       - dependency-name: "typescript"
         versions: [">=6.1"]
 
+  # "/space" holds space/Dockerfile, the image the canonical Space runs; "/" holds
+  # the leftover dev image. The CI space job builds and smoke-tests every change
+  # to space/Dockerfile.
   - package-ecosystem: "docker"
-    directory: "/"
+    directories:
+      - "/"
+      - "/space"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -67,3 +72,15 @@ updates:
       docker:
         patterns:
           - "*"
+    ignore:
+      # space/Dockerfile builds on node:26 and runs python:3.12; the source
+      # contract (scripts/nexus-space-contract.test.mjs) asserts both lines, and
+      # AGENTS.md makes a runtime-line change a separately qualified migration.
+      # Digest and patch refreshes of those tags still arrive. "library/node" is
+      # the root Dockerfile's mirror.gcr.io name for the same image.
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "library/node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
