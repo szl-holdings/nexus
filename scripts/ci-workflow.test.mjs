@@ -176,11 +176,27 @@ test("the source alias resolves without deprecated baseUrl or a suppression", ()
   );
 });
 
-test("the node job runs on both Node LTS lines the repository uses", () => {
+test("the node job runs on every Node LTS line the repository uses", () => {
   const steps = jobSteps("node");
-  assert.match(steps, /^ {8}node: \["22", "24"\]$/m);
+  assert.match(steps, /^ {8}node: \["22", "24", "26"\]$/m);
   assert.match(steps, /node-version: \$\{\{ matrix\.node \}\}/);
   assert.match(steps, /fail-fast: false/);
+  // 26 is the line both Docker images build on; the gate must run there too.
+  const nodeLine = (path) =>
+    readFileSync(join(ROOT, path), "utf8").match(/^FROM \S*node:(\d+)-/m)?.[1];
+  assert.equal(nodeLine("space/Dockerfile"), "26");
+  assert.equal(nodeLine("Dockerfile"), "26");
+});
+
+test("the python job runs pytest on the Space runtime line and the current line", () => {
+  const steps = jobSteps("python");
+  assert.match(steps, /^ {8}python: \["3\.11", "3\.12", "3\.13"\]$/m);
+  assert.match(steps, /python-version: \$\{\{ matrix\.python \}\}/);
+  assert.match(steps, /fail-fast: false/);
+  const runtime = readFileSync(join(ROOT, "space/Dockerfile"), "utf8").match(
+    /^FROM python:(\d+\.\d+)-/m,
+  )?.[1];
+  assert.equal(runtime, "3.12");
 });
 
 test("npm test runs the cross-platform runner, not a shell glob", () => {
