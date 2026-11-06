@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,9 +7,30 @@ name = "nexus-dynamics"
 version = "2.0.0"
 description = "NEXUS canonical simulation engine (Python binding). Stdlib only. Executable software simulation, not a physical chip; Energy UNAVAILABLE; Lambda uniqueness is Conjecture 1 (OPEN)."
 readme = "README.md"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
 requires-python = ">=3.10"
 dependencies = []
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+
+[project.optional-dependencies]
+# Unpinned convenience path: `python -m pip install -e './python[test]'`.
+# CI installs the hash-locked graph in requirements-dev.txt instead.
+test = ["pytest>=9.2.0", "hypothesis>=6.170.14"]
+
+[project.urls]
+Homepage = "https://github.com/szl-holdings/nexus"
+Source = "https://github.com/szl-holdings/nexus/tree/main/python"
+Documentation = "https://github.com/szl-holdings/nexus/blob/main/python/README.md"
+Issues = "https://github.com/szl-holdings/nexus/issues"
 
 [tool.setuptools]
 packages = ["nexus_dynamics", "nexus_dynamics.programs"]

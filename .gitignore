@@ -25,7 +25,9 @@ public/__grok/install/assets/homescreen/*.png
 
 __pycache__/
 
-# Python engine tests (python/)
+# Python engine tests and packaging (python/)
 .venv/
 .pytest_cache/
 .hypothesis/
+*.egg-info/
+python/build/
