@@ -19,7 +19,7 @@ export const ENDPOINTS: ProbeEndpoint[] = [
   // A11oy's /wires + /hatun-mcp product surfaces declare this MCP transport.
   // This is szl-a11oy-mcp, not the retired standalone Python Hatun deployment.
   { id: "hatun", label: "Hatun product gateway", url: "https://szlholdings-a11oy.hf.space/mcp/" },
-  { id: "anatomy", label: "Anatomy", url: "https://betterwithage-anatomy.hf.space/healthz" },
+  { id: "anatomy", label: "Anatomy", url: "https://szlholdings-anatomy.hf.space/healthz" },
   { id: "nexus-space", label: "NEXUS runtime", url: "https://szlholdings-nexus.hf.space/api/build-info" },
 ];
 
