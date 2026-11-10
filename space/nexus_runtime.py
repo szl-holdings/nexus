@@ -30,8 +30,8 @@ _ZERO_REVISION = "0" * 40
 # String.prototype.trim(): ECMAScript WhiteSpace plus LineTerminator. Differs from
 # str.strip(), which keeps U+FEFF and also removes U+001C..U+001F and U+0085.
 _JS_TRIM = (
-    "\t\n\v\f\r          "
-    "        　﻿"
+    "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006"
+    "\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
 )
 
 
@@ -95,7 +95,7 @@ ENDPOINTS = [
     # A11oy's /wires + /hatun-mcp surfaces declare this product MCP transport.
     # Distinct from the retired standalone Python Hatun deployment.
     {"id": "hatun", "label": "Hatun product gateway", "url": "https://szlholdings-a11oy.hf.space/mcp/"},
-    {"id": "anatomy", "label": "Anatomy", "url": "https://betterwithage-anatomy.hf.space/healthz"},
+    {"id": "anatomy", "label": "Anatomy", "url": "https://szlholdings-anatomy.hf.space/healthz"},
     {"id": "nexus-space", "label": "NEXUS runtime", "url": "https://szlholdings-nexus.hf.space/api/build-info"},
 ]
 

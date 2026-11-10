@@ -297,7 +297,7 @@ test("Anatomy probes use the retained creator-profile transport contract in both
   assert.deepEqual(py, ENDPOINTS);
   for (const endpoints of [ENDPOINTS, py]) {
     assert.equal(endpoints.find((row) => row.id === "hatun").url, "https://szlholdings-a11oy.hf.space/mcp/");
-    assert.equal(endpoints.find((row) => row.id === "anatomy").url, "https://betterwithage-anatomy.hf.space/healthz");
+    assert.equal(endpoints.find((row) => row.id === "anatomy").url, "https://szlholdings-anatomy.hf.space/healthz");
   }
 });
 
