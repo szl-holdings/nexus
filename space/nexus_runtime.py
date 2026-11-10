@@ -208,6 +208,8 @@ class _MCPEventStream:
                     value = value[1:]
                 if field == "data":
                     self.data.append(value)
+                elif field == "event":
+                    self.event = value
         return None
 
 
