@@ -1,0 +1,17 @@
+name: Lockfile registry guard
+
+# Pinned reviewed implementation: szl-holdings/.github#999.
+# Source coverage only; required-check policy and publication remain separate.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lockfiles:
+    uses: szl-holdings/.github/.github/workflows/reusable-lockfile-registry-check.yml@3979ffa27038daf0dcf7b66cc3d0da99d7aa5548
