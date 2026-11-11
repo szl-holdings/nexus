@@ -1,2 +1,6 @@
 # Byte-attested contracts must keep their committed LF bytes on Windows too.
 contracts/*.json text eol=lf
+
+# Byte-pinned shared template files (template.lock.json) must keep LF on every platform.
+scripts/** text eol=lf
+template.lock.json text eol=lf
