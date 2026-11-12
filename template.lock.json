@@ -28,8 +28,14 @@
     "scripts/grok-pwa-plugin.mjs": {
       "sha256": "36331d0bc0664debb5068bd6869d3089dc41555b7770c9ccb577d8845958835c"
     },
+    "scripts/grok-pwa-shared.d.mts": {
+      "sha256": "99c8342319978d71ef3dea4989c05ecbf096946c39a255fa08f48b081a3e506b"
+    },
     "scripts/grok-pwa-shared.mjs": {
       "sha256": "860da7df5e0e5698ccc0ed9def2eb981c2f396831c5523368d031ec740b88b9c"
+    },
+    "scripts/install-page.html": {
+      "sha256": "5f8fe91f837db8d74d68db5e057948918bd9299e097700e0bd18f1cf5f94e586"
     },
     "scripts/migrate.mjs": {
       "sha256": "e1a31c8046a099df37b4bcbcafa4f4f7d7d18b1f1f0dc6d79676d41c4be976be"

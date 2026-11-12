@@ -116,6 +116,34 @@ class DriftTests(unittest.TestCase):
         self.write_lock(text.replace('"files": {', dup, 1))
         self.assertEqual(self.run_main()[0], 2)
 
+    @unittest.skipIf(os.name == "nt", "symlink creation needs privilege on Windows")
+    def test_same_directory_symlink_is_refused(self):
+        (self.root / "scripts/a.mjs").rename(self.root / "scripts/real.mjs")
+        os.symlink("real.mjs", self.root / "scripts/a.mjs")
+        code, out = self.run_main()
+        self.assertEqual(code, 1, out)
+        self.assertIn("MISSING scripts/a.mjs", out)
+
+    @unittest.skipIf(os.name == "nt", "symlink creation needs privilege on Windows")
+    def test_symlinked_directory_escaping_the_tree_is_refused(self):
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        for p, b in self.files.items():
+            (Path(outside.name) / Path(p).name).write_bytes(b)
+        (Path(outside.name) / "local.mjs").write_bytes(b"local\n")
+        for p in list(self.files) + ["scripts/local.mjs"]:
+            (self.root / p).unlink()
+        (self.root / "scripts").rmdir()
+        os.symlink(outside.name, self.root / "scripts")
+        code, out = self.run_main()
+        self.assertEqual(code, 1, out)
+        self.assertIn("ESCAPE", out)
+
+    def test_dot_and_empty_segments_exit_2(self):
+        for path in ("scripts/./a.mjs", "scripts//a.mjs"):
+            self.write_lock(json.dumps(dict(self.lock, files={path: {"sha256": "0" * 64}})))
+            self.assertEqual(self.run_main()[0], 2, path)
+
     def test_missing_lock_exits_2(self):
         (self.root / "template.lock.json").unlink()
         self.assertEqual(self.run_main()[0], 2)
