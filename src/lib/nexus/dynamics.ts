@@ -171,7 +171,9 @@ export function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize);
   if (typeof value === "object") {
     const record = value as Record<string, unknown>;
-    const out: Record<string, unknown> = {};
+    // Null-prototype target: a "__proto__" key must stay an own, hashed member
+    // instead of invoking the Object.prototype.__proto__ setter and vanishing.
+    const out = Object.create(null) as Record<string, unknown>;
     for (const key of Object.keys(record).sort()) out[key] = canonicalize(record[key]);
     return out;
   }
