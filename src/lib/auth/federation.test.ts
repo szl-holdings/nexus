@@ -125,17 +125,20 @@ describe("deployed with the per-app broker client", () => {
 });
 
 describe("dynamic sandbox preview (no BETTER_AUTH_URL)", () => {
-  it("uses the shared preview client when no per-app pair is set", () => {
-    assert.deepEqual(resolve({}), { mode: "preview", client: "shared-preview", ...PREVIEW });
+  it("refuses when no per-app pair is set (no baked-in preview secret)", () => {
+    const config = resolve({});
+    assert.equal(config.mode, "refused");
+    assert.ok(!carriesPreviewClient(config), "refusal must not carry the preview client");
+    assert.equal("clientSecret" in config, false);
+    if (config.mode !== "refused") return;
+    assert.match(config.reason, /GROK_AUTH_CLIENT_SECRET is not set/);
   });
 
-  it("treats an empty or whitespace-only BETTER_AUTH_URL as the preview path", () => {
+  it("treats an empty or whitespace-only BETTER_AUTH_URL as unset, and still refuses without the env pair", () => {
     for (const BETTER_AUTH_URL of ["", "   "]) {
-      assert.deepEqual(resolve({ BETTER_AUTH_URL }), {
-        mode: "preview",
-        client: "shared-preview",
-        ...PREVIEW,
-      });
+      const config = resolve({ BETTER_AUTH_URL });
+      assert.equal(config.mode, "refused");
+      assert.ok(!carriesPreviewClient(config), "refusal must not carry the preview client");
     }
   });
 
@@ -225,11 +228,15 @@ describe("server.ts wiring", () => {
   const source = readFileSync(new URL("./server.ts", import.meta.url), "utf8");
 
   it("decides the broker client through resolveFederation", () => {
-    assert.match(source, /resolveFederation\(env,/);
+    assert.match(source, /resolveFederation\(env\)/);
   });
 
   it("never backfills an env value with the preview client", () => {
     assert.doesNotMatch(source, /\?\?\s*PREVIEW_CLIENT_(ID|SECRET)/);
     assert.doesNotMatch(source, /\|\|\s*PREVIEW_CLIENT_(ID|SECRET)/);
+  });
+
+  it("does not pass a baked-in preview client secret into resolveFederation", () => {
+    assert.doesNotMatch(source, /PREVIEW_CLIENT_SECRET/);
   });
 });

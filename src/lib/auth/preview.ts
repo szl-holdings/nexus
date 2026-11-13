@@ -7,21 +7,20 @@
  * Historical callback registration: `https://*.grok-sandbox.com/api/auth/oauth2/callback/*`.
  * Better Auth 1.7 uses `/api/auth/callback/*`; acceptance of that registration
  * remains unqualified and must be verified before enabling/publishing auth.
- * (broker: `app-builder-deployer/auth/src/preview-oauth.ts`). Baking it here lets
- * the live preview do REAL sign-in — no demo/mock users — with no platform
- * injection. Used ONLY on that dynamic preview path (no `BETTER_AUTH_URL`):
+ * (broker: `app-builder-deployer/auth/src/preview-oauth.ts`). The preview
+ * client id is listed here. The client secret must come from
+ * `GROK_AUTH_CLIENT_SECRET` in the environment and is never baked into the
+ * source. Used ONLY on that dynamic preview path (no `BETTER_AUTH_URL`):
  * a deployment must inject its own per-app `GROK_AUTH_*`, and one that does not
- * fails closed rather than falling back to these (see `federation.ts`).
+ * fails closed (see `federation.ts`).
  *
- * These MUST equal the broker's `GROK_PREVIEW_CLIENT_ID` /
- * `GROK_PREVIEW_CLIENT_SECRET` (set in the broker's Vercel env; the broker stores
- * only the secret's `base64url(SHA-256)` hash). This is a dedicated, low-privilege
- * client (preview-only, `*.grok-sandbox.com`) — rotate it by regenerating the
- * broker env var and this constant together.
+ * The preview client id is `grok_preview`. The matching client secret must
+ * be provided as `GROK_AUTH_CLIENT_SECRET` in the environment (the broker
+ * stores only the secret's `base64url(SHA-256)` hash). This is a dedicated,
+ * low-privilege client (preview-only, `*.grok-sandbox.com`). Rotate it by
+ * regenerating the broker env var and updating every consumer's environment.
  */
 export const PREVIEW_CLIENT_ID = "grok_preview";
-export const PREVIEW_CLIENT_SECRET =
-  "8bcdb7fc5a33874ad933ca568918d5790388a0795e44c4d1dea691f801b17ec5";
 
 /** The shared auth broker issuer (OIDC discovery lives under it). */
 export const GROK_ISSUER_DEFAULT = "https://auth.grok.me";
