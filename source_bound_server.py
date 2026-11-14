@@ -15,6 +15,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import server
+from space import nexus_runtime as runtime
 
 SOURCE_FILE = Path(__file__).with_name("SOURCE_GITHUB_SHA")
 SOURCE_REPOSITORY = "szl-holdings/nexus"
@@ -22,37 +23,17 @@ HF_REPOSITORY = "SZLHOLDINGS/nexus"
 
 
 def source_revision() -> str:
-    try:
-        value = SOURCE_FILE.read_text(encoding="utf-8").strip().lower()
-    except (OSError, UnicodeError):
-        return "UNAVAILABLE"
-    if (
-        len(value) == 40
-        and value != "0" * 40
-        and all(ch in "0123456789abcdef" for ch in value)
-    ):
-        return value
-    return "UNAVAILABLE"
+    # Keep this legacy wrapper on the exact same normalization path as the
+    # canonical Python Space runtime.  In particular, Node-style trimming
+    # differs from ``str.strip()`` for BOM/control characters.
+    return runtime.normalize_source_revision(runtime.read_source_revision(SOURCE_FILE))
 
 
 class SourceBoundHandler(server.Handler):
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         if path == "/api/build-info":
-            revision = source_revision()
-            self._json(
-                200,
-                {
-                    "schema": "szl.nexus-source-binding/v1",
-                    "source_repository": SOURCE_REPOSITORY,
-                    "source_revision": revision,
-                    "hf_repository": HF_REPOSITORY,
-                    "deployment_authority": "szl-holdings/.github/.github/workflows/publish-nexus-space.yml",
-                    "source_bound": revision != "UNAVAILABLE",
-                    "energy": "UNAVAILABLE",
-                    "uniqueness": "Conjecture 1",
-                },
-            )
+            self._json(200, runtime.build_info(source_revision()))
             return
         super().do_GET()
 

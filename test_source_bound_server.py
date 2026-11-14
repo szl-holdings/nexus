@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 import source_bound_server
+from space import nexus_runtime as runtime
 
 SOURCE_SHA = "bc69c1d792df63c9c680131c95e8684b61fd9a10"
 
@@ -28,13 +29,18 @@ def build_info(monkeypatch: pytest.MonkeyPatch) -> tuple[int, dict]:
     [
         (SOURCE_SHA.encode("utf-8"), SOURCE_SHA),
         (("  " + SOURCE_SHA.upper() + "\n").encode("utf-8"), SOURCE_SHA),
+        (b"\xef\xbb\xbf" + SOURCE_SHA.encode("ascii"), SOURCE_SHA),
+        (b"\x1c" + SOURCE_SHA.encode("ascii"), "UNAVAILABLE"),
         (b"0" * 40, "UNAVAILABLE"),
         (b"", "UNAVAILABLE"),
         (b"f" * 39, "UNAVAILABLE"),
         (b"g" * 40, "UNAVAILABLE"),
         (b"\xff", "UNAVAILABLE"),
     ],
-    ids=["valid", "normalized", "zero-placeholder", "empty", "short", "non-hex", "invalid-utf8"],
+    ids=[
+        "valid", "normalized", "bom-normalized", "js-control-rejected",
+        "zero-placeholder", "empty", "short", "non-hex", "invalid-utf8",
+    ],
 )
 def test_build_info_uses_valid_source_bytes_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, raw: bytes, expected: str
@@ -46,7 +52,7 @@ def test_build_info_uses_valid_source_bytes_only(
     status, payload = build_info(monkeypatch)
 
     assert status == 200
-    assert payload["schema"] == "szl.nexus-source-binding/v1"
+    assert payload == runtime.build_info(expected)
     assert payload["source_revision"] == expected
     assert payload["source_bound"] is (expected != "UNAVAILABLE")
 
