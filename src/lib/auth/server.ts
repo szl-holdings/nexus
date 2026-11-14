@@ -49,8 +49,6 @@ import { resolveFederation, type FederationMode } from "./federation";
 import {
   GROK_ISSUER_DEFAULT,
   PREVIEW_ALLOWED_HOSTS,
-  PREVIEW_CLIENT_ID,
-  PREVIEW_CLIENT_SECRET,
 } from "./preview";
 
 // Kick (and share) PGLite bootstrap as soon as the auth server module loads.
@@ -82,10 +80,7 @@ const env = (key: string): string | undefined => {
 // with the shared preview client. Only the dynamic sandbox preview (no
 // `BETTER_AUTH_URL`) may use the preview client, which the broker accepts for
 // any `*.grok-sandbox.com` callback (see `./preview` and `./federation`).
-const federation = resolveFederation(env, {
-  clientId: PREVIEW_CLIENT_ID,
-  clientSecret: PREVIEW_CLIENT_SECRET,
-});
+const federation = resolveFederation(env);
 const grokIssuer = env("GROK_AUTH_ISSUER") ?? GROK_ISSUER_DEFAULT;
 const grokClient =
   federation.mode === "preview" || federation.mode === "deployed" ? federation : null;
