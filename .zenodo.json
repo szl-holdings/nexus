@@ -6,7 +6,7 @@
   "license": {"id": "Apache-2.0"},
   "keywords": ["analog-computing", "holographic", "lorenz", "nexus", "governed-ai", "szl-holdings"],
   "related_identifiers": [
-    {"identifier": "10.5281/zenodo.19944926", "relation": "isSupplementTo", "scheme": "doi"},
+    {"identifier": "10.5281/zenodo.24239896", "relation": "isSupplementTo", "scheme": "doi"},
     {"identifier": "https://github.com/szl-holdings/immune", "relation": "isSupplementTo", "scheme": "url"}
   ],
   "notes": "NEW work (not a version of any existing SZL record) per the szl-papers deposit policy. Minted via GitHub release after enabling this repository in the owner's Zenodo account."
