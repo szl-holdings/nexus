@@ -8,7 +8,7 @@
 # so the image bytes are unchanged. ECR Public answers Dependabot's anonymous tag
 # listing with HTTP 429, which failed the weekly docker update job; Dependabot
 # reads mirror.gcr.io pins without credentials (scripts/dependabot-docker.test.mjs).
-FROM mirror.gcr.io/library/node:26-bookworm-slim@sha256:add5c17c14752c54d2f3d519ec46a3815684d41c33f198bcb09fb998f7dcbf68
+FROM mirror.gcr.io/library/node:26-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1
 
 ARG HF_CACHE_BUST=mkiii-4
 
