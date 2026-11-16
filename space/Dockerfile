@@ -7,7 +7,7 @@
 # The runtime stage is Python 3.12 stdlib: space/app_server.py serves the static
 # files and the read-only runtime API.
 
-FROM node:26-bookworm-slim@sha256:add5c17c14752c54d2f3d519ec46a3815684d41c33f198bcb09fb998f7dcbf68 AS builder
+FROM node:26-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1 AS builder
 WORKDIR /src
 ENV npm_config_cache=/tmp/npm-cache
 
@@ -23,7 +23,7 @@ COPY migrations ./migrations
 COPY vite.config.ts tsconfig.json ./
 RUN npm run build:static
 
-FROM python:3.12-slim@sha256:aa943ce411423c7582288f18707ff66eddcbaeb510502d747a72aeb34f30d159 AS runtime
+FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b AS runtime
 WORKDIR /app
 ENV HOST=0.0.0.0 \
     PORT=7860 \
