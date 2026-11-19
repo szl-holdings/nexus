@@ -447,6 +447,10 @@ def optical_field(program: str, s: dict[str, Any], cols: int = 24, rows: int = 1
     return field
 
 
+# Locked admit contract (szl.model_admit_contract/v1): admit iff GM >= 0.80 and min(x) > 0.
+ADMIT_GM_FLOOR = 0.80
+
+
 def finite(value: Any) -> float:
     if isinstance(value, bool):
         raise ValueError("expected a number")
@@ -595,7 +599,7 @@ class Handler(BaseHTTPRequestHandler):
                 value = lambda_aggregate(axes)
                 axes = [float(x) for x in axes]
                 sacred = len(axes) >= 2 and (axes[0] < 0.95 or axes[1] < 0.95)
-                blocked = sacred or value == 0.0 or not math.isfinite(value)
+                blocked = sacred or value == 0.0 or not math.isfinite(value) or value < ADMIT_GM_FLOOR
                 self._json(
                     200,
                     {
@@ -624,6 +628,8 @@ class Handler(BaseHTTPRequestHandler):
                 z = finite(data.get("z") or 0.0)
                 steps = int(data.get("steps") or 400)
                 trail = lorenz_rk4(x, y, z, steps)
+                if not all(math.isfinite(v) for point in trail for v in point):
+                    raise ValueError("lorenz trail diverged to a non-finite value; use a smaller seed")
             except (ValueError, TypeError, OverflowError) as exc:
                 self._json(400, {"error": str(exc), "energy": "UNAVAILABLE"})
                 return

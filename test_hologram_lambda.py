@@ -103,3 +103,48 @@ def test_well_formed_lorenz_and_ouroboros_still_answer(port):
 
 def test_space_copy_is_byte_identical():
     assert (ROOT / "server.py").read_bytes() == (ROOT / "space" / "server.py").read_bytes()
+
+
+_space_spec = importlib.util.spec_from_file_location("nexus_hologram_space_server", ROOT / "space" / "server.py")
+space_hologram = importlib.util.module_from_spec(_space_spec)
+_space_spec.loader.exec_module(space_hologram)
+
+
+@pytest.fixture(scope="module", params=[hologram, space_hologram], ids=["server", "space_server"])
+def any_port(request):
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), request.param.Handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    yield httpd.server_address[1]
+    httpd.shutdown()
+    httpd.server_close()
+
+
+def test_handler_blocks_hidden_weak_below_gm_floor(any_port):
+    status, payload = post(any_port, "/api/lambda", b'{"axes":[0.95,0.95,0.95,0.40]}')
+    assert status == 200, payload
+    assert round(payload["lambda"], 4) == 0.7653
+    assert payload["blocked"] is True
+    assert payload["decision"] == "BLOCKED"
+
+
+@pytest.mark.parametrize("raw", [
+    b'{"axes":[0.95,0.95,0.95,0.95]}',
+    b'{"axes":[0.95,0.95,0.80,0.80]}',
+])
+def test_handler_admits_at_or_above_gm_floor(any_port, raw):
+    status, payload = post(any_port, "/api/lambda", raw)
+    assert status == 200, payload
+    assert payload["lambda"] >= 0.80
+    assert payload["blocked"] is False
+    assert payload["decision"] == "ADMITTED"
+
+
+@pytest.mark.parametrize("raw", [
+    b'{"x":1e300,"steps":50}',
+    b'{"y":-1e300,"steps":50}',
+])
+def test_lorenz_divergent_trail_gets_400_json(any_port, raw):
+    status, payload = post(any_port, "/api/lorenz", raw)
+    assert status == 400, payload
+    assert payload["energy"] == "UNAVAILABLE"
+    assert "non-finite" in payload["error"]
