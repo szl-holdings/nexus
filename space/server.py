@@ -42,8 +42,14 @@ def clamp01(c: float) -> float:
 def lambda_aggregate(axes: list[float]) -> float:
     if not axes:
         raise ValueError("axes empty")
-    if any(x < 0 for x in axes):
-        raise ValueError("axes must be >= 0")
+    if any(isinstance(x, bool) for x in axes):
+        raise ValueError("axes must be numbers")
+    axes = [float(x) for x in axes]
+    # NaN slips past < and == comparisons, so finiteness is checked explicitly.
+    if not all(math.isfinite(x) for x in axes):
+        raise ValueError("axes must be finite")
+    if any(x < 0 or x > 1 for x in axes):
+        raise ValueError("axes must be in [0,1]")
     if any(x == 0 for x in axes):
         return 0.0
     w = 1.0 / len(axes)
@@ -441,6 +447,15 @@ def optical_field(program: str, s: dict[str, Any], cols: int = 24, rows: int = 1
     return field
 
 
+def finite(value: Any) -> float:
+    if isinstance(value, bool):
+        raise ValueError("expected a number")
+    value = float(value)
+    if not math.isfinite(value):
+        raise ValueError("expected a finite number")
+    return value
+
+
 def ouroboros_tax(amplitude: float, bars: int = 8) -> float:
     bars = max(1, min(int(bars), 64))
     return max(0.0, float(amplitude) * math.exp(-bars / 8.0))
@@ -573,11 +588,14 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         data = self._read()
         if path == "/api/lambda":
-            axes = [float(x) for x in (data.get("axes") or list(YUYAY_FLOORS))]
             try:
+                axes = data.get("axes") or list(YUYAY_FLOORS)
+                if not isinstance(axes, list):
+                    raise ValueError("axes must be a list")
                 value = lambda_aggregate(axes)
+                axes = [float(x) for x in axes]
                 sacred = len(axes) >= 2 and (axes[0] < 0.95 or axes[1] < 0.95)
-                blocked = sacred or value == 0.0
+                blocked = sacred or value == 0.0 or not math.isfinite(value)
                 self._json(
                     200,
                     {
@@ -591,7 +609,7 @@ class Handler(BaseHTTPRequestHandler):
                     },
                 )
             except Exception as exc:
-                self._json(400, {"error": str(exc), "honesty": "MEASURED"})
+                self._json(400, {"error": str(exc), "decision": "BLOCKED", "honesty": "BLOCKED"})
             return
         if path == "/api/analog":
             try:
@@ -600,11 +618,15 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(400, {"error": str(exc), "honesty": "MEASURED", "energy": "UNAVAILABLE"})
             return
         if path == "/api/lorenz":
-            x = float(data.get("x") or 0.1)
-            y = float(data.get("y") or 0.0)
-            z = float(data.get("z") or 0.0)
-            steps = int(data.get("steps") or 400)
-            trail = lorenz_rk4(x, y, z, steps)
+            try:
+                x = finite(data.get("x") or 0.1)
+                y = finite(data.get("y") or 0.0)
+                z = finite(data.get("z") or 0.0)
+                steps = int(data.get("steps") or 400)
+                trail = lorenz_rk4(x, y, z, steps)
+            except (ValueError, TypeError, OverflowError) as exc:
+                self._json(400, {"error": str(exc), "energy": "UNAVAILABLE"})
+                return
             self._json(
                 200,
                 {
@@ -622,12 +644,17 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, organs_eval(data))
             return
         if path == "/api/ouroboros":
-            tax = ouroboros_tax(float(data.get("amplitude") or 1.0), int(data.get("bars") or 8))
+            try:
+                bars = int(data.get("bars") or 8)
+                tax = ouroboros_tax(finite(data.get("amplitude") or 1.0), bars)
+            except (ValueError, TypeError, OverflowError) as exc:
+                self._json(400, {"error": str(exc), "energy": "UNAVAILABLE"})
+                return
             self._json(
                 200,
                 {
                     "tax": tax,
-                    "bars": int(data.get("bars") or 8),
+                    "bars": bars,
                     "energy": "UNAVAILABLE",
                     "uniqueness": "Conjecture 1",
                 },
@@ -683,6 +710,17 @@ def selftest() -> None:
 
     # Programs enumerate.
     assert len(PROGRAMS) == 6
+
+    # Λ fails closed: non-finite or out-of-range axes never aggregate.
+    for bad in ([math.nan], [math.inf], [5.0]):
+        try:
+            lambda_aggregate(bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"lambda_aggregate admitted {bad}")
+    assert lambda_aggregate([0.95, 0.95, 0.95, 0.40]) < 0.80, "hidden_weak must stay below the admit floor"
+    assert math.isfinite(lambda_aggregate(list(YUYAY_FLOORS)))
 
     # 15-cell persist pads; optical STDP leaks toward 1 without spikes.
     s = seed_analog("nemo")
