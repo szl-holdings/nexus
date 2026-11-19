@@ -94,8 +94,11 @@ def _read(path, limit, digest=False):
     return (length, hasher.hexdigest()) if digest else b"".join(chunks)
 
 
-def inspect_static_bundle(root: Path) -> dict:
-    """Recheck the served file set and bytes; an HTTP process alone is not ready."""
+def inspect_static_bundle(root: Path, digests: dict | None = None) -> dict:
+    """Recheck the served file set and bytes; an HTTP process alone is not ready.
+
+    On a VERIFIED pass only, fill `digests` with {path: sha256} for the request path.
+    """
     result = {"ready": False, "state": "UNAVAILABLE", "scope": "LOCAL_STATIC_BYTES",
               "browser_execution": "NOT_EVALUATED", "files_checked": 0}
     try:
@@ -138,6 +141,8 @@ def inspect_static_bundle(root: Path) -> dict:
                 raise BundleError("STATIC_FILE_DIGEST_MISMATCH")
             result["files_checked"] += 1
         result.update(ready=True, state="VERIFIED", manifest_sha256=hashlib.sha256(manifest_bytes).hexdigest())
+        if digests is not None:
+            digests.update((name, item["sha256"]) for name, item in expected.items())
     except BundleError as exc:
         result["reason"] = str(exc)
     except (OSError, ValueError, UnicodeError, RecursionError):
@@ -157,10 +162,12 @@ class StaticBundleVerifier:
         self.refresh()
 
     def refresh(self):
-        result = inspect_static_bundle(self.root)
+        digests = {}
+        result = inspect_static_bundle(self.root, digests)
         result["checked_at"] = datetime.now(timezone.utc).isoformat()
         with self._lock:
             self._result = result
+            self._digests = digests if result.get("ready") is True else None
             self._checked_at = self._clock()
 
     def _run(self):
@@ -175,6 +182,15 @@ class StaticBundleVerifier:
 
     def stop(self):
         self._stop.set()
+
+    def expected_digest(self, name: str) -> str | None:
+        """Verified sha256 for `name`, or None when unlisted, unverified or STALE."""
+        with self._lock:
+            digests = self._digests
+            age = max(0.0, self._clock() - self._checked_at)
+        if digests is None or age > MAX_VERIFICATION_AGE_SECONDS:
+            return None
+        return digests.get(name)
 
     def snapshot(self):
         with self._lock:
