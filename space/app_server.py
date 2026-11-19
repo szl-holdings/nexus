@@ -10,6 +10,7 @@ no receipts, holds no credentials and has no external effectors.
 """
 from __future__ import annotations
 
+import hashlib
 import mimetypes
 import os
 import sys
@@ -26,6 +27,8 @@ API_JSON_HEADERS = {
     "cache-control": "no-store",
 }
 IMMUTABLE = "public, max-age=31536000, immutable"
+UNVERIFIED = (503, {"content-type": "text/plain; charset=utf-8", "cache-control": "no-store"},
+              b"STATIC_BUNDLE_UNVERIFIED")
 REDIRECTED_API_PATHS = ("/api/build-info", "/health", "/healthz")
 
 
@@ -88,14 +91,25 @@ class NexusHandler(BaseHTTPRequestHandler):
             body = candidate.read_bytes()
         except OSError:  # e.g. a path segment longer than the filesystem allows
             return self._not_found()
+        # Hash the bytes actually served: files can change between verifier passes.
+        expected = self.server.static_verifier.expected_digest(candidate.relative_to(root).as_posix())
+        if expected is None or hashlib.sha256(body).hexdigest() != expected:
+            return UNVERIFIED
         headers = {"content-type": _content_type(candidate)}
         if candidate.is_relative_to(root / "assets"):
             headers["cache-control"] = IMMUTABLE
         return 200, headers, body
 
     def _not_found(self) -> tuple[int, dict[str, str], bytes]:
+        body = b"Not Found"
+        expected = self.server.static_verifier.expected_digest("index.html")
         index = self.server.static_dir / "index.html"
-        body = index.read_bytes() if index.is_file() else b"Not Found"
+        try:
+            shell = index.read_bytes() if expected and index.is_file() else None
+        except OSError:
+            shell = None
+        if shell is not None and hashlib.sha256(shell).hexdigest() == expected:
+            body = shell
         return 404, {"content-type": "text/html; charset=utf-8"}, body
 
     def _respond(self, status: int, headers: dict[str, str], body: bytes, head: bool) -> None:

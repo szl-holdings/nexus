@@ -225,3 +225,64 @@ def test_expired_bundle_proof_fails_readiness(site):
     payload = json.loads(body)
     assert payload["ready"] is False
     assert payload["static_bundle"]["reason"] == "STATIC_VERIFICATION_EXPIRED"
+
+
+UNVERIFIED = (503, "no-store", b"STATIC_BUNDLE_UNVERIFIED")
+
+
+def _unverified(response):
+    status, headers, body = response
+    return status, headers.get("cache-control"), body
+
+
+def test_corrupt_listed_asset_is_not_served_after_refresh(site, tmp_path):
+    (tmp_path / "static" / "assets" / "app-abc123.js").write_bytes(b"evil()")
+    site.server.static_verifier.refresh()
+    assert _unverified(fetch(site + "/assets/app-abc123.js")) == UNVERIFIED
+    status, headers, body = fetch(site + "/assets/app-abc123.js", "HEAD")
+    assert (status, headers["cache-control"], body) == (503, "no-store", b"")
+
+
+def test_unlisted_asset_is_not_served(site, tmp_path):
+    (tmp_path / "static" / "assets" / "extra.js").write_bytes(b"unlisted()")
+    site.server.static_verifier.refresh()
+    assert _unverified(fetch(site + "/assets/extra.js")) == UNVERIFIED
+
+
+def test_unlisted_asset_is_not_served_before_refresh(site, tmp_path):
+    (tmp_path / "static" / "assets" / "extra.js").write_bytes(b"unlisted()")
+    assert _unverified(fetch(site + "/assets/extra.js")) == UNVERIFIED
+
+
+def test_tamper_between_verifications_is_not_served(site, tmp_path):
+    (tmp_path / "static" / "assets" / "app-abc123.js").write_bytes(b"evil()")
+    assert _unverified(fetch(site + "/assets/app-abc123.js")) == UNVERIFIED
+
+
+def test_stale_verification_disables_immutable(site):
+    verifier = site.server.static_verifier
+    verifier._clock = lambda: verifier._checked_at + 91
+    assert _unverified(fetch(site + "/assets/app-abc123.js")) == UNVERIFIED
+
+
+def test_manifest_file_is_not_served(site):
+    assert _unverified(fetch(site + "/nexus-static-manifest.json")) == UNVERIFIED
+
+
+def test_tampered_index_not_used_as_404_body(site, tmp_path):
+    (tmp_path / "static" / "index.html").write_bytes(b"<html>tampered</html>")
+    site.server.static_verifier.refresh()
+    assert _unverified(fetch(site + "/")) == UNVERIFIED
+    status, headers, body = fetch(site + "/some/client/route")
+    assert (status, headers["content-type"], body) == (404, "text/html; charset=utf-8", b"Not Found")
+
+
+def test_tampered_index_without_refresh_not_used_as_404_body(site, tmp_path):
+    (tmp_path / "static" / "index.html").write_bytes(b"<html>tampered</html>")
+    status, _, body = fetch(site + "/some/client/route")
+    assert (status, body) == (404, b"Not Found")
+
+
+def test_verified_index_is_the_404_body(site):
+    status, _, body = fetch(site + "/some/client/route")
+    assert (status, body) == (404, INDEX)
