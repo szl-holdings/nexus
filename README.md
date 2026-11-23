@@ -16,6 +16,9 @@ tags:
   - crt
   - sequencer
   - szl-holdings
+szl:
+  source_repo: szl-holdings/nexus
+  proof_url: https://github.com/szl-holdings/nexus
 ---
 
 <!-- szl:header v1 -->
