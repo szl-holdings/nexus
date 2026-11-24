@@ -16,6 +16,7 @@ import nexus_runtime as rt
 SHA = "0123456789abcdef0123456789abcdef01234567"
 INDEX = b"<!DOCTYPE html><html><body>nexus</body></html>"
 ASSET = b"console.log(1)"
+CHUNK = b"export const chunk = 2"
 OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
@@ -29,6 +30,7 @@ def site(tmp_path, monkeypatch):
     (static / "assets").mkdir(parents=True)
     (static / "index.html").write_bytes(INDEX)
     (static / "assets" / "app-abc123.js").write_bytes(ASSET)
+    (static / "assets" / "chunk-def456.js").write_bytes(CHUNK)
     (static / "favicon.svg").write_bytes(b"<svg/>")
     files = [
         {"path": path.relative_to(static).as_posix(), "size": path.stat().st_size,
@@ -257,6 +259,32 @@ def test_unlisted_asset_is_not_served_before_refresh(site, tmp_path):
 def test_tamper_between_verifications_is_not_served(site, tmp_path):
     (tmp_path / "static" / "assets" / "app-abc123.js").write_bytes(b"evil()")
     assert _unverified(fetch(site + "/assets/app-abc123.js")) == UNVERIFIED
+
+
+def test_symlink_swap_between_verifications_cannot_alias_a_listed_asset(site, tmp_path):
+    verifier = site.server.static_verifier
+    assert verifier.snapshot()["state"] == "VERIFIED"
+    asset = tmp_path / "static" / "assets" / "app-abc123.js"
+    asset.unlink()
+    asset.symlink_to("chunk-def456.js")
+    response = fetch(site + "/assets/app-abc123.js")
+    assert verifier.snapshot()["state"] == "VERIFIED"
+    _, headers, body = response
+    assert body != CHUNK
+    assert "immutable" not in headers.get("cache-control", "")
+    assert headers["content-type"] == "text/plain; charset=utf-8"
+    assert _unverified(response) == UNVERIFIED
+
+
+def test_symlinked_directory_cannot_alias_a_listed_file(site, tmp_path):
+    static = tmp_path / "static"
+    (static / "assets").rename(tmp_path / "assets-moved")
+    (static / "assets").symlink_to(static, target_is_directory=True)
+    for path in ("/assets/favicon.svg", "/assets/index.html"):
+        response = fetch(site + path)
+        assert "immutable" not in response[1].get("cache-control", ""), path
+        assert _unverified(response) == UNVERIFIED, path
+    assert site.server.static_verifier.snapshot()["state"] == "VERIFIED"
 
 
 def test_stale_verification_disables_immutable(site):
