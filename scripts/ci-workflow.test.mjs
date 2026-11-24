@@ -16,7 +16,7 @@ const APPROVED_PINS = {
   "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1", // v7.0.1
   "actions/setup-node": "949feb2413d6458794dcd2491c4babbbce0c15c1", // v7.1.0
   "actions/setup-python": "6d4fd22b20465ccc0f7354476588e8df7c9ca0e0", // v7.1.0
-  "step-security/harden-runner": "1d88384fd173af6ecb012dfd0264a306b711241a", // v2.22.4
+  "step-security/harden-runner": "aebdcf6156ab6691adf63218240e476564a1ed4c", // v2.23.0
 };
 
 function onBlock() {
@@ -137,10 +137,7 @@ test("the Space smoke retries health, root and source readback", () => {
     /fetch_with_retry http:\/\/127\.0\.0\.1:7860\/healthz \/tmp\/nexus-health\.json/,
   );
   assert.match(steps, /fetch_with_retry http:\/\/127\.0\.0\.1:7860\/ \/tmp\/nexus-root\.html/);
-  assert.match(
-    steps,
-    /fetch_with_retry http:\/\/127\.0\.0\.1:7860\/api\/build-info \/tmp\/nexus-build\.json/,
-  );
+  assert.match(steps, /fetch_with_retry http:\/\/127\.0\.0\.1:7860\/api\/build-info \/tmp\/nexus-build\.json/);
   assert.match(steps, /--connect-timeout 2 --max-time 10/);
 });
 
@@ -162,7 +159,7 @@ test("the source alias resolves without deprecated baseUrl or a suppression", ()
   assert.equal(error, undefined);
   assert.equal(config.compilerOptions.baseUrl, undefined);
   assert.equal(config.compilerOptions.ignoreDeprecations, undefined);
-  const parsed = ts.parseJsonConfigFileContent(config, ts.sys, ROOT);
+  const parsed = ts.parseJsonConfigFileContent(config, ROOT);
   assert.equal(parsed.errors.length, 0);
   const resolved = ts.resolveModuleName(
     "@/lib/nexus/types",

@@ -55,7 +55,7 @@ test("the gate is read-only, pinned and hardened like the other workflows", () =
   assert.doesNotMatch(code, /:\s*write\b|secrets\.|continue-on-error|\|\| true|set \+e/);
   const uses = [...WORKFLOW.matchAll(/^\s*(?:- )?uses:\s*(\S+)/gm)].map((match) => match[1]);
   assert.deepEqual(uses, [
-    "step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a",
+    "step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c",
     "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
   ]);
   assert.match(WORKFLOW, /persist-credentials: false/);
