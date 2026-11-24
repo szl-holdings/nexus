@@ -2,6 +2,7 @@
 """space/app_server.py: static workstation plus the runtime API, matching Nitro."""
 import hashlib
 import json
+import os
 import socket
 import threading
 import time
@@ -285,6 +286,26 @@ def test_symlinked_directory_cannot_alias_a_listed_file(site, tmp_path):
         assert "immutable" not in response[1].get("cache-control", ""), path
         assert _unverified(response) == UNVERIFIED, path
     assert site.server.static_verifier.snapshot()["state"] == "VERIFIED"
+
+
+def test_in_root_dot_segments_are_refused_not_aliased(site):
+    # The request name must be a manifest name; ".." aliases are refused, not resolved.
+    for path in ("/assets/../index.html", "/assets/..%2findex.html",
+                 "/assets/%2e%2e/assets/app-abc123.js"):
+        response = fetch(site + path)
+        assert "immutable" not in response[1].get("cache-control", ""), path
+        assert _unverified(response) == UNVERIFIED, path
+
+
+def test_hard_link_to_another_listed_asset_is_not_served(site, tmp_path):
+    verifier = site.server.static_verifier
+    assets = tmp_path / "static" / "assets"
+    (assets / "app-abc123.js").unlink()
+    os.link(assets / "chunk-def456.js", assets / "app-abc123.js")
+    response = fetch(site + "/assets/app-abc123.js")
+    assert verifier.snapshot()["state"] == "VERIFIED"
+    assert response[2] != CHUNK
+    assert _unverified(response) == UNVERIFIED
 
 
 def test_stale_verification_disables_immutable(site):
