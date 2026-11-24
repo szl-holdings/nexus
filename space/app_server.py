@@ -20,7 +20,7 @@ from urllib.parse import unquote, urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import nexus_runtime as rt  # noqa: E402
-from static_assets import StaticBundleVerifier  # noqa: E402
+from static_assets import BundleError, MAX_FILE_BYTES, StaticBundleVerifier, _read  # noqa: E402
 
 API_JSON_HEADERS = {
     "content-type": "application/json; charset=utf-8",
@@ -88,12 +88,21 @@ class NexusHandler(BaseHTTPRequestHandler):
             candidate = (root / relative).resolve()
             if not candidate.is_relative_to(root) or not candidate.is_file():
                 return self._not_found()
-            body = candidate.read_bytes()
         except OSError:  # e.g. a path segment longer than the filesystem allows
             return self._not_found()
-        # Hash the bytes actually served: files can change between verifier passes.
-        expected = self.server.static_verifier.expected_digest(candidate.relative_to(root).as_posix())
-        if expected is None or hashlib.sha256(body).hexdigest() != expected:
+        # Reject unlisted or stale assets before opening the file. The periodic
+        # manifest check does not bound a file that grows between checks.
+        name = candidate.relative_to(root).as_posix()
+        expected = self.server.static_verifier.expected_digest(name)
+        if expected is None:
+            return UNVERIFIED
+        try:
+            body = _read(candidate, MAX_FILE_BYTES)
+        except (OSError, BundleError):
+            return UNVERIFIED
+        # Recheck admission and hash the bytes actually served.
+        if (self.server.static_verifier.expected_digest(name) != expected
+                or hashlib.sha256(body).hexdigest() != expected):
             return UNVERIFIED
         headers = {"content-type": _content_type(candidate)}
         if candidate.is_relative_to(root / "assets"):
@@ -105,10 +114,11 @@ class NexusHandler(BaseHTTPRequestHandler):
         expected = self.server.static_verifier.expected_digest("index.html")
         index = self.server.static_dir / "index.html"
         try:
-            shell = index.read_bytes() if expected and index.is_file() else None
-        except OSError:
+            shell = _read(index, MAX_FILE_BYTES) if expected and index.is_file() else None
+        except (OSError, BundleError):
             shell = None
-        if shell is not None and hashlib.sha256(shell).hexdigest() == expected:
+        if (shell is not None and self.server.static_verifier.expected_digest("index.html") == expected
+                and hashlib.sha256(shell).hexdigest() == expected):
             body = shell
         return 404, {"content-type": "text/html; charset=utf-8"}, body
 

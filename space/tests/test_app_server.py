@@ -286,3 +286,45 @@ def test_tampered_index_without_refresh_not_used_as_404_body(site, tmp_path):
 def test_verified_index_is_the_404_body(site):
     status, _, body = fetch(site + "/some/client/route")
     assert (status, body) == (404, INDEX)
+
+
+def test_unlisted_asset_rejected_without_read(site, tmp_path, monkeypatch):
+    import pathlib
+
+    extra = tmp_path / "static" / "assets" / "extra.js"
+    extra.write_bytes(b"unlisted")
+    original = pathlib.Path.read_bytes
+    reads = []
+
+    def record_read(path):
+        if path == extra:
+            reads.append(path)
+        return original(path)
+
+    monkeypatch.setattr(pathlib.Path, "read_bytes", record_read)
+    assert _unverified(fetch(site + "/assets/extra.js")) == UNVERIFIED
+    assert reads == []
+
+
+def test_growth_between_verifier_passes_is_bounded(site, tmp_path, monkeypatch):
+    import pathlib
+
+    monkeypatch.setattr(app_server, "MAX_FILE_BYTES", 64, raising=False)
+    asset = tmp_path / "static" / "assets" / "app-abc123.js"
+    index = tmp_path / "static" / "index.html"
+    asset.write_bytes(b"x" * 65)
+    index.write_bytes(b"x" * 65)
+    original = pathlib.Path.read_bytes
+    reads = []
+
+    def record_read(path):
+        if path in (asset, index):
+            reads.append(path)
+        return original(path)
+
+    monkeypatch.setattr(pathlib.Path, "read_bytes", record_read)
+    assert _unverified(fetch(site + "/assets/app-abc123.js")) == UNVERIFIED
+    assert _unverified(fetch(site + "/")) == UNVERIFIED
+    status, _, body = fetch(site + "/missing")
+    assert (status, body) == (404, b"Not Found")
+    assert reads == []
