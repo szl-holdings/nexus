@@ -84,12 +84,17 @@ class NexusHandler(BaseHTTPRequestHandler):
         relative = "index.html" if path == "/" else unquote(path).lstrip("/")
         if "\x00" in relative:
             return self._not_found()
+        candidate = root / relative
         try:
-            candidate = (root / relative).resolve()
-            if not candidate.is_relative_to(root) or not candidate.is_file():
+            resolved = candidate.resolve()
+            if not resolved.is_relative_to(root) or not resolved.is_file():
                 return self._not_found()
         except OSError:  # e.g. a path segment longer than the filesystem allows
             return self._not_found()
+        # Admit, read (O_NOFOLLOW) and hash only the requested name: through a
+        # symlink, another listed file's digest would vouch for these bytes.
+        if resolved != candidate:
+            return UNVERIFIED
         # Reject unlisted or stale assets before opening the file. The periodic
         # manifest check does not bound a file that grows between checks.
         name = candidate.relative_to(root).as_posix()
