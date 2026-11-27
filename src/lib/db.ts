@@ -1,22 +1,37 @@
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
 
-/** Which database backend is active. */
-export type DbSource = "neon" | "pglite";
+import { resolveDbConfig, type DbSource } from "./db-config";
 
-// An empty/whitespace DATABASE_URL (an easy misconfig in deploy UIs) must mean
-// "unset" — otherwise production would silently run on the PGLite fallback.
-const rawDatabaseUrl =
-  typeof process !== "undefined" ? process.env.DATABASE_URL : undefined;
-const databaseUrl =
-  rawDatabaseUrl && rawDatabaseUrl.trim() ? rawDatabaseUrl : undefined;
+export type { DbSource } from "./db-config";
+export { DatabaseConfigError, resolveDbConfig } from "./db-config";
 
 /**
- * Active backend: real **Neon** when `DATABASE_URL` is set (deployed / configured
- * sandbox), otherwise a local embedded **PGLite** (Postgres compiled to WASM) so
- * the app has a working database even with nothing configured — the live preview
- * included. Swap in Neon later by just setting `DATABASE_URL`; no code changes.
+ * Resolved once at module load. In production a missing DATABASE_URL does NOT
+ * fall back to in-memory PGLite: `dbConfig.error` is set and every `getSql()`,
+ * `getPglite()` and `ensureDbReady()` call rejects with it (fail closed, gap G1).
+ * See ./db-config.ts for the exact rules.
  */
-export const dbSource: DbSource = databaseUrl ? "neon" : "pglite";
+export const dbConfig = resolveDbConfig(
+  typeof process !== "undefined" ? (process.env as Record<string, string | undefined>) : {},
+);
+const databaseUrl = dbConfig.url;
+
+/**
+ * Active backend: real Postgres (**Neon**) when `DATABASE_URL` is set, otherwise
+ * a local embedded **PGLite** (Postgres compiled to WASM) for local dev and the
+ * live preview. PGLite is in-memory and is lost on restart, so it is refused in
+ * production unless explicitly allowed (SZL_ALLOW_EPHEMERAL_DB=1, never in
+ * strict production).
+ */
+export const dbSource: DbSource = dbConfig.source;
+
+if (typeof window === "undefined") {
+  if (dbConfig.error) {
+    console.error(`[db] ${dbConfig.error.message}`);
+  } else if (dbConfig.ephemeralInProduction) {
+    console.warn("[db] SZL_ALLOW_EPHEMERAL_DB=1: production-mode server is using in-memory PGLite; data is lost on restart.");
+  }
+}
 
 /**
  * Minimal shared SQL surface, satisfied by both Neon and PGLite. Both the
@@ -176,12 +191,15 @@ async function createSql(): Promise<Sql> {
         "or a server route loader, never from client code.",
     );
   }
+  if (dbConfig.error) throw dbConfig.error; // fail closed: never fall back in production
   return dbSource === "neon" ? createNeonSql() : createPgliteSql();
 }
 
 /**
  * Get the shared, **server-only** SQL client. Neon when `DATABASE_URL` is set,
- * otherwise the local PGLite fallback. Memoized — safe to call per request.
+ * otherwise the local PGLite fallback outside production. Rejects with
+ * `DatabaseConfigError` when production has no DATABASE_URL. Memoized — safe to
+ * call per request.
  *
  * Schema comes from `migrations/*.sql`, auto-applied before the first query on
  * both backends — define tables there, never inline in server functions.
@@ -220,6 +238,7 @@ export async function getPglite(): Promise<import("@electric-sql/pglite").PGlite
  * module kick it off immediately (see bottom of file).
  */
 export function ensureDbReady(): Promise<void> {
+  if (dbConfig.error) return Promise.reject(dbConfig.error);
   if (dbSource !== "pglite") return Promise.resolve();
   return getSql().then(() => undefined);
 }
@@ -229,7 +248,7 @@ export function ensureDbReady(): Promise<void> {
 const globalBoot = globalThis as typeof globalThis & {
   __pgBootstrapPromise__?: Promise<void>;
 };
-if (typeof window === "undefined" && dbSource === "pglite") {
+if (typeof window === "undefined" && dbSource === "pglite" && !dbConfig.error) {
   globalBoot.__pgBootstrapPromise__ ??= ensureDbReady().catch((err) => {
     globalBoot.__pgBootstrapPromise__ = undefined;
     console.error("[db] PGLite bootstrap failed:", err);
