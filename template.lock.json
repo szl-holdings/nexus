@@ -37,9 +37,6 @@
     "scripts/install-page.html": {
       "sha256": "5f8fe91f837db8d74d68db5e057948918bd9299e097700e0bd18f1cf5f94e586"
     },
-    "scripts/migrate.mjs": {
-      "sha256": "e1a31c8046a099df37b4bcbcafa4f4f7d7d18b1f1f0dc6d79676d41c4be976be"
-    },
     "scripts/migration-plan.mjs": {
       "sha256": "9305d8cfe8cdad73671065d675c89d0f20075d18c756f9aba5043b72e7c19a0d"
     },
@@ -89,6 +86,10 @@
     "scripts/write-atomic.test.mjs": {
       "reason": "test file diverged from the template with repo-local cases; intent not yet reviewed",
       "sha256": "cbafbff240c1580a7879c36e9421ec2b6f7bd92763f473cfbdf55fea8d65d5a7"
+    },
+    "scripts/migrate.mjs": {
+      "sha256": "9bcf12323b66be4afddbbf2333e7df7580d8c96898ca655c5d0f115deac87e7e",
+      "reason": "nexus-specific strict-production guard (SZL_ENV/VERCEL_ENV/SZL_REQUIRE_DATABASE) mirroring src/lib/db-config.ts fail-closed signals; production deploy without DATABASE_URL must exit 1, not silently skip migrations. Declared fork per template-lock/v1; PR #134."
     }
   },
   "schema": "szl.template-lock/v1"

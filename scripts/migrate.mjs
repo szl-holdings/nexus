@@ -18,8 +18,20 @@ import { dirname, join } from "node:path";
 import pg from "pg";
 import { pendingMigrations } from "./migration-plan.mjs";
 
-const databaseUrl = process.env.DATABASE_URL;
+const databaseUrl = process.env.DATABASE_URL?.trim() || undefined;
+// Strict production (same signals as src/lib/db-config.ts) must never skip:
+// a production deploy without a database is a misconfiguration, not a preview.
+const strictProduction =
+  (process.env.SZL_ENV ?? "").trim().toLowerCase() === "production" ||
+  (process.env.VERCEL_ENV ?? "").trim().toLowerCase() === "production" ||
+  /^(1|true|yes|on)$/i.test((process.env.SZL_REQUIRE_DATABASE ?? "").trim());
 if (!databaseUrl) {
+  if (strictProduction) {
+    console.error(
+      "[migrate] production requires a PostgreSQL DATABASE_URL — refusing to skip migrations.",
+    );
+    process.exit(1);
+  }
   console.log(
     "[migrate] DATABASE_URL not set — skipping (the PGLite fallback migrates itself).",
   );
